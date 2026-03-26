@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>員工系統</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f1c3a;--navy-mid:#1a2d58;--accent:#4a7bda;--accent-light:#eef3fd;
+  --green:#2e9e6b;--green-light:#edfaf4;
+  --red:#d64242;--red-light:#fdf0f0;
+  --gold:#c8a96e;--orange:#e07b2a;--orange-light:#fef3e8;
+  --bg:#f0f2f8;--surface:#fff;--text:#1e2a45;--muted:#8892a4;--border:#dde3ef;
+}
+html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans-serif;-webkit-tap-highlight-color:transparent}
+.wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 14px 48px}
+.header{width:100%;max-width:460px;text-align:center;margin-bottom:18px}
+.header-brand{font-size:10px;letter-spacing:.22em;color:rgba(255,255,255,.28);text-transform:uppercase;margin-bottom:5px}
+.header-bar{width:26px;height:2px;background:var(--gold);margin:0 auto 14px}
+.clock-time{font-family:"DM Mono",monospace;font-size:46px;font-weight:500;color:#fff;letter-spacing:.04em;line-height:1}
+.clock-date{font-size:12px;color:rgba(255,255,255,.42);margin-top:6px}
+.card{background:var(--surface);border-radius:16px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.38);margin-bottom:14px}
+.card-body{padding:22px 20px}
+.login-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:16px}
+.fl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.fi{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:9px;font-family:"Noto Sans TC",sans-serif;font-size:15px;color:var(--text);outline:none;transition:border-color .15s;margin-bottom:12px;background:#fff}
+.fi:focus{border-color:var(--accent)}
+.login-btn{width:100%;padding:13px;border-radius:9px;border:none;background:var(--navy);color:#fff;font-family:"Noto Sans TC",sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.login-btn:active{opacity:.85}
+.login-btn:disabled{opacity:.5}
+.login-err{color:var(--red);font-size:12px;text-align:center;margin-top:8px;min-height:16px}
+.tab-bar{display:flex;background:var(--navy-mid);border-bottom:1px solid rgba(255,255,255,.08)}
+.tab{flex:1;padding:13px 8px;text-align:center;font-family:"Noto Sans TC",sans-serif;font-size:13px;font-weight:600;color:rgba(255,255,255,.45);cursor:pointer;border:none;background:transparent;transition:all .15s;border-bottom:3px solid transparent}
+.tab.active{color:#fff;border-bottom-color:var(--gold)}
+.tab-body{padding:20px}
+.gps-bar{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:16px}
+.gps-ok{background:var(--green-light);color:var(--green)}
+.gps-warn{background:var(--orange-light);color:var(--orange)}
+.gps-err{background:var(--red-light);color:var(--red)}
+.gps-loading{background:var(--accent-light);color:var(--accent)}
+.gps-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--green)}.dot-warn{background:var(--orange);animation:pulse .8s infinite}
+.dot-err{background:var(--red)}.dot-spin{background:var(--accent);animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.punch-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+.punch-btn{padding:20px 8px;border-radius:12px;border:none;font-family:"Noto Sans TC",sans-serif;font-size:14px;font-weight:700;cursor:pointer;text-align:center;transition:all .12s}
+.punch-btn:active:not(:disabled){transform:scale(.95)}
+.punch-btn:disabled{opacity:.32;cursor:not-allowed}
+.p-sub{font-size:10px;font-weight:400;opacity:.75;margin-top:3px}
+.p-in{background:var(--green);color:#fff}.p-out{background:var(--red);color:#fff}
+.p-bout{background:var(--orange);color:#fff}.p-bin{background:var(--accent);color:#fff}
+.log-section{border-top:1px solid var(--border);padding:14px 20px}
+.section-label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
+.log-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f2f8}
+.log-item:last-child{border-bottom:none}
+.lb{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px}
+.lb-in{background:var(--green-light);color:var(--green)}.lb-out{background:var(--red-light);color:var(--red)}
+.lb-bout{background:var(--orange-light);color:var(--orange)}.lb-bin{background:var(--accent-light);color:var(--accent)}
+.log-time{font-family:"DM Mono",monospace;font-size:14px;font-weight:500;text-align:right}
+.log-sub{font-size:10px;color:var(--muted);text-align:right;margin-top:1px}
+.log-empty{font-size:13px;color:var(--muted);text-align:center;padding:8px 0}
+.month-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.month-inp{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:"Noto Sans TC",sans-serif;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;background:#fff}
+.month-inp:focus{border-color:var(--accent)}
+.quota-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:8px;margin-bottom:14px;flex-wrap:wrap}
+.quota-num{font-family:"DM Mono",monospace;font-size:20px;font-weight:700}
+.q-ok{color:var(--green)}.q-warn{color:var(--orange)}.q-over{color:var(--red)}
+.status-box{padding:12px 14px;border-radius:8px;margin-bottom:12px;font-size:13px}
+.sb-pending{background:var(--orange-light);border:1px solid #f5c0a0}
+.sb-approved{background:var(--green-light);border:1px solid #a8dfc5}
+.sb-rejected{background:var(--red-light);border:1px solid #f5c0c0}
+.sb-modified{background:var(--accent-light);border:1px solid #c0d0f5}
+.sb-title{font-weight:700;margin-bottom:4px}
+.sb-dates{line-height:1.9;color:var(--text)}
+.sb-note{font-size:11px;color:var(--muted);margin-top:5px}
+.cal-head-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px}
+.cal-hd{text-align:center;font-size:10px;font-weight:700;padding:5px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:12px}
+.cal-day{aspect-ratio:1;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;transition:all .12s;-webkit-tap-highlight-color:transparent}
+.cal-day:active:not(.past):not(.full){transform:scale(.92)}
+.cal-day.empty{visibility:hidden;cursor:default}
+.cal-day.selected{background:var(--navy);border-color:var(--navy)}
+.cal-day.selected .dn{color:#fff}.cal-day.selected .dw{color:rgba(255,255,255,.55)}
+.cal-day.full:not(.selected){background:var(--red-light);border-color:#f5c0c0;cursor:not-allowed}
+.cal-day.full:not(.selected) .dn{color:var(--red)}
+.cal-day.past{opacity:.38;cursor:not-allowed}
+.cal-day.approved-day{background:var(--green-light);border-color:#a8dfc5}
+.cal-day.approved-day .dn{color:var(--green)}
+.cal-day.weekend .dn{color:var(--accent)}.cal-day.is-sun .dn{color:var(--red)}
+.dn{font-family:"DM Mono",monospace;font-size:14px;font-weight:600;color:var(--text);line-height:1}
+.dw{font-size:9px;color:var(--muted);line-height:1}
+.dbadge{position:absolute;top:2px;right:3px;font-size:8px;font-weight:700;color:var(--muted)}
+.dbadge.full-b{color:var(--red)}
+.sel-summary{font-size:11px;color:var(--muted);min-height:16px;margin-bottom:12px;line-height:1.7}
+.note-inp{width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-family:"Noto Sans TC",sans-serif;font-size:13px;color:var(--text);outline:none;margin-bottom:12px;background:#fff}
+.note-inp:focus{border-color:var(--accent)}
+.btn-row{display:flex;gap:8px}
+.btn{padding:10px 16px;border-radius:8px;font-family:"Noto Sans TC",sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:var(--navy);color:#fff}
+.btn-primary:disabled{opacity:.38;cursor:not-allowed}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.user-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,.07);background:var(--navy-mid)}
+.user-name{font-size:13px;font-weight:600;color:#fff}
+.user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.logout-btn{background:transparent;border:none;font-size:11px;color:rgba(255,255,255,.38);cursor:pointer;font-family:"Noto Sans TC",sans-serif;transition:color .15s}
+.logout-btn:hover{color:rgba(255,255,255,.7)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.confirm-sheet{background:#fff;border-radius:16px 16px 0 0;padding:24px 20px 36px;width:100%;max-width:460px}
+.cs-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:10px}
+.cs-dates{font-size:13px;line-height:2;color:var(--text);max-height:180px;overflow-y:auto;margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px}
+.cs-warn{font-size:12px;color:var(--orange);margin-bottom:14px;line-height:1.6}
+.cs-btns{display:flex;gap:10px}
+.success-overlay{position:fixed;inset:0;background:rgba(46,158,107,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity .2s}
+.success-overlay.show{opacity:1;pointer-events:all}
+.so-name{font-size:26px;font-weight:700;color:#fff;margin-bottom:5px}
+.so-type{font-size:15px;color:rgba(255,255,255,.8);margin-bottom:5px}
+.so-time{font-family:"DM Mono",monospace;font-size:42px;color:#fff;font-weight:500}
+.so-dist{font-size:12px;color:rgba(255,255,255,.6);margin-top:7px}
+.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);padding:11px 20px;border-radius:9px;font-size:13px;font-weight:600;z-index:999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:88vw;text-align:center;white-space:pre-line}
+.toast.show{opacity:1}.toast-ok{background:var(--green);color:#fff}.toast-err{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="header-brand">打卡管理系統</div>
+    <div class="header-bar"></div>
+    <div class="clock-time" id="clock-time">--:--:--</div>
+    <div class="clock-date" id="clock-date"></div>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="card" id="screen-login">
+    <div class="card-body">
+      <div class="login-title">員工登入</div>
+      <div class="fl">帳號</div>
+      <input class="fi" type="text" id="inp-user" placeholder="請輸入帳號" autocapitalize="none" spellcheck="false" autocomplete="username">
+      <div class="fl">密碼</div>
+      <input class="fi" type="password" id="inp-pass" placeholder="請輸入密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="login-btn" id="login-btn" onclick="doLogin()">登入</button>
+      <div class="login-err" id="login-err"></div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="screen-main" style="display:none;width:100%;max-width:460px">
+    <div class="card" style="margin-bottom:14px;overflow:hidden">
+      <div class="user-bar">
+        <div>
+          <div class="user-name" id="user-name"></div>
+          <div class="user-role" id="user-role"></div>
+        </div>
+        <button class="logout-btn" onclick="doLogout()">登出</button>
+      </div>
+      <div class="tab-bar">
+        <button class="tab active" id="tab-punch"         onclick="switchTab('punch')">打卡</button>
+        <button class="tab"        id="tab-sched"         onclick="switchTab('sched')">排休申請</button>
+        <button class="tab"        id="tab-schedule-view" onclick="switchTab('schedule-view')">我的排班</button>
+        <button class="tab"        id="tab-overtime"      onclick="switchTab('overtime')">加班申請</button>
+        <button class="tab"        id="tab-attendance"    onclick="switchTab('attendance')">出勤月曆</button>
+      </div>
+
+      <!-- 打卡 tab -->
+      <div id="panel-punch" class="tab-body">
+        <div class="gps-bar gps-loading" id="gps-bar">
+          <div class="gps-dot dot-spin" id="gps-dot"></div>
+          <span id="gps-text">正在取得定位...</span>
+        </div>
+        <div class="punch-grid">
+          <button class="punch-btn p-in"   id="btn-in"   onclick="doPunch('in')">上班打卡<div class="p-sub">Clock In</div></button>
+          <button class="punch-btn p-out"  id="btn-out"  onclick="doPunch('out')">下班打卡<div class="p-sub">Clock Out</div></button>
+          <button class="punch-btn p-bout" id="btn-bout" onclick="doPunch('break_out')">休息開始<div class="p-sub">Break Out</div></button>
+          <button class="punch-btn p-bin"  id="btn-bin"  onclick="doPunch('break_in')">休息結束<div class="p-sub">Break In</div></button>
+        </div>
+        <div class="log-section" id="today-log-wrap" style="display:none">
+          <div class="section-label">今日打卡記錄</div>
+          <div id="today-log"></div>
+        </div>
+        <!-- 補打卡申請 -->
+        <div style="padding:10px 20px;border-top:1px solid var(--border)">
+          <button class="btn btn-outline" style="width:100%;font-size:13px" onclick="showReqPanel()">申請補打卡</button>
+        </div>
+        <div id="req-panel" style="display:none;padding:16px 20px;border-top:1px solid var(--border)">
+          <div class="section-label" style="margin-bottom:12px">補打卡申請</div>
+          <div style="margin-bottom:10px">
+            <div class="fl">打卡類型</div>
+            <select class="fi" id="req-type" style="margin-bottom:8px">
+              <option value="in">上班打卡</option><option value="out">下班打卡</option>
+              <option value="break_out">休息開始</option><option value="break_in">休息結束</option>
+            </select>
+          </div>
+          <div style="margin-bottom:10px">
+            <div class="fl">補打時間</div>
+            <input class="fi" type="datetime-local" id="req-time" style="margin-bottom:8px">
+          </div>
+          <div style="margin-bottom:14px">
+            <div class="fl">原因 *</div>
+            <input class="fi" id="req-reason" placeholder="例：忘記打卡、手機沒電" style="margin-bottom:0">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline" style="flex:1" onclick="hideReqPanel()">取消</button>
+            <button class="btn btn-primary" style="flex:2" onclick="submitPunchReq()">送出申請</button>
+          </div>
+          <div id="my-reqs" style="margin-top:16px;display:none">
+            <div class="section-label" style="margin-bottom:8px">我的申請記錄</div>
+            <div id="my-reqs-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 排休申請 tab -->
+      <div id="panel-sched" class="tab-body" style="display:none">
+        <div class="month-row">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">月份</span>
+          <input type="month" class="month-inp" id="month-picker" onchange="loadSchedMonth()">
+        </div>
+        <div class="quota-bar">
+          <div>
+            <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase">已選 / 配額</div>
+            <div style="margin-top:2px">
+              <span class="quota-num q-ok" id="q-sel">0</span>
+              <span style="font-size:13px;color:var(--muted);margin:0 3px">/</span>
+              <span class="quota-num" style="color:var(--muted)" id="q-quota">8</span>
+            </div>
+          </div>
+          <div style="flex:1;font-size:11px;color:var(--muted);text-align:right" id="q-hint">點擊日期選取休假日</div>
+        </div>
+        <div id="status-area"></div>
+        <div id="cal-wrap" style="display:none">
+          <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:10px" id="cal-title"></div>
+          <div class="cal-head-row">
+            <div class="cal-hd" style="color:var(--red)">日</div>
+            <div class="cal-hd" style="color:var(--muted)">一</div>
+            <div class="cal-hd" style="color:var(--muted)">二</div>
+            <div class="cal-hd" style="color:var(--muted)">三</div>
+            <div class="cal-hd" style="color:var(--muted)">四</div>
+            <div class="cal-hd" style="color:var(--muted)">五</div>
+            <div class="cal-hd" style="color:var(--accent)">六</div>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="sel-summary" id="sel-summary"></div>
+          <div class="fl">備註（選填）</div>
+          <input class="note-inp" id="submit-note" placeholder="例：5號家庭活動">
+          <div class="btn-row">
+            <button class="btn btn-outline" onclick="clearSchedSel()">清除</button>
+            <button class="btn btn-primary" id="submit-btn" style="flex:1" onclick="showSchedConfirm()">送出申請</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 我的排班 tab -->
+      <div id="panel-schedule-view" class="tab-body" style="display:none">
+        <div class="month-row">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">月份</span>
+          <input type="month" class="month-inp" id="view-month-picker" onchange="loadScheduleView()">
+        </div>
+        <div id="schedule-view-content"><div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">請選擇月份</div></div>
+      </div>
+
+      <!-- 加班申請 tab -->
+      <div id="panel-overtime" class="tab-body" style="display:none">
+        <div style="margin-bottom:14px;padding:10px 14px;background:var(--orange-light);border-radius:8px;border:1px solid #f5c0a0;font-size:12px;color:var(--text)">
+          <strong>勞基法加班費</strong>：前 2 小時 × 1.33、第 3 小時起 × 1.67
+        </div>
+        <div style="background:#fff;border-radius:10px;border:1.5px solid var(--border);padding:16px;margin-bottom:16px">
+          <div class="section-label" style="margin-bottom:12px">新增加班申請</div>
+          <div style="margin-bottom:10px"><div class="fl">加班日期</div><input class="fi" type="date" id="ot-date" style="margin-bottom:8px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><div class="fl">開始時間</div><input class="fi" type="time" id="ot-start" style="margin-bottom:0"></div>
+            <div><div class="fl">結束時間</div><input class="fi" type="time" id="ot-end" style="margin-bottom:0"></div>
+          </div>
+          <div id="ot-hours-preview" style="font-size:12px;color:var(--accent);margin-bottom:10px;min-height:16px"></div>
+          <div style="margin-bottom:10px">
+            <div class="fl">加班日別</div>
+            <select class="fi" id="ot-day-type" onchange="updateOTHoursPreview()" style="margin-bottom:0">
+              <option value="weekday">平日（前2h×1.33，後續×1.67）</option>
+              <option value="rest_day">休息日（最少4h）</option>
+              <option value="holiday">國定假日（全程×2倍）</option>
+              <option value="special">例假日（全程×2倍）</option>
+            </select>
+          </div>
+          <div style="margin-bottom:14px"><div class="fl">加班原因 *</div><input class="fi" id="ot-reason" placeholder="例：客戶急件、備料作業" style="margin-bottom:0"></div>
+          <button class="btn btn-primary" style="width:100%" onclick="submitOTRequest()">送出加班申請</button>
+        </div>
+        <div class="section-label" style="margin-bottom:10px">我的申請記錄</div>
+        <div id="my-ot-list"><div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div></div>
+      </div>
+
+      <!-- 出勤月曆 tab -->
+      <div id="panel-attendance" class="tab-body" style="display:none">
+        <div class="month-row" style="margin-bottom:14px">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">月份</span>
+          <input type="month" class="month-inp" id="att-month-picker" onchange="loadAttendance()">
+        </div>
+        <div id="att-summary" style="display:flex;gap:0;border-radius:9px;overflow:hidden;margin-bottom:14px;border:1px solid var(--border)"></div>
+        <div id="att-calendar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm sheet -->
+<div class="overlay" id="confirm-overlay" style="display:none" onclick="if(event.target===this)closeConfirm()">
+  <div class="confirm-sheet">
+    <div class="cs-title">確認排休申請</div>
+    <div class="cs-dates" id="cs-dates"></div>
+    <div class="cs-warn" id="cs-warn"></div>
+    <div class="cs-btns">
+      <button class="btn btn-outline" style="flex:1" onclick="closeConfirm()">返回修改</button>
+      <button class="btn btn-primary" style="flex:2" onclick="submitSchedRequest()">確認送出</button>
+    </div>
+  </div>
+</div>
+
+<div class="success-overlay" id="sov">
+  <div class="so-name" id="so-name"></div>
+  <div class="so-type" id="so-type"></div>
+  <div class="so-time" id="so-time"></div>
+  <div class="so-dist" id="so-dist"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DAYS=['日','一','二','三','四','五','六'];
+const PLABEL={in:'上班打卡',out:'下班打卡',break_out:'休息開始',break_in:'休息結束'};
+const PLCLS={in:'lb-in',out:'lb-out',break_out:'lb-bout',break_in:'lb-bin'};
+const SLABEL={pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審'};
+const SCLS={pending:'sb-pending',approved:'sb-approved',rejected:'sb-rejected',modified_pending:'sb-modified'};
+
+let me=null,gpsSettings=null,gpsPos=null,gpsWatchId=null,punchLocked=false;
+let curSchedMonth=null,schedCfg=null,schedOffCounts={},schedSelectedDates=new Set(),schedExistingReq=null;
+
+function tick(){
+  const n=new Date();
+  document.getElementById('clock-time').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  document.getElementById('clock-date').textContent=n.getFullYear()+' / '+(n.getMonth()+1)+' / '+n.getDate()+'（週'+DAYS[n.getDay()]+'）';
+}
+setInterval(tick,1000);tick();
+
+(async()=>{
+  gpsSettings=await fetch('/api/punch/settings').then(r=>r.json()).catch(()=>({}));
+  const r=await fetch('/api/punch/me');
+  if(r.ok){me=await r.json();showMain();}
+  else showLogin();
+})();
+
+function showLogin(){
+  document.getElementById('screen-login').style.display='';
+  document.getElementById('screen-main').style.display='none';
+}
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const err=document.getElementById('login-err');
+  const btn=document.getElementById('login-btn');
+  err.textContent='';
+  if(!u||!p){err.textContent='請輸入帳號及密碼';return;}
+  btn.disabled=true;btn.textContent='登入中...';
+  try{
+    const r=await fetch('/api/punch/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.error||'登入失敗';return;}
+    me=d;document.getElementById('inp-pass').value='';showMain();
+  }catch(e){err.textContent='網路錯誤，請重試';}
+  finally{btn.disabled=false;btn.textContent='登入';}
+}
+async function doLogout(){
+  await fetch('/api/punch/logout',{method:'POST'});
+  me=null;gpsPos=null;
+  if(gpsWatchId)navigator.geolocation.clearWatch(gpsWatchId);
+  showLogin();
+}
+function showMain(){
+  document.getElementById('screen-login').style.display='none';
+  document.getElementById('screen-main').style.display='';
+  document.getElementById('user-name').textContent=me.name;
+  document.getElementById('user-role').textContent=me.role||'員工';
+  switchTab('punch');
+}
+function switchTab(tab){
+  ['punch','sched','schedule-view','overtime','attendance'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('panel-'+t).style.display=t===tab?'':'none';
+  });
+  if(tab==='punch'){startGPS();loadTodayLog();}
+  if(tab==='sched')initSchedTab();
+  if(tab==='schedule-view')initScheduleViewTab();
+  if(tab==='overtime')initOTTab();
+  if(tab==='attendance')initAttendanceTab();
+}
+
+/* GPS */
+function startGPS(){
+  setGpsBar('loading','正在取得定位...');
+  if(!navigator.geolocation){setGpsBar('err','裝置不支援 GPS');return;}
+  navigator.geolocation.getCurrentPosition(gpsOk,gpsErr,{timeout:12000,enableHighAccuracy:true});
+  gpsWatchId=navigator.geolocation.watchPosition(gpsOk,gpsErr,{enableHighAccuracy:true,maximumAge:15000,timeout:15000});
+}
+function gpsOk(pos){
+  gpsPos={lat:pos.coords.latitude,lng:pos.coords.longitude};
+  const locs=(gpsSettings&&gpsSettings.locations)||[];
+  const req=gpsSettings&&gpsSettings.gps_required;
+  if(!locs.length){setGpsBar('ok','定位成功');setBtns(false);return;}
+  let minDist=null,minLoc=null;
+  locs.forEach(loc=>{const d=hav(gpsPos.lat,gpsPos.lng,loc.lat,loc.lng);if(minDist===null||d<minDist){minDist=d;minLoc=loc;}});
+  if(minDist<=minLoc.radius_m){setGpsBar('ok','「'+minLoc.location_name+'」範圍內（'+minDist+'m）');setBtns(false);}
+  else{setGpsBar('warn','距「'+minLoc.location_name+'」'+minDist+'m，超出範圍');setBtns(req,'超出打卡範圍');}
+}
+function gpsErr(){
+  if(gpsSettings&&gpsSettings.gps_required){setGpsBar('err','無法取得定位，請允許位置權限');setBtns(true,'需要定位權限');}
+  else{setGpsBar('warn','未取得定位（非必要）');setBtns(false);}
+}
+function setGpsBar(type,msg){
+  const tmap={ok:'gps-ok',warn:'gps-warn',err:'gps-err',loading:'gps-loading'};
+  const dmap={ok:'dot-ok',warn:'dot-warn',err:'dot-err',loading:'dot-spin'};
+  document.getElementById('gps-bar').className='gps-bar '+(tmap[type]||'gps-loading');
+  document.getElementById('gps-dot').className='gps-dot '+(dmap[type]||'dot-spin');
+  document.getElementById('gps-text').textContent=msg;
+}
+function setBtns(disabled,title=''){
+  ['btn-in','btn-out','btn-bout','btn-bin'].forEach(id=>{
+    const b=document.getElementById(id);b.disabled=disabled;if(disabled&&title)b.title=title;
+  });
+}
+function hav(a,b,c,d){
+  const R=6371000,p=Math.PI/180;
+  return Math.round(2*R*Math.asin(Math.sqrt(Math.sin((c-a)*p/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin((d-b)*p/2)**2)));
+}
+
+/* Punch */
+async function doPunch(type){
+  if(punchLocked)return;
+  punchLocked=true;setTimeout(()=>punchLocked=false,2000);
+  const body={punch_type:type};
+  if(gpsPos){body.lat=gpsPos.lat;body.lng=gpsPos.lng;}
+  try{
+    const r=await fetch('/api/punch/clock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok){showToast(d.error||'打卡失敗','err');punchLocked=false;return;}
+    const n=new Date();
+    const ts=[n.getHours(),n.getMinutes()].map(x=>String(x).padStart(2,'0')).join(':');
+    showSuccess(me.name,PLABEL[type],ts,d.gps_distance!=null?'距離打卡地點 '+d.gps_distance+' 公尺':'');
+    await loadTodayLog();
+  }catch(e){showToast('網路錯誤，請重試','err');punchLocked=false;}
+}
+async function loadTodayLog(){
+  const r=await fetch('/api/punch/today');const list=await r.json();
+  const wrap=document.getElementById('today-log');
+  document.getElementById('today-log-wrap').style.display='';
+  if(!list.length){wrap.innerHTML='<div class="log-empty">尚無打卡記錄</div>';return;}
+  wrap.innerHTML=list.map(r=>{
+    const t=r.punched_at?r.punched_at.slice(11,16):'';
+    const dist=r.gps_distance!=null?r.gps_distance+'m':'';
+    return '<div class="log-item"><span class="lb '+(PLCLS[r.punch_type]||'')+'">'+( PLABEL[r.punch_type]||r.punch_type)+'</span><div><div class="log-time">'+t+'</div>'+(dist?'<div class="log-sub">'+dist+'</div>':'')+(r.is_manual?'<div class="log-sub">補打卡</div>':'')+'</div></div>';
+  }).join('');
+}
+
+/* 補打卡申請 */
+const REQ_LABEL={pending:'審核中',approved:'已核准',rejected:'已退回'};
+const REQ_CLS={pending:'background:var(--orange-light);color:var(--orange)',approved:'background:var(--green-light);color:var(--green)',rejected:'background:var(--red-light);color:var(--red)'};
+function showReqPanel(){
+  const panel=document.getElementById('req-panel');panel.style.display='';
+  const now=new Date();
+  const local=new Date(now.getTime()+(8*60-now.getTimezoneOffset())*60000).toISOString().slice(0,16);
+  document.getElementById('req-time').value=local;loadMyReqs();
+}
+function hideReqPanel(){document.getElementById('req-panel').style.display='none';}
+async function submitPunchReq(){
+  const punch_type=document.getElementById('req-type').value;
+  const requested_at=document.getElementById('req-time').value;
+  const reason=document.getElementById('req-reason').value.trim();
+  if(!reason){showToast('請填寫補打原因','err');return;}
+  if(!requested_at){showToast('請選擇補打時間','err');return;}
+  try{
+    const res=await fetch('/api/punch/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({punch_type,requested_at,reason})});
+    const d=await res.json();
+    if(!res.ok){showToast(d.error||'送出失敗','err');return;}
+    showToast('補打卡申請已送出，等待主管審核','ok');
+    document.getElementById('req-reason').value='';await loadMyReqs();
+  }catch(e){showToast('網路錯誤','err');}
+}
+async function loadMyReqs(){
+  const res=await fetch('/api/punch/request/my');const list=await res.json();
+  const wrap=document.getElementById('my-reqs');const body=document.getElementById('my-reqs-list');
+  if(!list.length){wrap.style.display='none';return;}
+  wrap.style.display='';
+  body.innerHTML=list.map(r=>{
+    const dt=r.requested_at?r.requested_at.slice(0,16).replace('T',' '):'';
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px"><div><div style="font-size:12px;font-weight:600">${PLABEL[r.punch_type]||r.punch_type} — <span style="font-family:'DM Mono',monospace">${dt}</span></div><div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(r.reason)}</div>${r.review_note?`<div style="font-size:11px;color:var(--red);margin-top:2px">意見：${esc(r.review_note)}</div>`:''}</div><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap;${REQ_CLS[r.status]||''}">${REQ_LABEL[r.status]||r.status}</span></div>`;
+  }).join('');
+}
+
+/* 排休申請 */
+function initSchedTab(){
+  const n=new Date();n.setMonth(n.getMonth()+1);
+  const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!document.getElementById('month-picker').value)document.getElementById('month-picker').value=ym;
+  loadSchedMonth();
+}
+async function loadSchedMonth(){
+  const month=document.getElementById('month-picker').value;if(!month)return;
+  curSchedMonth=month;schedSelectedDates=new Set();schedExistingReq=null;
+  try{
+    const safeJson=async r=>{try{return await r.json();}catch(e){return null;}};
+    const[cfgRes,reqRes]=await Promise.all([
+      fetch('/api/schedule/config/'+month).then(safeJson),
+      fetch('/api/schedule/my-request/'+month).then(safeJson)
+    ]);
+    schedCfg=cfgRes||{vacation_quota:8,max_off_per_day:2,off_counts:{}};
+    schedOffCounts=schedCfg.off_counts||{};
+    schedExistingReq=(reqRes&&reqRes.error)?null:reqRes;
+  }catch(e){schedCfg={vacation_quota:8,max_off_per_day:2,off_counts:{}};schedOffCounts={};schedExistingReq=null;}
+  if(schedExistingReq&&['approved','pending','modified_pending'].includes(schedExistingReq.status))
+    (schedExistingReq.dates||[]).forEach(d=>schedSelectedDates.add(d));
+  document.getElementById('q-quota').textContent=schedCfg.vacation_quota||8;
+  renderStatusArea();renderCalendar();
+  document.getElementById('cal-wrap').style.display='';
+  updateQuotaBar();
+}
+function renderStatusArea(){
+  const area=document.getElementById('status-area');
+  if(!schedExistingReq){area.innerHTML='';return;}
+  const s=schedExistingReq.status;const cls=SCLS[s]||'';const label=SLABEL[s]||s;
+  const dateStr=(schedExistingReq.dates||[]).map(d=>{const dt=new Date(d+'T00:00:00');return d.slice(5)+'（'+DAYS[dt.getDay()]+'）';}).join('　');
+  let html=`<div class="status-box ${cls}"><div class="sb-title">${label}</div><div class="sb-dates">${dateStr||'（無日期）'}</div>`;
+  if(schedExistingReq.review_note)html+=`<div class="sb-note">審核意見：${esc(schedExistingReq.review_note)}</div>`;
+  if(s==='rejected')html+=`<div class="sb-note" style="color:var(--red)">請重新選取日期並送出</div>`;
+  html+='</div>';area.innerHTML=html;
+}
+function renderCalendar(){
+  const[y,m]=curSchedMonth.split('-').map(Number);
+  const firstWd=new Date(y,m-1,1).getDay();const daysInMonth=new Date(y,m,0).getDate();
+  const today=new Date();today.setHours(0,0,0,0);
+  document.getElementById('cal-title').textContent=y+'年 '+m+'月 排休日曆';
+  const grid=document.getElementById('cal-grid');grid.innerHTML='';
+  for(let i=0;i<firstWd;i++){const el=document.createElement('div');el.className='cal-day empty';grid.appendChild(el);}
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=curSchedMonth+'-'+String(day).padStart(2,'0');
+    const dt=new Date(y,m-1,day);const wd=dt.getDay();
+    const isPast=dt<today;const isSelected=schedSelectedDates.has(ds);
+    let othersCount=schedOffCounts[ds]||0;
+    const iWasIn=schedExistingReq&&(schedExistingReq.dates||[]).includes(ds);
+    if(iWasIn)othersCount=Math.max(0,othersCount-1);
+    const isFull=!isSelected&&othersCount>=(schedCfg.max_off_per_day||2);
+    let cls='cal-day';
+    if(isPast)cls+=' past';else if(isSelected)cls+=' selected';else if(isFull)cls+=' full';
+    if(wd===6)cls+=' weekend';if(wd===0)cls+=' is-sun';
+    const el=document.createElement('div');el.className=cls;
+    if(!isPast&&(!isFull||isSelected))el.onclick=()=>toggleSchedDate(ds);
+    const badge=isFull?`<span class="dbadge full-b">額滿</span>`:othersCount>0?`<span class="dbadge">${othersCount}人</span>`:'';
+    el.innerHTML=badge+`<span class="dn">${day}</span><span class="dw">${DAYS[wd]}</span>`;
+    grid.appendChild(el);
+  }
+}
+function toggleSchedDate(ds){
+  const dt=new Date(ds+'T00:00:00');const today=new Date();today.setHours(0,0,0,0);
+  if(dt<today)return;
+  if(schedSelectedDates.has(ds)){schedSelectedDates.delete(ds);}
+  else{
+    if(schedSelectedDates.size>=(schedCfg.vacation_quota||8)){showToast('已達本月配額','err');return;}
+    let othersCount=schedOffCounts[ds]||0;
+    const iWasIn=schedExistingReq&&(schedExistingReq.dates||[]).includes(ds);
+    if(iWasIn)othersCount=Math.max(0,othersCount-1);
+    if(othersCount>=(schedCfg.max_off_per_day||2)){showToast(ds.slice(5)+'休假人數已達上限','err');return;}
+    schedSelectedDates.add(ds);
+  }
+  renderCalendar();updateQuotaBar();
+}
+function updateQuotaBar(){
+  const sel=schedSelectedDates.size;const quota=(schedCfg&&schedCfg.vacation_quota)||8;
+  const el=document.getElementById('q-sel');
+  el.textContent=sel;el.className='quota-num '+(sel>quota?'q-over':sel===quota?'q-warn':'q-ok');
+  const sorted=[...schedSelectedDates].sort();
+  document.getElementById('q-hint').textContent=sorted.length?sorted.map(d=>d.slice(5)+'('+DAYS[new Date(d+'T00:00:00').getDay()]+')').join(' '):'點擊日期選取休假日';
+  document.getElementById('submit-btn').disabled=sel===0;
+}
+function clearSchedSel(){schedSelectedDates=new Set();renderCalendar();updateQuotaBar();}
+function showSchedConfirm(){
+  if(schedSelectedDates.size===0){showToast('請先選取休假日期','err');return;}
+  const sorted=[...schedSelectedDates].sort();
+  document.getElementById('cs-dates').innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">共 ${sorted.length} 天</div>`+sorted.map(d=>{const dt=new Date(d+'T00:00:00');return `<div>${d.slice(5).replace('-','/')} <strong>（週${DAYS[dt.getDay()]}）</strong></div>`;}).join('');
+  document.getElementById('cs-warn').textContent=schedExistingReq&&schedExistingReq.status==='approved'?'注意：修改後需等待主管重新審核。':'';
+  document.getElementById('confirm-overlay').style.display='flex';
+}
+function closeConfirm(){document.getElementById('confirm-overlay').style.display='none';}
+async function submitSchedRequest(){
+  const dates=[...schedSelectedDates].sort();const note=document.getElementById('submit-note').value.trim();
+  closeConfirm();
+  try{
+    const res=await fetch('/api/schedule/my-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:curSchedMonth,dates,submit_note:note})});
+    let d;try{d=await res.json();}catch(e){d={error:'伺服器回應格式錯誤'};}
+    if(!res.ok){showToast(d.error||`送出失敗（${res.status}）`,'err');return;}
+    showToast('申請送出成功','ok');schedExistingReq=d;renderStatusArea();renderCalendar();
+  }catch(e){showToast('連線失敗，請檢查網路後重試','err');}
+}
+
+/* 我的排班 */
+function initScheduleViewTab(){
+  const n=new Date();const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!document.getElementById('view-month-picker').value)document.getElementById('view-month-picker').value=ym;
+  loadScheduleView();
+}
+async function loadScheduleView(){
+  const month=document.getElementById('view-month-picker').value;if(!month)return;
+  const wrap=document.getElementById('schedule-view-content');
+  wrap.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div>';
+  let cfgData={vacation_quota:8,max_off_per_day:2,off_counts:{},notes:''},reqData=null,shiftData={};
+  try{
+    const safeJ=async r=>{try{return await r.json();}catch(e){return null;}};
+    const[c,r,s]=await Promise.all([
+      fetch('/api/schedule/config/'+month).then(safeJ),
+      fetch('/api/schedule/my-request/'+month).then(safeJ),
+      fetch('/api/shifts/my-schedule?month='+month).then(safeJ),
+    ]);
+    if(c)cfgData=c;if(r&&!r.error)reqData=r;if(s&&s.shifts)shiftData=s.shifts;
+  }catch(e){}
+  const cfg=cfgData;const req=reqData;
+  const[y,m]=month.split('-').map(Number);const daysInMonth=new Date(y,m,0).getDate();
+  const today=new Date();today.setHours(0,0,0,0);
+  const myDates=new Set((req&&req.dates)||[]);const myStatus=(req&&req.status)||'not_submitted';
+  const statusLabel={pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審',not_submitted:'尚未申請'};
+  const statusColor={pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)',modified_pending:'var(--accent)',not_submitted:'var(--muted)'};
+  let html=`<div style="padding:12px 14px;background:var(--bg);border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--navy)">${y}年 ${m}月</div><div style="font-size:12px;margin-top:3px">申請狀態：<span style="font-weight:700;color:${statusColor[myStatus]}">${statusLabel[myStatus]}</span>${req?`（${myDates.size} 天）`:''}</div>${cfg.notes?`<div style="font-size:11px;color:var(--muted);margin-top:3px">備註：${esc(cfg.notes)}</div>`:''}</div>`;
+  const firstWd=new Date(y,m-1,1).getDay();
+  html+=`<div style="padding:14px"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">${['日','一','二','三','四','五','六'].map((d,i)=>`<div style="text-align:center;font-size:10px;font-weight:700;color:${i===0?'var(--red)':i===6?'var(--accent)':'var(--muted)'};padding:4px 0">${d}</div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">`;
+  for(let i=0;i<firstWd;i++)html+='<div></div>';
+  const offCounts=cfgData.off_counts||{};
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=month+'-'+String(day).padStart(2,'0');const dt=new Date(y,m-1,day);const wd=dt.getDay();
+    const isOff=myDates.has(ds);const isPast=dt<today;
+    let bg='#fff',border='var(--border)',dayColor=wd===0?'var(--red)':wd===6?'var(--accent)':'var(--text)';
+    if(isOff&&myStatus==='approved'){bg='var(--green-light)';border='#a8dfc5';dayColor='var(--green)';}
+    else if(isOff&&myStatus==='pending'){bg='var(--orange-light)';border='#f5c0a0';dayColor='var(--orange)';}
+    else if(isOff&&myStatus==='rejected'){bg='var(--red-light)';border='#f5c0c0';dayColor='var(--red)';}
+    if(isPast)bg='#fafafa';
+    const shift=shiftData[ds];
+    let shiftBadge='';
+    if(shift&&!isOff){border=shift.color;bg=shift.color+'22';shiftBadge=`<span style="font-size:7px;font-weight:700;color:${shift.color};line-height:1.3;text-align:center;display:block">${esc(shift.shift_name)}</span><span style="font-size:7px;color:${shift.color}">${shift.start_time}~${shift.end_time}</span>`;}
+    else if(shift&&isOff){shiftBadge=`<span style="font-size:7px;font-weight:700;color:${shift.color};opacity:.5;line-height:1.3;display:block">${esc(shift.shift_name)}</span>`;}
+    const offLabel={approved:'✓休假',pending:'申請中',modified_pending:'修改中',rejected:'✗退回'};
+    const offBadge=isOff?`<span style="font-size:7px;font-weight:700;color:${dayColor};line-height:1.3">${offLabel[myStatus]||'休假'}</span>`:'';
+    html+=`<div style="border-radius:7px;border:1.5px solid ${border};background:${bg};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3px 2px;gap:0;opacity:${isPast?'.5':'1'};min-height:52px"><span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${dayColor};line-height:1.2">${day}</span>${offBadge}${shiftBadge}</div>`;
+  }
+  html+='</div></div>';wrap.innerHTML=html;
+}
+
+/* 加班申請 */
+const OT_SL={pending:'審核中',approved:'已核准',rejected:'已退回'};
+const OT_SC={pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)'};
+function initOTTab(){
+  const n=new Date();const today=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  if(!document.getElementById('ot-date').value)document.getElementById('ot-date').value=today;
+  ['ot-start','ot-end'].forEach(id=>document.getElementById(id).addEventListener('change',updateOTHoursPreview));
+  loadMyOTRequests();
+}
+function updateOTHoursPreview(){
+  const s=document.getElementById('ot-start').value;const e=document.getElementById('ot-end').value;
+  const dt=document.getElementById('ot-day-type')?.value||'weekday';
+  const el=document.getElementById('ot-hours-preview');
+  if(!s||!e){el.textContent='';return;}
+  const[sh,sm]=s.split(':').map(Number);const[eh,em]=e.split(':').map(Number);
+  let mins=(eh*60+em)-(sh*60+sm);if(mins<=0)mins+=24*60;
+  const hrs=(mins/60).toFixed(2)*1;
+  const DT_LABEL={weekday:'平日',rest_day:'休息日',holiday:'國定假日',special:'例假日'};
+  let detail='';
+  if(dt==='rest_day'){const billed=Math.max(hrs,4);detail=`休息日（實際${hrs}h，計費${billed}h）`;}
+  else if(dt==='holiday'||dt==='special'){detail=`${DT_LABEL[dt]}：${hrs}h × 2 倍`;}
+  else{const h1=Math.min(hrs,2).toFixed(1),h2=Math.max(0,hrs-2).toFixed(1);detail=`平日：前${h1}h×1.33 + 後${h2}h×1.67`;}
+  el.innerHTML=`<strong>加班時數：${hrs} 小時</strong>　<span style="color:var(--muted)">${detail}</span>`;
+}
+async function submitOTRequest(){
+  const request_date=document.getElementById('ot-date').value;
+  const start_time=document.getElementById('ot-start').value;
+  const end_time=document.getElementById('ot-end').value;
+  const reason=document.getElementById('ot-reason').value.trim();
+  if(!request_date||!start_time||!end_time){showToast('請填寫加班日期及時間','err');return;}
+  if(!reason){showToast('請填寫加班原因','err');return;}
+  try{
+    const day_type=document.getElementById('ot-day-type')?.value||'weekday';
+    const res=await fetch('/api/overtime/my-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_date,start_time,end_time,reason,day_type})});
+    const d=await res.json();
+    if(!res.ok){showToast(d.error||'送出失敗','err');return;}
+    showToast('加班申請已送出','ok');document.getElementById('ot-reason').value='';await loadMyOTRequests();
+  }catch(e){showToast('網路錯誤','err');}
+}
+async function loadMyOTRequests(){
+  const res=await fetch('/api/overtime/my-requests');const list=await res.json();
+  const wrap=document.getElementById('my-ot-list');
+  if(!list.length){wrap.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">尚無申請記錄</div>';return;}
+  const DAY_LABEL={weekday:'平日',rest_day:'休息日',holiday:'國定假日',special:'例假日'};
+  wrap.innerHTML=list.map(r=>{
+    const sc=OT_SC[r.status]||'var(--muted)';const sl=OT_SL[r.status]||r.status;
+    const payStr=r.ot_pay>0?`<div style="font-size:13px;font-weight:700;color:var(--green);margin-top:4px">加班費：$${Number(r.ot_pay).toLocaleString()}</div>`:'';
+    return `<div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px"><div style="padding:10px 14px;background:var(--bg);display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700">${r.request_date}　${r.start_time}～${r.end_time}<span style="font-size:11px;font-weight:400;background:var(--bg);padding:1px 6px;border-radius:8px;margin-left:6px">${DAY_LABEL[r.day_type||'weekday']||''}</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px">加班 <strong>${r.ot_hours}</strong> 小時</div></div><span style="font-size:12px;font-weight:700;color:${sc};padding:3px 10px;border-radius:10px;background:${sc}22">${sl}</span></div><div style="padding:10px 14px;font-size:12px;color:var(--text)">${esc(r.reason)}${payStr}${r.review_note?`<div style="color:${sc};margin-top:4px">意見：${esc(r.review_note)}</div>`:''}</div></div>`;
+  }).join('');
+}
+
+/* 出勤月曆 */
+const ATT_COLOR={in:'var(--green)',out:'var(--red)',break_out:'var(--orange)',break_in:'var(--accent)'};
+const ATT_BG={in:'var(--green-light)',out:'var(--red-light)',break_out:'var(--orange-light)',break_in:'var(--accent-light)'};
+function initAttendanceTab(){
+  const n=new Date();const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!document.getElementById('att-month-picker').value)document.getElementById('att-month-picker').value=ym;
+  loadAttendance();
+}
+async function loadAttendance(){
+  const month=document.getElementById('att-month-picker').value;if(!month)return;
+  document.getElementById('att-calendar').innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">載入中...</div>';
+  let data;
+  try{const res=await fetch('/api/punch/my-records?month='+month);data=await res.json();if(data.error)throw new Error(data.error);}
+  catch(e){document.getElementById('att-calendar').innerHTML=`<div style="text-align:center;color:var(--red);font-size:13px;padding:20px">${esc(e.message)}</div>`;return;}
+  const records=data.records||{};
+  const[y,m]=month.split('-').map(Number);const daysInMonth=new Date(y,m,0).getDate();
+  const today=new Date();today.setHours(0,0,0,0);
+  let totalIn=0;
+  for(let d=1;d<=daysInMonth;d++){const ds=month+'-'+String(d).padStart(2,'0');if((records[ds]||[]).some(r=>r.type==='in'))totalIn++;}
+  document.getElementById('att-summary').innerHTML=`<div style="flex:1;padding:10px 14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:10px;color:var(--muted);margin-bottom:3px">出勤天數</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--navy)">${totalIn}</div></div><div style="flex:1;padding:10px 14px;text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:3px">月份</div><div style="font-size:14px;font-weight:700;color:var(--navy)">${y}/${String(m).padStart(2,'0')}</div></div>`;
+  const firstWd=new Date(y,m-1,1).getDay();
+  let html=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">${['日','一','二','三','四','五','六'].map((d,i)=>`<div style="text-align:center;font-size:10px;font-weight:700;padding:5px 0;color:${i===0?'var(--red)':i===6?'var(--accent)':'var(--muted)'}">${d}</div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">`;
+  for(let i=0;i<firstWd;i++)html+='<div></div>';
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=month+'-'+String(day).padStart(2,'0');const dt=new Date(y,m-1,day);const wd=dt.getDay();
+    const isFuture=dt>today;const recs=records[ds]||[];
+    const hasIn=recs.some(r=>r.type==='in');
+    let cellBg='#fff',cellBorder='var(--border)';
+    if(recs.length>0){cellBg=hasIn?'#edfaf4':'#fef3e8';cellBorder=hasIn?'#a8dfc5':'#f5c0a0';}
+    if(isFuture){cellBg='#fafafa';cellBorder='var(--border)';}
+    const dayColor=wd===0?'var(--red)':wd===6?'var(--accent)':'var(--text)';
+    const recRows=recs.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:1px 3px;border-radius:3px;margin-top:2px;background:${ATT_BG[r.type]||'var(--bg)'}"><span style="font-size:9px;font-weight:700;color:${ATT_COLOR[r.type]||'var(--muted)'}">${r.label}</span><span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;color:${ATT_COLOR[r.type]||'var(--muted)'}">${r.time}${r.is_manual?'補':''}</span></div>`).join('');
+    html+=`<div style="border:1.5px solid ${cellBorder};border-radius:8px;background:${cellBg};padding:5px 5px 4px;min-height:54px;opacity:${isFuture?'.4':'1'}"><div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${recs.length?'var(--navy)':dayColor};margin-bottom:1px">${day}</div>${recRows}${recs.length===0&&!isFuture?'<div style="font-size:9px;color:var(--border);margin-top:4px;text-align:center">—</div>':''}</div>`;
+  }
+  html+='</div>';
+  document.getElementById('att-calendar').innerHTML=html;
+}
+
+/* Utils */
+function showSuccess(name,type,time,dist){
+  ['so-name','so-type','so-time','so-dist'].forEach((id,i)=>{document.getElementById(id).textContent=[name,type+' 成功',time,dist][i];});
+  const el=document.getElementById('sov');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2400);
+}
+function showToast(msg,type){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast show toast-'+(type==='ok'?'ok':'err');
+  setTimeout(()=>el.classList.remove('show'),3500);
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+</body>
+</html>

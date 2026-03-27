@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>後台管理系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -195,6 +196,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div>
   <nav class="sidebar-nav">
     <div class="nav-label">功能選單</div>
+    <a href="#" class="nav-item"        id="nav-dash"  onclick="showPage('dash',event)">儀表板</a>
     <a href="#" class="nav-item active" id="nav-punch" onclick="showPage('punch',event)">打卡管理<span class="nav-badge" id="badge-punch" style="display:none"></span></a>
     <a href="#" class="nav-item"        id="nav-sched"  onclick="showPage('sched',event)">排班管理<span class="nav-badge" id="badge-sched" style="display:none"></span></a>
     <a href="#" class="nav-item"        id="nav-leave"  onclick="showPage('leave',event)">請假管理<span class="nav-badge" id="badge-leave" style="display:none"></span></a>
@@ -217,6 +219,120 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
     <div class="topbar-actions"></div>
   </header>
+
+
+  <!-- ── 儀表板 ── -->
+  <div class="page" id="page-dash" style="display:none">
+
+    <!-- 頂部統計卡片 -->
+    <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px" id="dash-stat-cards">
+      <div class="stat-card" style="border-left:4px solid var(--green)">
+        <div class="stat-label">今日出勤</div>
+        <div class="stat-value" id="ds-working">—</div>
+        <div class="stat-sub" id="ds-working-sub">人正在工作</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid var(--orange)">
+        <div class="stat-label">待審申請</div>
+        <div class="stat-value" id="ds-pending">—</div>
+        <div class="stat-sub" id="ds-pending-sub">筆需要處理</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid var(--accent)">
+        <div class="stat-label">本月薪資總額</div>
+        <div class="stat-value" id="ds-salary">—</div>
+        <div class="stat-sub" id="ds-salary-sub">已確認 / 全部</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid var(--navy)">
+        <div class="stat-label">在職人員</div>
+        <div class="stat-value" id="ds-total">—</div>
+        <div class="stat-sub" id="ds-total-sub">位員工</div>
+      </div>
+    </div>
+
+    <!-- 主要圖表區 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+      <!-- 本月每日出勤折線/長條圖 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">本月每日出勤人數</span>
+          <span id="ds-month-label" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div style="padding:16px 20px">
+          <canvas id="chart-daily" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- 今日出勤狀態圓餅圖 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">今日出勤狀態</span>
+          <span id="ds-today-label" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div style="padding:16px 20px;display:flex;align-items:center;gap:24px">
+          <div style="position:relative;flex-shrink:0">
+            <canvas id="chart-today-pie" width="180" height="180"></canvas>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+              <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:700;color:var(--navy)" id="ds-pie-center">—</div>
+              <div style="font-size:10px;color:var(--muted)">人出勤</div>
+            </div>
+          </div>
+          <div id="ds-today-legend" style="flex:1;font-size:12px;display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二排圖表 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+      <!-- 本月請假類型圓餅圖 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">本月請假類型分佈</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;align-items:center;gap:24px">
+          <div style="flex-shrink:0">
+            <canvas id="chart-leave-pie" width="180" height="180"></canvas>
+          </div>
+          <div id="ds-leave-legend" style="flex:1;font-size:12px;display:flex;flex-direction:column;gap:7px"></div>
+        </div>
+      </div>
+
+      <!-- 本月加班費排行橫條圖 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">本月加班費排行</span>
+        </div>
+        <div style="padding:16px 20px">
+          <canvas id="chart-ot-bar" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待審申請 + 今日明細 -->
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
+
+      <!-- 待審申請分類 -->
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="padding:0;margin-bottom:16px">待審申請</div>
+        <div id="ds-pending-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+
+      <!-- 今日出勤明細表 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">今日人員狀態</span>
+          <button class="btn btn-outline btn-sm" onclick="initDash()">重新整理</button>
+        </div>
+        <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+          <table>
+            <thead><tr><th>姓名</th><th>職稱</th><th>上班</th><th>下班</th><th>狀態</th></tr></thead>
+            <tbody id="ds-today-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end page-dash -->
 
   <!-- ── 打卡管理 ── -->
   <div class="page" id="page-punch">
@@ -1155,6 +1271,291 @@ async function api(url, opts = {}, silent = false) {
 function apiJSON(body) { return { method: 'POST', body: JSON.stringify(body) }; }
 function apiPUT(body)  { return { method: 'PUT',  body: JSON.stringify(body) }; }
 
+
+// ══════════════════════════════════════════════════════════════
+// 儀表板模組
+// ══════════════════════════════════════════════════════════════
+let _dashCharts = {};   // chart instances to destroy on reload
+
+function _destroyChart(id) {
+  if (_dashCharts[id]) {
+    _dashCharts[id].destroy();
+    delete _dashCharts[id];
+  }
+}
+
+async function initDash() {
+  const { ok, data } = await api('/api/dashboard', {}, true);
+  if (!ok) return;
+  renderDashStats(data);
+  renderDashTodayDetail(data.today_detail || []);
+  renderDashPending(data.pending);
+  renderDashDailyChart(data.daily_attendance || [], data.month);
+  renderDashTodayPie(data.today_summary);
+  renderDashLeavePie(data.leave_distribution || []);
+  renderDashOTBar(data.ot_ranking || []);
+}
+
+// ── 統計卡片 ─────────────────────────────────────────────────
+function renderDashStats(data) {
+  const ts  = data.today_summary;
+  const sal = data.salary_summary;
+  const now = new Date();
+  document.getElementById('ds-month-label').textContent  = data.month;
+  document.getElementById('ds-today-label').textContent  = data.today;
+
+  document.getElementById('ds-working').textContent     = ts.working;
+  document.getElementById('ds-working-sub').textContent = `上班中 | 已下班 ${ts.clocked_out} | 請假 ${ts.on_leave}`;
+  document.getElementById('ds-pending').textContent     = data.pending.total;
+  document.getElementById('ds-pending-sub').textContent = `補打${data.pending.punch} 加班${data.pending.ot} 排休${data.pending.sched} 請假${data.pending.leave}`;
+
+  const netFmt = sal.total_net > 0 ? '$' + sal.total_net.toLocaleString('zh-TW', {maximumFractionDigits:0}) : '—';
+  document.getElementById('ds-salary').textContent     = netFmt;
+  document.getElementById('ds-salary-sub').textContent = `已確認 ${sal.confirmed_count} / 共 ${sal.total_count} 筆`;
+  document.getElementById('ds-total').textContent      = ts.total;
+  document.getElementById('ds-total-sub').textContent  = `未出勤 ${ts.absent} 人`;
+}
+
+// ── 今日出勤明細表 ────────────────────────────────────────────
+function renderDashTodayDetail(detail) {
+  const STATUS_COLOR = {
+    working: 'var(--green)', done: 'var(--muted)',
+    leave: 'var(--accent)', absent: 'var(--red)'
+  };
+  const tb = document.getElementById('ds-today-table');
+  if (!detail.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">今日無出勤資料</div></td></tr>';
+    return;
+  }
+  tb.innerHTML = detail.map(r => `<tr>
+    <td style="font-weight:600">${escHtml(r.name)}</td>
+    <td style="color:var(--muted);font-size:12px">${escHtml(r.role)}</td>
+    <td style="font-family:'DM Mono',monospace;color:var(--green)">${r.clock_in || '—'}</td>
+    <td style="font-family:'DM Mono',monospace;color:var(--muted)">${r.clock_out || '—'}</td>
+    <td><span style="font-size:11px;font-weight:700;color:${STATUS_COLOR[r.status]||'var(--muted)'}">${escHtml(r.status_label)}</span></td>
+  </tr>`).join('');
+}
+
+// ── 待審申請清單 ──────────────────────────────────────────────
+function renderDashPending(pending) {
+  const items = [
+    { label: '補打卡申請', count: pending.punch,  color: 'var(--red)',    page: 'punch',  tab: 'requests' },
+    { label: '加班申請',   count: pending.ot,     color: 'var(--orange)', page: 'punch',  tab: 'overtime' },
+    { label: '排休申請',   count: pending.sched,  color: 'var(--accent)', page: 'sched',  tab: 'requests' },
+    { label: '請假申請',   count: pending.leave,  color: 'var(--green)',  page: 'leave',  tab: 'requests' },
+  ];
+  const wrap = document.getElementById('ds-pending-list');
+  wrap.innerHTML = items.map(it => `
+    <div onclick="showPage('${it.page}',null);setTimeout(()=>{ try{switch${it.page==='punch'?'Punch':'Sched'}Tab && switch${it.page==='punch'?'Punch':it.page==='sched'?'Sched':'Leave'}Tab('${it.tab}')}catch(e){} },200)"
+      style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+             border-radius:9px;border:1.5px solid var(--border);cursor:pointer;
+             transition:background .12s;-webkit-tap-highlight-color:transparent"
+      onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+      <span style="font-size:13px;font-weight:500">${it.label}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;
+                   color:${it.count > 0 ? it.color : 'var(--border)'}">${it.count}</span>
+    </div>`).join('');
+}
+
+// ── 本月每日出勤長條圖 ────────────────────────────────────────
+function renderDashDailyChart(daily, month) {
+  _destroyChart('daily');
+  const ctx = document.getElementById('chart-daily');
+  if (!ctx) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const labels = daily.map(d => d.day + '日');
+  const data   = daily.map(d => d.count);
+  const colors = daily.map(d => {
+    if (d.date === today)    return 'rgba(74,123,218,0.9)';
+    if (d.weekday >= 5)      return 'rgba(200,169,110,0.45)';
+    if (!d.is_past)          return 'rgba(200,200,200,0.3)';
+    return 'rgba(46,158,107,0.7)';
+  });
+
+  _dashCharts['daily'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '出勤人數',
+        data,
+        backgroundColor: colors,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y} 人出勤`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0 } },
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f0f2f8' } }
+      }
+    }
+  });
+}
+
+// ── 今日出勤圓餅圖 ────────────────────────────────────────────
+function renderDashTodayPie(ts) {
+  _destroyChart('today-pie');
+  const ctx = document.getElementById('chart-today-pie');
+  if (!ctx || !ts) return;
+
+  const inWork  = ts.clocked_in - ts.clocked_out;
+  const done    = ts.clocked_out;
+  const onLeave = ts.on_leave;
+  const absent  = Math.max(0, ts.absent);
+  const total   = ts.total;
+
+  document.getElementById('ds-pie-center').textContent = ts.clocked_in;
+
+  const hasPie = (inWork + done + onLeave + absent) > 0;
+  if (!hasPie) {
+    document.getElementById('ds-pie-center').textContent = '0';
+    document.getElementById('ds-today-legend').innerHTML =
+      '<div style="color:var(--muted);font-size:12px">今日尚無出勤記錄</div>';
+    return;
+  }
+
+  const pieData = [
+    { label: '上班中',  value: inWork,  color: '#2e9e6b' },
+    { label: '已下班',  value: done,    color: '#8892a4' },
+    { label: '請假中',  value: onLeave, color: '#4a7bda' },
+    { label: '未出勤',  value: absent,  color: '#f0f2f8' },
+  ].filter(d => d.value > 0);
+
+  _dashCharts['today-pie'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: pieData.map(d => d.label),
+      datasets: [{ data: pieData.map(d => d.value), backgroundColor: pieData.map(d => d.color), borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: false,
+      cutout: '68%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.label}：${c.parsed} 人` } } }
+    }
+  });
+
+  document.getElementById('ds-today-legend').innerHTML = [
+    { label: '上班中',  value: inWork,  color: '#2e9e6b' },
+    { label: '已下班',  value: done,    color: '#8892a4' },
+    { label: '請假中',  value: onLeave, color: '#4a7bda' },
+    { label: '未出勤',  value: absent,  color: '#dde3ef' },
+  ].map(d => `<div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:${d.color};flex-shrink:0"></div>
+    <span style="flex:1;color:var(--muted)">${d.label}</span>
+    <strong style="font-family:'DM Mono',monospace">${d.value}</strong>
+  </div>`).join('');
+}
+
+// ── 本月請假類型圓餅圖 ────────────────────────────────────────
+function renderDashLeavePie(dist) {
+  _destroyChart('leave-pie');
+  const ctx = document.getElementById('chart-leave-pie');
+  if (!ctx) return;
+
+  const legend = document.getElementById('ds-leave-legend');
+
+  if (!dist.length) {
+    legend.innerHTML = '<div style="color:var(--muted);font-size:12px">本月尚無請假記錄</div>';
+    // Draw empty state donut
+    _dashCharts['leave-pie'] = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: ['無資料'], datasets: [{ data: [1], backgroundColor: ['#f0f2f8'], borderWidth: 0 }] },
+      options: { responsive: false, cutout: '68%', plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+    });
+    return;
+  }
+
+  const total = dist.reduce((s, d) => s + d.days, 0);
+  _dashCharts['leave-pie'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: dist.map(d => d.name),
+      datasets: [{ data: dist.map(d => d.days), backgroundColor: dist.map(d => d.color || '#4a7bda'), borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: false, cutout: '60%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.label}：${c.parsed} 天` } } }
+    }
+  });
+
+  legend.innerHTML = dist.map(d => {
+    const pct = total > 0 ? Math.round(d.days / total * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${d.color||'#4a7bda'};flex-shrink:0"></div>
+      <span style="flex:1;color:var(--muted);font-size:11px">${escHtml(d.name)}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:11px">${d.days}天</span>
+      <span style="font-size:10px;color:var(--muted)">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ── 本月加班費排行橫條圖 ──────────────────────────────────────
+function renderDashOTBar(ranking) {
+  _destroyChart('ot-bar');
+  const ctx = document.getElementById('chart-ot-bar');
+  if (!ctx) return;
+
+  if (!ranking.length) {
+    // Draw empty state
+    _dashCharts['ot-bar'] = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: ['無資料'], datasets: [{ data: [0], backgroundColor: '#f0f2f8' }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
+    });
+    return;
+  }
+
+  const maxPay = Math.max(...ranking.map(r => r.pay));
+  const colors = ranking.map((_, i) => {
+    const alpha = 0.9 - i * 0.08;
+    return `rgba(74,123,218,${Math.max(alpha, 0.3)})`;
+  });
+
+  _dashCharts['ot-bar'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ranking.map(r => r.name),
+      datasets: [{
+        label: '加班費',
+        data:  ranking.map(r => r.pay),
+        backgroundColor: colors,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',   // horizontal bar
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => `$${c.parsed.x.toLocaleString('zh-TW')} （${ranking[c.dataIndex].hours}h）`
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: '#f0f2f8' },
+          ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v), font: { size: 11 } }
+        },
+        y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+      }
+    }
+  });
+}
+
 // ── Navigation ────────────────────────────────────────────────
 function openSidebar() {
   document.getElementById('sidebar').classList.add('open');
@@ -1171,11 +1572,12 @@ function showPage(page, e) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('nav-' + page).classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['punch','sched','leave','salary','ann','holiday'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
   document.getElementById('page-title').textContent =
-    { punch: '打卡管理', sched: '排班管理', leave: '請假管理', salary: '薪資管理', ann: '公告管理', holiday: '國定假日' }[page];
+    { dash: '儀表板', punch: '打卡管理', sched: '排班管理', leave: '請假管理', salary: '薪資管理', ann: '公告管理', holiday: '國定假日' }[page];
+  if (page === 'dash')   initDash();
   if (page === 'punch')  initPunch();
   if (page === 'sched')  initSched();
   if (page === 'leave')  initLeave();
@@ -3222,6 +3624,6 @@ function setTabDot(id, count) {
 document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterval(refreshBadges, 30000); });
 
 // ── Init ──────────────────────────────────────────────────────
-showPage('punch', null);
+showPage('dash', null);
 </script>
 </html>

@@ -132,6 +132,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Empty */
+.tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e53e3e; color: #fff;
+  font-size: 9px; font-weight: 800; font-family: 'DM Mono', monospace;
+  min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
+  margin-left: 5px; vertical-align: middle;
+  animation: badge-pop .2s ease;
+}
 .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
 .empty-state-text { font-size: 14px; margin-top: 8px; }
 
@@ -215,8 +223,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab active" id="punchtab-summary"  onclick="switchPunchTab('summary')">出勤摘要</button>
       <button class="inv-tab"        id="punchtab-records"  onclick="switchPunchTab('records')">打卡記錄</button>
       <button class="inv-tab"        id="punchtab-manual"   onclick="switchPunchTab('manual')">補打卡（管理員）</button>
-      <button class="inv-tab"        id="punchtab-requests" onclick="switchPunchTab('requests')">補打申請</button>
-      <button class="inv-tab"        id="punchtab-overtime" onclick="switchPunchTab('overtime')">加班申請</button>
+      <button class="inv-tab"        id="punchtab-requests" onclick="switchPunchTab('requests')">補打申請<span class="tab-badge" id="tabdot-punchrq" style="display:none"></span></button>
+      <button class="inv-tab"        id="punchtab-overtime" onclick="switchPunchTab('overtime')">加班申請<span class="tab-badge" id="tabdot-overtime" style="display:none"></span></button>
       <button class="inv-tab"        id="punchtab-staff"    onclick="switchPunchTab('staff')">員工管理</button>
       <button class="inv-tab"        id="punchtab-gps"      onclick="switchPunchTab('gps')">GPS 設定</button>
       <button class="inv-tab"        id="punchtab-line"     onclick="switchPunchTab('line')">LINE 打卡</button>
@@ -417,7 +425,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab active" id="schedtab-shift"      onclick="switchSchedTab('shift')">班別排班</button>
       <button class="inv-tab"        id="schedtab-shifttypes" onclick="switchSchedTab('shifttypes')">班別設定</button>
       <button class="inv-tab"        id="schedtab-calendar"   onclick="switchSchedTab('calendar')">排休月曆</button>
-      <button class="inv-tab"        id="schedtab-requests"   onclick="switchSchedTab('requests')">排休申請</button>
+      <button class="inv-tab"        id="schedtab-requests"   onclick="switchSchedTab('requests')">排休申請<span class="tab-badge" id="tabdot-schedrq" style="display:none"></span></button>
       <button class="inv-tab"        id="schedtab-summary"    onclick="switchSchedTab('summary')">人員摘要</button>
       <button class="inv-tab"        id="schedtab-config"     onclick="switchSchedTab('config')">月份設定</button>
     </div>
@@ -517,7 +525,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   <!-- ── 請假管理 ── -->
   <div class="page" id="page-leave" style="display:none">
     <div class="inv-tab-bar">
-      <button class="inv-tab active" id="leavetab-requests"  onclick="switchLeaveTab('requests')">請假申請</button>
+      <button class="inv-tab active" id="leavetab-requests"  onclick="switchLeaveTab('requests')">請假申請<span class="tab-badge" id="tabdot-leaverq" style="display:none"></span></button>
       <button class="inv-tab"        id="leavetab-calendar"  onclick="switchLeaveTab('calendar')">請假月曆</button>
       <button class="inv-tab"        id="leavetab-balance"   onclick="switchLeaveTab('balance')">假別餘額</button>
       <button class="inv-tab"        id="leavetab-types"     onclick="switchLeaveTab('types')">假別設定</button>
@@ -1136,8 +1144,8 @@ function switchPunchTab(tab) {
   if (tab === 'records')   { loadPunchStaffOptions(); loadPunchRecords(); }
   if (tab === 'manual')    { loadManualStaffOptions(); loadManualRecords(); }
   if (tab === 'staff')     loadPunchStaff();
-  if (tab === 'requests')  loadPunchRequests();
-  if (tab === 'overtime')  loadOTRequests();
+  if (tab === 'requests')  { loadPunchRequests(); setTabDot('tabdot-punchrq', 0); }
+  if (tab === 'overtime')  { loadOTRequests(); setTabDot('tabdot-overtime', 0); }
   if (tab === 'gps')       loadGpsSettings();
   if (tab === 'line')      loadLinePunchConfig();
 }
@@ -1659,7 +1667,7 @@ function switchSchedTab(tab) {
   if (tab === 'shift')      loadShiftCalendar();
   if (tab === 'shifttypes') loadShiftTypes();
   if (tab === 'calendar')   loadSchedCalendar();
-  if (tab === 'requests')   loadSchedRequests();
+  if (tab === 'requests')   { loadSchedRequests(); setTabDot('tabdot-schedrq', 0); }
   if (tab === 'summary')    loadSchedSummary();
   if (tab === 'config')     loadSchedConfig();
 }
@@ -2016,7 +2024,7 @@ function switchLeaveTab(tab) {
     document.getElementById('leavetab-'+t).classList.toggle('active', t===tab);
     document.getElementById('leave-panel-'+t).style.display = t===tab?'':'none';
   });
-  if (tab==='requests') { loadLeaveStaffOptions(); loadLeaveRequests(); }
+  if (tab==='requests') { loadLeaveStaffOptions(); loadLeaveRequests(); setTabDot('tabdot-leaverq', 0); }
   if (tab==='calendar') loadLeaveCalendar();
   if (tab==='balance')  loadLeaveBalances();
   if (tab==='types')    loadLeaveTypes();
@@ -2887,24 +2895,45 @@ async function toggleAnnPin(id) {
 
 // ── Badges ────────────────────────────────────────────────────
 async function refreshBadges() {
-  const [pr, sr1, sr2, lr] = await Promise.all([
-    api('/api/punch/requests?status=pending', {}, true),
-    api('/api/schedule/admin/requests?status=pending', {}, true),
-    api('/api/schedule/admin/requests?status=modified_pending', {}, true),
-    api('/api/leave/requests?status=pending', {}, true),
+  const [punchRq, otRq, schedRq1, schedRq2, leaveRq] = await Promise.all([
+    api('/api/punch/requests?status=pending',                    {}, true),
+    api('/api/overtime/requests?status=pending',                 {}, true),
+    api('/api/schedule/admin/requests?status=pending',           {}, true),
+    api('/api/schedule/admin/requests?status=modified_pending',  {}, true),
+    api('/api/leave/requests?status=pending',                    {}, true),
   ]);
-  setBadge('badge-punch', pr.ok && Array.isArray(pr.data) ? pr.data.length : 0);
-  const sc = (sr1.ok && Array.isArray(sr1.data) ? sr1.data.length : 0) +
-             (sr2.ok && Array.isArray(sr2.data) ? sr2.data.length : 0);
-  setBadge('badge-sched', sc);
-  setBadge('badge-leave', lr.ok && Array.isArray(lr.data) ? lr.data.length : 0);
+
+  const punchRqCnt = punchRq.ok && Array.isArray(punchRq.data) ? punchRq.data.length : 0;
+  const otCnt      = otRq.ok   && Array.isArray(otRq.data)     ? otRq.data.length    : 0;
+  const schedCnt   = (schedRq1.ok && Array.isArray(schedRq1.data) ? schedRq1.data.length : 0) +
+                     (schedRq2.ok && Array.isArray(schedRq2.data) ? schedRq2.data.length : 0);
+  const leaveCnt   = leaveRq.ok && Array.isArray(leaveRq.data)  ? leaveRq.data.length  : 0;
+
+  // ── 左側 nav badge（顯示各模組總待審數）──
+  setBadge('badge-punch', punchRqCnt + otCnt);   // 打卡管理 = 補打卡 + 加班
+  setBadge('badge-sched', schedCnt);              // 排班管理 = 排休申請
+  setBadge('badge-leave', leaveCnt);              // 請假管理 = 請假申請
+
+  // ── Tab 內的小 badge（進入頁面後顯示哪個 tab 有待審）──
+  setTabDot('tabdot-punchrq', punchRqCnt);
+  setTabDot('tabdot-overtime', otCnt);
+  setTabDot('tabdot-schedrq', schedCnt);
+  setTabDot('tabdot-leaverq', leaveCnt);
 }
+
 function setBadge(id, count) {
   const el = document.getElementById(id); if (!el) return;
   if (count > 0) { el.textContent = count > 99 ? '99+' : count; el.style.display = 'inline-flex'; }
   else el.style.display = 'none';
 }
-document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterval(refreshBadges, 60000); });
+
+function setTabDot(id, count) {
+  const el = document.getElementById(id); if (!el) return;
+  if (count > 0) { el.textContent = count > 99 ? '99+' : count; el.style.display = 'inline-flex'; }
+  else el.style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterval(refreshBadges, 30000); });
 
 // ── Init ──────────────────────────────────────────────────────
 showPage('punch', null);

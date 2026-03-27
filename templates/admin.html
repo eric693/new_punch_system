@@ -188,7 +188,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   <nav class="sidebar-nav">
     <div class="nav-label">功能選單</div>
     <a href="#" class="nav-item active" id="nav-punch" onclick="showPage('punch',event)">打卡管理<span class="nav-badge" id="badge-punch" style="display:none"></span></a>
-    <a href="#" class="nav-item"        id="nav-sched" onclick="showPage('sched',event)">排班管理<span class="nav-badge" id="badge-sched" style="display:none"></span></a>
+    <a href="#" class="nav-item"        id="nav-sched"  onclick="showPage('sched',event)">排班管理<span class="nav-badge" id="badge-sched" style="display:none"></span></a>
+    <a href="#" class="nav-item"        id="nav-leave"  onclick="showPage('leave',event)">請假管理<span class="nav-badge" id="badge-leave" style="display:none"></span></a>
+    <a href="#" class="nav-item"        id="nav-salary" onclick="showPage('salary',event)">薪資管理</a>
   </nav>
   <div class="sidebar-bottom">
     <a href="/admin/logout" class="logout-btn">登出系統</a>
@@ -510,6 +512,161 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div><!-- end page-sched -->
 
+
+  <!-- ── 請假管理 ── -->
+  <div class="page" id="page-leave" style="display:none">
+    <div class="inv-tab-bar">
+      <button class="inv-tab active" id="leavetab-requests"  onclick="switchLeaveTab('requests')">請假申請</button>
+      <button class="inv-tab"        id="leavetab-calendar"  onclick="switchLeaveTab('calendar')">請假月曆</button>
+      <button class="inv-tab"        id="leavetab-balance"   onclick="switchLeaveTab('balance')">假別餘額</button>
+      <button class="inv-tab"        id="leavetab-types"     onclick="switchLeaveTab('types')">假別設定</button>
+    </div>
+
+    <!-- 請假申請 -->
+    <div id="leave-panel-requests">
+      <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">月份</span>
+        <input class="filter-input" type="month" id="leave-req-month" onchange="loadLeaveRequests()">
+        <div class="filter-divider"></div>
+        <span class="filter-label">狀態</span>
+        <select class="filter-input" id="leave-req-status" onchange="loadLeaveRequests()" style="min-width:110px">
+          <option value="pending">待審核</option><option value="">全部</option>
+          <option value="approved">已核准</option><option value="rejected">已退回</option>
+        </select>
+        <div class="filter-divider"></div>
+        <span class="filter-label">員工</span>
+        <select class="filter-input" id="leave-req-staff" onchange="loadLeaveRequests()" style="min-width:120px">
+          <option value="">全部</option>
+        </select>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" onclick="openLeaveAdminModal()">管理員代填</button>
+        <span id="leave-req-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="leave-req-list"></div>
+    </div>
+
+    <!-- 請假月曆 -->
+    <div id="leave-panel-calendar" style="display:none">
+      <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">月份</span>
+        <input class="filter-input" type="month" id="leave-cal-month" onchange="loadLeaveCalendar()">
+      </div>
+      <div id="leave-cal-wrap"></div>
+    </div>
+
+    <!-- 假別餘額 -->
+    <div id="leave-panel-balance" style="display:none">
+      <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">年度</span>
+        <select class="filter-input" id="leave-bal-year" onchange="loadLeaveBalances()" style="min-width:100px"></select>
+        <button class="btn btn-outline btn-sm" onclick="initAnnualLeave()">自動計算特休（依年資）</button>
+        <span style="flex:1"></span>
+        <span id="leave-bal-note" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="leave-bal-wrap"></div>
+    </div>
+
+    <!-- 假別設定 -->
+    <div id="leave-panel-types" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--muted)">設定假別名稱、薪資倍率、天數上限</span>
+        <button class="btn btn-primary" onclick="openLeaveTypeModal()">新增假別</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>假別名稱</th><th>代碼</th><th>薪資倍率</th><th>年度上限</th><th>顏色</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="leave-types-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          <strong style="color:var(--text)">2026 勞基法假別說明：</strong><br>
+          特休：1年10天、2年15天、3~5年+1天/年、滿5年20天（上限）｜
+          病假：年30天半薪（住院另計）｜事假：年14天無薪｜
+          生理假：月1天（年12天）半薪｜婚假：8天全薪｜
+          喪假：父母/配偶8天；祖父母6天；曾祖父母3天
+        </div>
+      </div>
+    </div>
+  </div><!-- end page-leave -->
+
+  <!-- ── 薪資管理 ── -->
+  <div class="page" id="page-salary" style="display:none">
+    <div class="inv-tab-bar">
+      <button class="inv-tab active" id="salarytab-calc"     onclick="switchSalaryTab('calc')">月薪計算</button>
+      <button class="inv-tab"        id="salarytab-settings" onclick="switchSalaryTab('settings')">薪資設定</button>
+      <button class="inv-tab"        id="salarytab-items"    onclick="switchSalaryTab('items')">薪資項目</button>
+    </div>
+
+    <!-- 月薪計算 -->
+    <div id="salary-panel-calc">
+      <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">月份</span>
+        <input class="filter-input" type="month" id="sal-month" onchange="loadSalaryRecords()">
+        <button class="btn btn-primary btn-sm" onclick="generateSalary()">自動產生薪資</button>
+        <span style="flex:1"></span>
+        <span id="sal-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>代碼</th><th>姓名</th><th>部門</th><th>津貼合計</th><th>扣除合計</th><th>實領金額</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="sal-tbody"></tbody>
+          </table>
+        </div>
+        <div id="sal-total-row" style="padding:12px 20px;border-top:2px solid var(--border);background:#f7f9fd;display:none">
+          <div style="display:flex;gap:32px;font-size:13px;font-weight:700">
+            <span>合計</span>
+            <span style="color:var(--green)" id="sal-total-allow"></span>
+            <span style="color:var(--red)"   id="sal-total-deduct"></span>
+            <span style="color:var(--navy)"  id="sal-total-net"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 薪資設定 -->
+    <div id="salary-panel-settings" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span id="sal-staff-count" style="font-size:13px;color:var(--muted)"></span>
+        <a href="#" onclick="showPage('punch',event);switchPunchTab('staff')" style="font-size:12px;color:var(--accent)">管理員工 →</a>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>姓名</th><th>帳號</th><th>部門</th><th>職稱</th><th>到職日</th><th>底薪</th><th>投保薪資</th><th>排休配額</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="sal-staff-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 薪資項目 -->
+    <div id="salary-panel-items" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--muted)">設定每月薪資計算時使用的津貼和扣除項目</span>
+        <button class="btn btn-primary" onclick="openSalaryItemModal()">新增項目</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" id="salary-items-grid">
+        <div><div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:12px">津貼項目（加項）</div><div id="sal-items-allow"></div></div>
+        <div><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:12px">扣除項目（減項）</div><div id="sal-items-deduct"></div></div>
+      </div>
+      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          <strong style="color:var(--text)">公式說明：</strong>可用變數：
+          <code>base_salary</code>（底薪）
+          <code>insured_salary</code>（投保薪資）
+          <code>service_years</code>（年資）<br>
+          範例：勞保 <code>insured_salary*0.125*0.2</code>　
+          健保 <code>insured_salary*0.0517*0.3</code>　
+          勞退6% <code>base_salary*0.06</code>
+        </div>
+      </div>
+    </div>
+  </div><!-- end page-salary -->
+
 </main>
 
 <!-- Punch Staff Modal -->
@@ -666,6 +823,140 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div>
 </div>
 
+
+<!-- Leave Admin Modal -->
+<div class="modal-overlay" id="leave-admin-modal" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><span class="modal-title" id="lam-title">管理員代填請假</span><button class="modal-close" onclick="closeLeaveAdminModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="lam-id">
+      <div class="form-row">
+        <div><label class="form-label">員工 *</label><select class="form-input" id="lam-staff" style="width:100%"></select></div>
+        <div><label class="form-label">假別 *</label><select class="form-input" id="lam-type" style="width:100%"></select></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">開始日期 *</label><input class="form-input" type="date" id="lam-start"></div>
+        <div><label class="form-label">結束日期 *</label><input class="form-input" type="date" id="lam-end"></div>
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lam-start-half"> <span class="form-label" style="margin:0">開始日半天</span></label></div>
+        <div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lam-end-half"> <span class="form-label" style="margin:0">結束日半天</span></label></div>
+      </div>
+      <div id="lam-days-preview" style="font-size:13px;color:var(--accent);margin-bottom:12px;min-height:18px"></div>
+      <div style="margin-bottom:12px"><label class="form-label">狀態</label><select class="form-input" id="lam-status" style="width:auto"><option value="approved">直接核准</option><option value="pending">待審核</option></select></div>
+      <div><label class="form-label">原因/備註</label><input class="form-input" id="lam-reason" placeholder="選填" style="width:100%"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeLeaveAdminModal()">取消</button><button class="btn btn-primary" onclick="saveLeaveAdmin()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Leave Review Modal -->
+<div class="modal-overlay" id="leave-review-modal" style="display:none">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header"><span class="modal-title" id="lrm-title">審核請假申請</span><button class="modal-close" onclick="closeLeaveReview()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="lrm-id">
+      <div id="lrm-info" style="padding:12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:13px"></div>
+      <div style="margin-bottom:12px"><label class="form-label">審核人員 *</label><input class="form-input" id="lrm-by" placeholder="管理員姓名" style="width:100%"></div>
+      <div><label class="form-label">審核意見（選填）</label><input class="form-input" id="lrm-note" placeholder="退回原因或備註" style="width:100%"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeLeaveReview()">取消</button><button class="btn btn-danger" onclick="reviewLeave('reject')">退回</button><button class="btn btn-primary" style="background:var(--green)" onclick="reviewLeave('approve')">核准</button></div>
+  </div>
+</div>
+
+<!-- Leave Type Modal -->
+<div class="modal-overlay" id="leave-type-modal" style="display:none">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><span class="modal-title" id="ltm-title">新增假別</span><button class="modal-close" onclick="closeLeaveTypeModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ltm-id">
+      <div class="form-row">
+        <div><label class="form-label">假別名稱 *</label><input class="form-input" id="ltm-name" placeholder="例：特休假"></div>
+        <div><label class="form-label">代碼 *</label><input class="form-input" id="ltm-code" placeholder="例：annual" autocapitalize="none"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">薪資倍率</label><input class="form-input" type="number" id="ltm-pay" min="0" max="2" step="0.1" value="1.0"><div style="font-size:11px;color:var(--muted);margin-top:3px">0=無薪、0.5=半薪、1=全薪</div></div>
+        <div><label class="form-label">年度上限（天）</label><input class="form-input" type="number" id="ltm-max" min="0" placeholder="空白=無限制"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">顏色</label><input type="color" id="ltm-color" value="#4a7bda" style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer"></div>
+        <div><label class="form-label">狀態</label><select class="form-input" id="ltm-active"><option value="1">啟用</option><option value="0">停用</option></select></div>
+      </div>
+      <div><label class="form-label">說明（選填）</label><input class="form-input" id="ltm-desc" style="width:100%"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeLeaveTypeModal()">取消</button><button class="btn btn-primary" onclick="saveLeaveType()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Salary Staff Modal -->
+<div class="modal-overlay" id="sal-staff-modal" style="display:none">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><span class="modal-title" id="ssm-title">薪資設定</span><button class="modal-close" onclick="closeSalStaffModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ssm-id">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">員工代碼</label><input class="form-input" id="ssm-code" placeholder="例：EMP001"></div>
+        <div class="form-group"><label class="form-label">部門</label><input class="form-input" id="ssm-dept" placeholder="例：外場"></div>
+        <div class="form-group"><label class="form-label">職稱</label><input class="form-input" id="ssm-pos" placeholder="例：領班"></div>
+        <div class="form-group"><label class="form-label">到職日</label><input class="form-input" type="date" id="ssm-hire"></div>
+        <div class="form-group"><label class="form-label">薪資制度</label><select class="form-input" id="ssm-sal-type" onchange="toggleSalType()"><option value="monthly">月薪制</option><option value="hourly">時薪制</option></select></div>
+        <div class="form-group" id="ssm-base-wrap"><label class="form-label">底薪（月薪）</label><input class="form-input" type="number" id="ssm-base" placeholder="例：28590"></div>
+        <div class="form-group" id="ssm-hourly-wrap" style="display:none"><label class="form-label">時薪</label><input class="form-input" type="number" id="ssm-hourly" placeholder="例：183"></div>
+        <div class="form-group"><label class="form-label">投保薪資</label><input class="form-input" type="number" id="ssm-insured" placeholder="依勞健保投保級距"></div>
+        <div class="form-group"><label class="form-label">每日工時</label><input class="form-input" type="number" id="ssm-daily-h" value="8" min="1" max="12" step="0.5"></div>
+        <div class="form-group"><label class="form-label">排休配額（天/月）</label><input class="form-input" type="number" id="ssm-vq" placeholder="空白=使用月份預設"></div>
+        <div class="form-group"><label class="form-label">加班費率1（前2h）</label><input class="form-input" type="number" id="ssm-ot1" value="1.33" step="0.01"></div>
+        <div class="form-group"><label class="form-label">加班費率2（後續）</label><input class="form-input" type="number" id="ssm-ot2" value="1.67" step="0.01"></div>
+        <div class="form-group full-width"><label class="form-label">薪資備註</label><input class="form-input" id="ssm-notes" placeholder="選填"></div>
+      </div>
+      <div id="ssm-annual-info" style="font-size:12px;color:var(--green);margin-top:8px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeSalStaffModal()">取消</button><button class="btn btn-primary" onclick="saveSalStaff()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Salary Item Modal -->
+<div class="modal-overlay" id="sal-item-modal" style="display:none">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><span class="modal-title" id="sim-title">新增薪資項目</span><button class="modal-close" onclick="closeSalaryItemModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="sim-id">
+      <div class="form-row">
+        <div><label class="form-label">項目名稱 *</label><input class="form-input" id="sim-name" placeholder="例：職務加給"></div>
+        <div><label class="form-label">類型</label><select class="form-input" id="sim-type"><option value="allowance">津貼（加項）</option><option value="deduction">扣除（減項）</option></select></div>
+      </div>
+      <div style="margin-bottom:12px"><label class="form-label">計算公式（優先）</label><input class="form-input" id="sim-formula" placeholder="例：insured_salary*0.125*0.2　留空則用固定金額" style="width:100%"></div>
+      <div class="form-row">
+        <div><label class="form-label">固定金額（公式為空時用）</label><input class="form-input" type="number" id="sim-amount" value="0"></div>
+        <div><label class="form-label">顏色</label><input type="color" id="sim-color" value="#4a7bda" style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">排序</label><input class="form-input" type="number" id="sim-sort" value="0"></div>
+        <div><label class="form-label">狀態</label><select class="form-input" id="sim-active"><option value="1">啟用</option><option value="0">停用</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeSalaryItemModal()">取消</button><button class="btn btn-primary" onclick="saveSalaryItem()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Salary Detail Modal (薪資單) -->
+<div class="modal-overlay" id="sal-detail-modal" style="display:none">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <span class="modal-title" id="sdm-title">薪資明細</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="printSalarySlip()">列印薪資單</button>
+        <button class="modal-close" onclick="closeSalDetail()">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body" id="sal-detail-body" style="padding:0"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeSalDetail()">關閉</button>
+      <button class="btn btn-primary" style="background:var(--green)" id="sdm-confirm-btn" onclick="confirmSalary()">確認薪資</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
@@ -707,13 +998,15 @@ function showPage(page, e) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('nav-' + page).classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['punch','sched'].forEach(p =>
+  ['punch','sched','leave','salary'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
   document.getElementById('page-title').textContent =
-    { punch: '打卡管理', sched: '排班管理' }[page];
-  if (page === 'punch') initPunch();
-  if (page === 'sched') initSched();
+    { punch: '打卡管理', sched: '排班管理', leave: '請假管理', salary: '薪資管理' }[page];
+  if (page === 'punch')  initPunch();
+  if (page === 'sched')  initSched();
+  if (page === 'leave')  initLeave();
+  if (page === 'salary') initSalary();
 }
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -1603,17 +1896,731 @@ async function deleteShiftType(id) {
   showToast('已刪除','success'); await loadShiftTypes();
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// 請假管理模組
+// ══════════════════════════════════════════════════════════════
+const LEAVE_STATUS_LABEL = {pending:'待審核',approved:'已核准',rejected:'已退回'};
+const LEAVE_STATUS_COLOR = {pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)'};
+let leaveReqData=[], leaveTypesList=[], leaveStaffList=[];
+let leaveReviewId=null;
+
+function initLeave() {
+  const now = new Date();
+  const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  if (!document.getElementById('leave-req-month').value) document.getElementById('leave-req-month').value = ym;
+  if (!document.getElementById('leave-cal-month').value) document.getElementById('leave-cal-month').value = ym;
+  const yr = document.getElementById('leave-bal-year');
+  if (!yr.options.length) {
+    const y = now.getFullYear();
+    for (let i = y+1; i >= y-2; i--) yr.add(new Object({text:i+'年',value:i}));
+    yr.value = y;
+  }
+  switchLeaveTab('requests');
+}
+
+function switchLeaveTab(tab) {
+  ['requests','calendar','balance','types'].forEach(t => {
+    document.getElementById('leavetab-'+t).classList.toggle('active', t===tab);
+    document.getElementById('leave-panel-'+t).style.display = t===tab?'':'none';
+  });
+  if (tab==='requests') { loadLeaveStaffOptions(); loadLeaveRequests(); }
+  if (tab==='calendar') loadLeaveCalendar();
+  if (tab==='balance')  loadLeaveBalances();
+  if (tab==='types')    loadLeaveTypes();
+}
+
+async function loadLeaveStaffOptions() {
+  if (!leaveStaffList.length) {
+    const {ok,data} = await api('/api/punch/staff',{},true);
+    leaveStaffList = ok?data:[];
+  }
+  const sel = document.getElementById('leave-req-staff');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' +
+    leaveStaffList.map(s=>`<option value="${s.id}" ${s.id==cur?'selected':''}>${escHtml(s.name)}</option>`).join('');
+}
+
+async function loadLeaveRequests() {
+  const month  = document.getElementById('leave-req-month').value;
+  const status = document.getElementById('leave-req-status').value;
+  const staffId = document.getElementById('leave-req-staff').value;
+  let url = '/api/leave/requests?';
+  if (month)  url += `month=${month}&`;
+  if (status) url += `status=${status}&`;
+  if (staffId) url += `staff_id=${staffId}&`;
+  const {ok,data} = await api(url,{},true);
+  leaveReqData = ok?data:[];
+  document.getElementById('leave-req-count').textContent = `共 ${leaveReqData.length} 筆`;
+  renderLeaveRequests();
+}
+
+function renderLeaveRequests() {
+  const wrap = document.getElementById('leave-req-list');
+  if (!leaveReqData.length) { wrap.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
+  wrap.innerHTML = leaveReqData.map(r => {
+    const sc = LEAVE_STATUS_COLOR[r.status]||'var(--muted)';
+    const sl = LEAVE_STATUS_LABEL[r.status]||r.status;
+    const canReview = r.status==='pending';
+    const sHalf = r.start_half?' (下午)':''; const eHalf = r.end_half?' (上午)':'';
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <div>
+          <span class="card-title">${escHtml(r.staff_name||'')}</span>
+          ${r.staff_role?`<span style="font-size:12px;color:var(--muted);margin-left:8px">${escHtml(r.staff_role)}</span>`:''}
+          <span style="display:inline-block;margin-left:8px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${r.leave_color||'#4a7bda'}22;color:${r.leave_color||'#4a7bda'}">${escHtml(r.leave_type_name||'')}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">
+            ${r.start_date}${sHalf} ~ ${r.end_date}${eHalf}
+            &nbsp;|&nbsp; <strong>${r.total_days} 天</strong>
+            &nbsp;|&nbsp; 薪資倍率：${r.pay_rate===1?'全薪':r.pay_rate===0?'無薪':r.pay_rate+'倍'}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:${sc}">${sl}</span>
+          ${canReview?`<button class="btn btn-primary btn-sm" onclick="openLeaveReview(${r.id})">審核</button>`:''}
+          <button class="btn btn-outline btn-sm" onclick="openLeaveAdminModal(${r.id})">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteLeaveReq(${r.id})">刪除</button>
+        </div>
+      </div>
+      ${r.reason?`<div style="padding:8px 20px;background:var(--bg);font-size:12px;color:var(--muted)">原因：${escHtml(r.reason)}${r.substitute_name?'　代理人：'+escHtml(r.substitute_name):''}${r.review_note?`<span style="color:${sc}">　審核意見：${escHtml(r.review_note)}</span>`:''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function openLeaveAdminModal(id=null) {
+  if (!leaveTypesList.length) {
+    const {ok,data} = await api('/api/leave/types',{},true);
+    leaveTypesList = ok?data:[];
+  }
+  if (!leaveStaffList.length) {
+    const {ok,data} = await api('/api/punch/staff',{},true);
+    leaveStaffList = ok?data.filter(s=>s.active):[];
+  }
+  document.getElementById('lam-staff').innerHTML = leaveStaffList.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+  document.getElementById('lam-type').innerHTML  = leaveTypesList.filter(t=>t.active).map(t=>`<option value="${t.id}">${escHtml(t.name)}</option>`).join('');
+  document.getElementById('lam-start-half').checked = false;
+  document.getElementById('lam-end-half').checked   = false;
+  document.getElementById('lam-reason').value = '';
+  document.getElementById('lam-status').value = 'approved';
+  document.getElementById('lam-days-preview').textContent = '';
+  if (id) {
+    const r = leaveReqData.find(x=>x.id===id); if(!r) return;
+    document.getElementById('lam-title').textContent = '編輯請假記錄';
+    document.getElementById('lam-id').value   = id;
+    document.getElementById('lam-staff').value = r.staff_id;
+    document.getElementById('lam-type').value  = r.leave_type_id;
+    document.getElementById('lam-start').value = r.start_date;
+    document.getElementById('lam-end').value   = r.end_date;
+    document.getElementById('lam-start-half').checked = r.start_half||false;
+    document.getElementById('lam-end-half').checked   = r.end_half||false;
+    document.getElementById('lam-reason').value = r.reason||'';
+    document.getElementById('lam-status').value = r.status;
+  } else {
+    document.getElementById('lam-title').textContent = '管理員代填請假';
+    document.getElementById('lam-id').value = '';
+    const now = new Date();
+    const today = now.toISOString().slice(0,10);
+    document.getElementById('lam-start').value = today;
+    document.getElementById('lam-end').value   = today;
+  }
+  ['lam-start','lam-end','lam-start-half','lam-end-half'].forEach(id2 =>
+    document.getElementById(id2).addEventListener('change', previewLeaveDays)
+  );
+  previewLeaveDays();
+  document.getElementById('leave-admin-modal').style.display='flex';
+}
+function closeLeaveAdminModal() { document.getElementById('leave-admin-modal').style.display='none'; }
+
+function previewLeaveDays() {
+  const s = document.getElementById('lam-start').value;
+  const e = document.getElementById('lam-end').value;
+  const sh = document.getElementById('lam-start-half').checked;
+  const eh = document.getElementById('lam-end-half').checked;
+  if (!s||!e) return;
+  const start = new Date(s), end = new Date(e);
+  if (end < start) { document.getElementById('lam-days-preview').textContent='結束日不能早於開始日'; return; }
+  let days = 0;
+  let cur = new Date(start);
+  while (cur <= end) {
+    if (cur.getDay() !== 0) {
+      const isFirst = cur.getTime()===start.getTime();
+      const isLast  = cur.getTime()===end.getTime();
+      if (isFirst && sh) days += 0.5;
+      else if (isLast && eh) days += 0.5;
+      else days += 1;
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  document.getElementById('lam-days-preview').textContent = `預計請假：${days} 天（排除週日）`;
+}
+
+async function saveLeaveAdmin() {
+  const id       = document.getElementById('lam-id').value;
+  const staff_id = document.getElementById('lam-staff').value;
+  const leave_type_id = document.getElementById('lam-type').value;
+  const start_date = document.getElementById('lam-start').value;
+  const end_date   = document.getElementById('lam-end').value;
+  const start_half = document.getElementById('lam-start-half').checked;
+  const end_half   = document.getElementById('lam-end-half').checked;
+  const reason     = document.getElementById('lam-reason').value.trim();
+  const status     = document.getElementById('lam-status').value;
+  if (!staff_id||!leave_type_id||!start_date||!end_date) { showToast('請填寫完整資料','error'); return; }
+  if (id) {
+    // Delete and recreate (simplest approach)
+    await api(`/api/leave/requests/${id}`,{method:'DELETE'});
+  }
+  const {ok} = await api('/api/leave/requests', apiJSON({staff_id:parseInt(staff_id),leave_type_id:parseInt(leave_type_id),start_date,end_date,start_half,end_half,reason,status,reviewed_by:'管理員'}));
+  if (!ok) return;
+  closeLeaveAdminModal(); showToast(id?'已更新':'請假記錄已建立','success'); await loadLeaveRequests();
+}
+
+function openLeaveReview(id) {
+  const r = leaveReqData.find(x=>x.id===id); if(!r) return;
+  leaveReviewId = id;
+  document.getElementById('lrm-id').value  = id;
+  document.getElementById('lrm-by').value  = '';
+  document.getElementById('lrm-note').value= '';
+  document.getElementById('lrm-title').textContent = `審核 ${r.staff_name} 的請假申請`;
+  const sh = r.start_half?' (下午)':''; const eh = r.end_half?' (上午)':'';
+  document.getElementById('lrm-info').innerHTML = `
+    <strong>${escHtml(r.staff_name)}</strong>
+    <span style="margin-left:8px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${r.leave_color||'#4a7bda'}22;color:${r.leave_color||'#4a7bda'}">${escHtml(r.leave_type_name)}</span><br>
+    ${r.start_date}${sh} ~ ${r.end_date}${eh}　<strong>${r.total_days} 天</strong><br>
+    <span style="color:var(--muted)">${escHtml(r.reason||'（無說明）')}</span>`;
+  document.getElementById('leave-review-modal').style.display='flex';
+}
+function closeLeaveReview() { document.getElementById('leave-review-modal').style.display='none'; }
+async function reviewLeave(action) {
+  const id   = document.getElementById('lrm-id').value;
+  const by   = document.getElementById('lrm-by').value.trim();
+  const note = document.getElementById('lrm-note').value.trim();
+  if (!by) { showToast('請填寫審核人員姓名','error'); return; }
+  const {ok} = await api(`/api/leave/requests/${id}`, apiPUT({action,reviewed_by:by,review_note:note}));
+  if (!ok) return;
+  closeLeaveReview(); showToast(action==='approve'?'已核准':'已退回','success'); await loadLeaveRequests();
+}
+async function deleteLeaveReq(id) {
+  if (!confirm('確定刪除此請假記錄？')) return;
+  await api(`/api/leave/requests/${id}`,{method:'DELETE'});
+  showToast('已刪除','success'); leaveReqData=leaveReqData.filter(r=>r.id!==id); renderLeaveRequests();
+  document.getElementById('leave-req-count').textContent=`共 ${leaveReqData.length} 筆`;
+}
+
+// ── 請假月曆 ─────────────────────────────────────────────────
+async function loadLeaveCalendar() {
+  const month = document.getElementById('leave-cal-month').value; if(!month) return;
+  const {ok,data} = await api(`/api/leave/requests?month=${month}&status=approved`,{},true);
+  const wrap = document.getElementById('leave-cal-wrap');
+  if (!ok) { wrap.innerHTML=''; return; }
+  const [y,m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y,m,0).getDate();
+  const firstWd = new Date(y,m-1,1).getDay();
+  // build day→staff map
+  const dayMap = {};
+  data.forEach(r => {
+    const s = new Date(r.start_date+'T00:00:00');
+    const e = new Date(r.end_date+'T00:00:00');
+    for (let cur=new Date(s); cur<=e; cur.setDate(cur.getDate()+1)) {
+      const ds = cur.toISOString().slice(0,10);
+      if (!ds.startsWith(month)) continue;
+      if (!dayMap[ds]) dayMap[ds] = [];
+      dayMap[ds].push({name:r.staff_name,type:r.leave_type_name,color:r.leave_color,total:r.total_days});
+    }
+  });
+  let html = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+    ${['日','一','二','三','四','五','六'].map((d,i)=>`<div style="text-align:center;font-size:11px;font-weight:700;color:${i===0?'var(--red)':i===6?'var(--accent)':'var(--muted)'};padding:6px 0">${d}</div>`).join('')}
+  </div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">`;
+  for (let i=0;i<firstWd;i++) html+='<div></div>';
+  for (let day=1;day<=daysInMonth;day++) {
+    const ds = `${month}-${String(day).padStart(2,'0')}`;
+    const dt = new Date(y,m-1,day); const wd=dt.getDay();
+    const list = dayMap[ds]||[];
+    const bg = list.length?'#fef3e8':'#fff';
+    const border = list.length?'#f5c0a0':'var(--border)';
+    const names = list.map(x=>`<div style="font-size:9px;font-weight:700;color:${x.color||'var(--accent)'};line-height:1.4">${escHtml(x.name)}</div>`).join('');
+    html += `<div style="border:1.5px solid ${border};border-radius:8px;background:${bg};padding:5px 4px;min-height:60px">
+      <div style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:${wd===0?'var(--red)':wd===6?'var(--accent)':'var(--navy)'};">${day}</div>
+      ${names}
+    </div>`;
+  }
+  html+='</div>';
+  wrap.innerHTML = html;
+}
+
+// ── 假別餘額 ─────────────────────────────────────────────────
+async function loadLeaveBalances() {
+  const year = document.getElementById('leave-bal-year').value;
+  const {ok,data} = await api(`/api/leave/balances?year=${year}`,{},true);
+  const wrap = document.getElementById('leave-bal-wrap');
+  if (!ok||!data.length) { wrap.innerHTML='<div class="card" style="padding:32px;text-align:center;color:var(--muted)">無資料，請先點選「自動計算特休」</div>'; return; }
+  // Group by staff
+  const staffMap = {};
+  data.forEach(r=>{
+    if (!staffMap[r.staff_id]) staffMap[r.staff_id]={name:r.staff_name,items:[]};
+    staffMap[r.staff_id].items.push(r);
+  });
+  let html = '<div class="card"><div class="table-wrap"><table><thead><tr><th>員工</th><th>假別</th><th>配額</th><th>已用</th><th>剩餘</th><th>操作</th></tr></thead><tbody>';
+  Object.values(staffMap).forEach(s=>{
+    s.items.forEach(it=>{
+      const remain = (it.total_days||0)-(it.used_days||0);
+      html+=`<tr>
+        <td style="font-weight:600">${escHtml(s.name)}</td>
+        <td><span style="padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${it.leave_color||'#4a7bda'}22;color:${it.leave_color||'#4a7bda'}">${escHtml(it.leave_type_name)}</span></td>
+        <td style="font-family:'DM Mono',monospace;font-weight:600">${it.total_days}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--red)">${it.used_days}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:700;color:${remain>0?'var(--green)':'var(--red)'}">${remain}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="editLeaveBalance(${it.id},${it.total_days},${it.used_days})">調整</button></td>
+      </tr>`;
+    });
+  });
+  html+='</tbody></table></div></div>';
+  wrap.innerHTML = html;
+}
+async function initAnnualLeave() {
+  const year = document.getElementById('leave-bal-year').value;
+  const {ok,data} = await api('/api/leave/balances/init', apiJSON({year}));
+  if (!ok) return;
+  document.getElementById('leave-bal-note').textContent=`已計算 ${data.updated} 位員工的特休天數`;
+  showToast(`${year}年特休已自動計算完成（${data.updated}人）`,'success'); await loadLeaveBalances();
+}
+async function editLeaveBalance(id, total, used) {
+  const newTotal = parseFloat(prompt(`調整配額天數（原：${total}天）：`, total));
+  if (isNaN(newTotal)||newTotal<0) return;
+  const newUsed  = parseFloat(prompt(`調整已用天數（原：${used}天）：`, used));
+  if (isNaN(newUsed)||newUsed<0) return;
+  const {ok} = await api(`/api/leave/balances/${id}`, apiPUT({total_days:newTotal,used_days:newUsed}));
+  if (ok) { showToast('已更新','success'); await loadLeaveBalances(); }
+}
+
+// ── 假別設定 ─────────────────────────────────────────────────
+async function loadLeaveTypes() {
+  const {ok,data} = await api('/api/leave/types',{},true);
+  leaveTypesList = ok?data:[];
+  const tb = document.getElementById('leave-types-tbody');
+  if (!leaveTypesList.length) { tb.innerHTML='<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無假別</div></td></tr>'; return; }
+  const PAY_LABEL = {0:'無薪（事假）',0.5:'半薪（病假）',1:'全薪'};
+  tb.innerHTML = leaveTypesList.map(t=>`<tr style="opacity:${t.active?1:.5}">
+    <td style="font-weight:600"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${t.color};margin-right:6px;vertical-align:middle"></span>${escHtml(t.name)}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(t.code)}</td>
+    <td>${PAY_LABEL[t.pay_rate]||t.pay_rate+'倍'}</td>
+    <td style="font-family:'DM Mono',monospace">${t.max_days!=null?t.max_days+'天':'無限制'}</td>
+    <td><div style="width:20px;height:20px;border-radius:4px;background:${t.color}"></div></td>
+    <td>${t.active?'<span class="badge badge-ok">啟用</span>':'<span class="badge badge-warn">停用</span>'}</td>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openLeaveTypeModal(${t.id})">編輯</button><button class="btn btn-danger btn-sm" onclick="deleteLeaveType(${t.id})" style="margin-left:4px">刪除</button></td>
+  </tr>`).join('');
+}
+function openLeaveTypeModal(id=null) {
+  document.getElementById('ltm-title').textContent = id?'編輯假別':'新增假別';
+  document.getElementById('ltm-id').value = id||'';
+  if (id) {
+    const t = leaveTypesList.find(x=>x.id===id); if(!t) return;
+    document.getElementById('ltm-name').value  = t.name;
+    document.getElementById('ltm-code').value  = t.code;
+    document.getElementById('ltm-pay').value   = t.pay_rate;
+    document.getElementById('ltm-max').value   = t.max_days!=null?t.max_days:'';
+    document.getElementById('ltm-color').value = t.color;
+    document.getElementById('ltm-active').value= t.active?'1':'0';
+    document.getElementById('ltm-desc').value  = t.description||'';
+  } else {
+    ['ltm-name','ltm-code','ltm-desc'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('ltm-pay').value='1'; document.getElementById('ltm-max').value='';
+    document.getElementById('ltm-color').value='#4a7bda'; document.getElementById('ltm-active').value='1';
+  }
+  document.getElementById('leave-type-modal').style.display='flex';
+}
+function closeLeaveTypeModal() { document.getElementById('leave-type-modal').style.display='none'; }
+async function saveLeaveType() {
+  const id = document.getElementById('ltm-id').value;
+  const body = {
+    name:document.getElementById('ltm-name').value.trim(),
+    code:document.getElementById('ltm-code').value.trim(),
+    pay_rate:parseFloat(document.getElementById('ltm-pay').value)||1,
+    max_days:document.getElementById('ltm-max').value?parseFloat(document.getElementById('ltm-max').value):null,
+    color:document.getElementById('ltm-color').value,
+    active:document.getElementById('ltm-active').value==='1',
+    description:document.getElementById('ltm-desc').value.trim(),
+  };
+  if (!body.name||!body.code) { showToast('請填寫假別名稱和代碼','error'); return; }
+  const {ok} = await api(id?`/api/leave/types/${id}`:'/api/leave/types',{method:id?'PUT':'POST',body:JSON.stringify(body)});
+  if (!ok) return;
+  closeLeaveTypeModal(); showToast(id?'已更新':'已新增','success'); await loadLeaveTypes();
+}
+async function deleteLeaveType(id) {
+  if (!confirm('確定刪除此假別？')) return;
+  await api(`/api/leave/types/${id}`,{method:'DELETE'});
+  showToast('已刪除','success'); await loadLeaveTypes();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 薪資管理模組
+// ══════════════════════════════════════════════════════════════
+let salaryRecords=[], salaryStaffList=[], salaryItemsList=[];
+let salDetailId=null;
+
+function initSalary() {
+  const now=new Date();
+  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  if (!document.getElementById('sal-month').value) document.getElementById('sal-month').value=ym;
+  switchSalaryTab('calc');
+}
+
+function switchSalaryTab(tab) {
+  ['calc','settings','items'].forEach(t=>{
+    document.getElementById('salarytab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('salary-panel-'+t).style.display=t===tab?'':'none';
+  });
+  if (tab==='calc')     loadSalaryRecords();
+  if (tab==='settings') loadSalaryStaff();
+  if (tab==='items')    loadSalaryItems();
+}
+
+// ── 月薪計算 ─────────────────────────────────────────────────
+async function loadSalaryRecords() {
+  const month = document.getElementById('sal-month').value; if (!month) return;
+  const {ok,data} = await api(`/api/salary/records?month=${month}`,{},true);
+  salaryRecords = ok?data:[];
+  document.getElementById('sal-count').textContent=`共 ${salaryRecords.length} 筆 | 已確認 ${salaryRecords.filter(r=>r.status==='confirmed').length} 筆`;
+  const tb = document.getElementById('sal-tbody');
+  if (!salaryRecords.length) {
+    tb.innerHTML='<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無薪資記錄，請點「自動產生薪資」</div></td></tr>';
+    document.getElementById('sal-total-row').style.display='none'; return;
+  }
+  let totAllow=0,totDeduct=0,totNet=0;
+  tb.innerHTML = salaryRecords.map(r=>{
+    totAllow  += r.allowance_total||0;
+    totDeduct += r.deduction_total||0;
+    totNet    += r.net_pay||0;
+    const sc = r.status==='confirmed'?'var(--green)':'var(--muted)';
+    const sl = r.status==='confirmed'?'已確認':'草稿';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(r.employee_code||'')}</td>
+      <td style="font-weight:600">${escHtml(r.staff_name)}</td>
+      <td style="color:var(--muted)">${escHtml(r.department||'')}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--green)">$${fmtNum(r.allowance_total)}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--red)">-$${fmtNum(r.deduction_total)}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--navy)">$${fmtNum(r.net_pay)}</td>
+      <td><span style="font-size:12px;font-weight:700;color:${sc}">${sl}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openSalDetail(${r.id})">明細</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSalRecord(${r.id})" style="margin-left:4px">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('sal-total-row').style.display='';
+  document.getElementById('sal-total-allow').textContent  = `津貼：$${fmtNum(totAllow)}`;
+  document.getElementById('sal-total-deduct').textContent = `扣除：-$${fmtNum(totDeduct)}`;
+  document.getElementById('sal-total-net').textContent    = `實領：$${fmtNum(totNet)}`;
+}
+
+async function generateSalary() {
+  const month = document.getElementById('sal-month').value;
+  if (!month) { showToast('請選擇月份','error'); return; }
+  if (!confirm(`確定自動產生/更新 ${month} 的薪資記錄？`)) return;
+  const {ok,data} = await api('/api/salary/records/generate', apiJSON({month}));
+  if (!ok) return;
+  showToast(`已產生 ${data.generated} 筆薪資記錄`,'success'); await loadSalaryRecords();
+}
+
+async function openSalDetail(id) {
+  salDetailId = id;
+  const {ok,data} = await api(`/api/salary/records/${id}`,{},true);
+  if (!ok) return;
+  const month = data.month;
+  document.getElementById('sdm-title').textContent = `${month} 薪資明細 — ${data.staff_name}`;
+  document.getElementById('sdm-confirm-btn').style.display = data.status==='confirmed'?'none':'';
+  document.getElementById('sdm-confirm-btn').setAttribute('data-id', id);
+  const items = data.items||[];
+  const allowItems = items.filter(it=>it.type==='allowance');
+  const deductItems= items.filter(it=>it.type==='deduction');
+  const leaveInfo = `<div style="font-size:12px;color:var(--muted);margin-top:4px">
+    出勤 ${data.actual_days} 天 / 工作日 ${data.work_days} 天
+    ${data.leave_days>0?` | 請假 ${data.leave_days} 天`:''}
+    ${data.unpaid_days>0?` | 無薪 ${data.unpaid_days} 天`:''}
+    ${data.ot_pay>0?` | 加班費 $${fmtNum(data.ot_pay)}`:''}
+  </div>`;
+  let html = `<div style="padding:16px 24px;background:var(--bg);border-bottom:1px solid var(--border)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+      <div><span style="color:var(--muted)">職員代碼：</span><strong>${escHtml(data.employee_code||'—')}</strong></div>
+      <div><span style="color:var(--muted)">姓名：</span><strong>${escHtml(data.staff_name)}</strong></div>
+      <div><span style="color:var(--muted)">部門：</span><strong>${escHtml(data.department||'—')}</strong></div>
+      <div><span style="color:var(--muted)">月份：</span><strong>${month}</strong></div>
+    </div>
+    ${leaveInfo}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;padding:12px;background:#fff;border-radius:8px;border:1px solid var(--border)">
+      <div style="text-align:center"><div style="font-size:11px;color:var(--muted)">支付總額</div><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--green)">$${fmtNum(data.allowance_total)}</div></div>
+      <div style="text-align:center"><div style="font-size:11px;color:var(--muted)">扣除總額</div><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--red)">$${fmtNum(data.deduction_total)}</div></div>
+      <div style="text-align:center"><div style="font-size:11px;color:var(--muted)">實支付額</div><div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--navy)">$${fmtNum(data.net_pay)}</div></div>
+    </div>
+  </div>
+  <div style="padding:16px 24px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">津貼項目</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">項目</th><th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--border)">金額</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">說明</th></tr>
+          ${allowItems.map(it=>`<tr style="border-bottom:1px solid #f0f2f8"><td style="padding:5px 8px">${escHtml(it.name)}</td><td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmtNum(it.amount)}</td><td style="padding:5px 8px;color:var(--muted);font-size:11px">${escHtml(it.calc_note||'')}</td></tr>`).join('')}
+          <tr style="background:var(--bg)"><td style="padding:7px 8px;font-weight:700" colspan="2">合計</td><td style="padding:7px 8px;text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--green)">${fmtNum(data.allowance_total)}</td></tr>
+        </table>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">扣除項目</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">項目</th><th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--border)">金額</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">說明</th></tr>
+          ${deductItems.map(it=>`<tr style="border-bottom:1px solid #f0f2f8"><td style="padding:5px 8px">${escHtml(it.name)}</td><td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmtNum(it.amount)}</td><td style="padding:5px 8px;color:var(--muted);font-size:11px">${escHtml(it.calc_note||'')}</td></tr>`).join('')}
+          <tr style="background:var(--bg)"><td style="padding:7px 8px;font-weight:700" colspan="2">合計</td><td style="padding:7px 8px;text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--red)">${fmtNum(data.deduction_total)}</td></tr>
+        </table>
+      </div>
+    </div>
+    ${data.note?`<div style="margin-top:12px;font-size:12px;color:var(--muted)">備註：${escHtml(data.note)}</div>`:''}
+    ${data.status==='confirmed'&&data.confirmed_by?`<div style="margin-top:8px;font-size:12px;color:var(--green)">✅ 已由 ${escHtml(data.confirmed_by)} 確認</div>`:''}
+  </div>`;
+  document.getElementById('sal-detail-body').innerHTML = html;
+  document.getElementById('sal-detail-modal').style.display='flex';
+  // Store for print
+  document.getElementById('sal-detail-modal').setAttribute('data-print-data', JSON.stringify(data));
+}
+
+function closeSalDetail() { document.getElementById('sal-detail-modal').style.display='none'; }
+
+async function confirmSalary() {
+  const id = parseInt(document.getElementById('sdm-confirm-btn').getAttribute('data-id'));
+  const by = prompt('確認人員姓名：','管理員'); if(!by) return;
+  const {ok} = await api(`/api/salary/records/${id}/confirm`, apiJSON({confirmed_by:by}));
+  if (!ok) return;
+  showToast('薪資已確認','success'); closeSalDetail(); await loadSalaryRecords();
+}
+
+async function deleteSalRecord(id) {
+  if (!confirm('確定刪除此薪資記錄？')) return;
+  await api(`/api/salary/records/${id}`,{method:'DELETE'});
+  showToast('已刪除','success'); await loadSalaryRecords();
+}
+
+function printSalarySlip() {
+  const raw = document.getElementById('sal-detail-modal').getAttribute('data-print-data');
+  if (!raw) return;
+  const d = JSON.parse(raw);
+  const month = d.month;
+  const items = d.items||[];
+  const allowItems = items.filter(it=>it.type==='allowance');
+  const deductItems= items.filter(it=>it.type==='deduction');
+  const win = window.open('','_blank','width=800,height=900');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>${month} 薪資明細表</title>
+  <style>
+    body{font-family:'Noto Sans TC',sans-serif;padding:32px;color:#1e2a45;max-width:700px;margin:0 auto}
+    h2{text-align:center;font-size:22px;margin-bottom:24px;color:#0f1c3a}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid #ccc;margin-bottom:16px}
+    .info-cell{padding:8px 14px;border:1px solid #ccc;font-size:13px}
+    .info-label{font-weight:700;background:#eef3fd;color:#0f1c3a}
+    .summary{display:grid;grid-template-columns:repeat(3,1fr);border:2px solid #0f1c3a;margin-bottom:20px;text-align:center}
+    .sum-cell{padding:10px;border-right:1px solid #0f1c3a}
+    .sum-cell:last-child{border-right:none}
+    .sum-label{font-size:11px;color:#888;margin-bottom:4px}
+    .sum-val{font-size:20px;font-weight:700}
+    .allow-val{color:#2e9e6b}.deduct-val{color:#d64242}.net-val{color:#0f1c3a}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
+    th{background:#0f1c3a;color:#fff;padding:8px 12px;text-align:left}
+    td{padding:7px 12px;border-bottom:1px solid #eee}
+    .total-row td{font-weight:700;background:#f7f9fd;border-top:2px solid #0f1c3a}
+    .sign-row{display:grid;grid-template-columns:repeat(3,1fr);margin-top:48px;gap:20px}
+    .sign-cell{text-align:center;font-size:13px;padding-top:32px;border-top:1px solid #ccc}
+    @media print{body{padding:16px}@page{margin:15mm}}
+  </style></head><body>
+  <h2>${month.replace('-','/')} 薪資明細表</h2>
+  <div class="info-grid">
+    <div class="info-cell info-label">職員代碼</div><div class="info-cell">${escHtml(d.employee_code||'—')}</div>
+    <div class="info-cell info-label">姓名</div><div class="info-cell">${escHtml(d.staff_name)}</div>
+    <div class="info-cell info-label">部門</div><div class="info-cell">${escHtml(d.department||'—')}</div>
+    <div class="info-cell info-label">支付日期</div><div class="info-cell">${escHtml(d.confirmed_at?d.confirmed_at.slice(0,10):'—')}</div>
+  </div>
+  <div class="summary">
+    <div class="sum-cell"><div class="sum-label">支付總額</div><div class="sum-val allow-val">${fmtNum(d.allowance_total)}</div></div>
+    <div class="sum-cell"><div class="sum-label">扣除總額</div><div class="sum-val deduct-val">${fmtNum(d.deduction_total)}</div></div>
+    <div class="sum-cell"><div class="sum-label">實支付額</div><div class="sum-val net-val">${fmtNum(d.net_pay)}</div></div>
+  </div>
+  <table>
+    <tr><th colspan="3">津貼項目名稱</th></tr>
+    <tr><th>津貼項目名稱</th><th style="text-align:right">金額</th><th>計算明細</th></tr>
+    ${allowItems.map(it=>`<tr><td>${escHtml(it.name)}</td><td style="text-align:right">${fmtNum(it.amount)}</td><td style="font-size:12px;color:#888">${escHtml(it.calc_note||'')}</td></tr>`).join('')}
+    <tr class="total-row"><td colspan="1">合計</td><td style="text-align:right">${fmtNum(d.allowance_total)}</td><td></td></tr>
+  </table>
+  <table>
+    <tr><th colspan="3">扣除項目名稱</th></tr>
+    <tr><th>扣除項目名稱</th><th style="text-align:right">金額</th><th>計算明細</th></tr>
+    ${deductItems.map(it=>`<tr><td>${escHtml(it.name)}</td><td style="text-align:right">${fmtNum(it.amount)}</td><td style="font-size:12px;color:#888">${escHtml(it.calc_note||'')}</td></tr>`).join('')}
+    <tr class="total-row"><td colspan="1">合計</td><td style="text-align:right">${fmtNum(d.deduction_total)}</td><td></td></tr>
+  </table>
+  <div class="sign-row">
+    <div class="sign-cell">主管確認</div>
+    <div class="sign-cell">人事確認</div>
+    <div class="sign-cell">員工簽收</div>
+  </div>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+function fmtNum(n) {
+  if (n===null||n===undefined) return '0';
+  return Number(n).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});
+}
+
+// ── 薪資設定 ─────────────────────────────────────────────────
+async function loadSalaryStaff() {
+  const {ok,data} = await api('/api/salary/staff',{},true);
+  salaryStaffList = ok?data:[];
+  document.getElementById('sal-staff-count').textContent = `共 ${salaryStaffList.length} 位員工（來自打卡系統）`;
+  const tb = document.getElementById('sal-staff-tbody');
+  if (!salaryStaffList.length) { tb.innerHTML='<tr><td colspan="10" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
+  tb.innerHTML = salaryStaffList.map(s=>`<tr>
+    <td style="font-weight:600">${escHtml(s.name)}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(s.username||'')}</td>
+    <td style="color:var(--muted)">${escHtml(s.department||'—')}</td>
+    <td style="color:var(--muted)">${escHtml(s.position_title||'—')}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px">${s.hire_date||'—'}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--navy)">$${fmtNum(s.base_salary)}</td>
+    <td style="font-family:'DM Mono',monospace;color:var(--muted)">$${fmtNum(s.insured_salary)}</td>
+    <td style="color:var(--muted)">${s.vacation_quota!=null?s.vacation_quota+'天':'預設'}</td>
+    <td>${s.active?'<span class="badge badge-ok">在職</span>':'<span class="badge badge-warn">停用</span>'}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="openSalStaffModal(${s.id})">設定薪資</button></td>
+  </tr>`).join('');
+}
+
+function openSalStaffModal(id) {
+  const s = salaryStaffList.find(x=>x.id===id); if(!s) return;
+  document.getElementById('ssm-title').textContent=`薪資設定 — ${s.name}`;
+  document.getElementById('ssm-id').value       = s.id;
+  document.getElementById('ssm-code').value     = s.employee_code||'';
+  document.getElementById('ssm-dept').value     = s.department||'';
+  document.getElementById('ssm-pos').value      = s.position_title||'';
+  document.getElementById('ssm-hire').value     = s.hire_date||'';
+  document.getElementById('ssm-sal-type').value = s.salary_type||'monthly';
+  document.getElementById('ssm-base').value     = s.base_salary||'';
+  document.getElementById('ssm-hourly').value   = s.hourly_rate||'';
+  document.getElementById('ssm-insured').value  = s.insured_salary||'';
+  document.getElementById('ssm-daily-h').value  = s.daily_hours||8;
+  document.getElementById('ssm-ot1').value      = s.ot_rate1||1.33;
+  document.getElementById('ssm-ot2').value      = s.ot_rate2||1.67;
+  document.getElementById('ssm-vq').value       = s.vacation_quota!=null?s.vacation_quota:'';
+  document.getElementById('ssm-notes').value    = s.salary_notes||'';
+  toggleSalType();
+  const days = s.annual_leave_days||0;
+  const yrs  = s.service_years?s.service_years.toFixed(1):0;
+  document.getElementById('ssm-annual-info').textContent =
+    days>0 ? `年資 ${yrs} 年 → 特休 ${days} 天/年` : '到職未滿1年，尚無特休';
+  document.getElementById('sal-staff-modal').style.display='flex';
+}
+function closeSalStaffModal() { document.getElementById('sal-staff-modal').style.display='none'; }
+function toggleSalType() {
+  const t = document.getElementById('ssm-sal-type').value;
+  document.getElementById('ssm-base-wrap').style.display   = t==='monthly'?'':'none';
+  document.getElementById('ssm-hourly-wrap').style.display = t==='hourly'?'':'none';
+}
+async function saveSalStaff() {
+  const id = document.getElementById('ssm-id').value;
+  const body = {
+    employee_code: document.getElementById('ssm-code').value.trim(),
+    department:    document.getElementById('ssm-dept').value.trim(),
+    position_title:document.getElementById('ssm-pos').value.trim(),
+    hire_date:     document.getElementById('ssm-hire').value||null,
+    salary_type:   document.getElementById('ssm-sal-type').value,
+    base_salary:   parseFloat(document.getElementById('ssm-base').value)||0,
+    hourly_rate:   parseFloat(document.getElementById('ssm-hourly').value)||0,
+    insured_salary:parseFloat(document.getElementById('ssm-insured').value)||0,
+    daily_hours:   parseFloat(document.getElementById('ssm-daily-h').value)||8,
+    ot_rate1:      parseFloat(document.getElementById('ssm-ot1').value)||1.33,
+    ot_rate2:      parseFloat(document.getElementById('ssm-ot2').value)||1.67,
+    vacation_quota:document.getElementById('ssm-vq').value?parseInt(document.getElementById('ssm-vq').value):null,
+    salary_notes:  document.getElementById('ssm-notes').value.trim(),
+  };
+  const {ok} = await api(`/api/salary/staff/${id}`, apiPUT(body));
+  if (!ok) return;
+  closeSalStaffModal(); showToast('薪資設定已儲存','success'); await loadSalaryStaff();
+}
+
+// ── 薪資項目 ─────────────────────────────────────────────────
+async function loadSalaryItems() {
+  const {ok,data} = await api('/api/salary/items',{},true);
+  salaryItemsList = ok?data:[];
+  const allowDiv  = document.getElementById('sal-items-allow');
+  const deductDiv = document.getElementById('sal-items-deduct');
+  const card = (it) => `<div class="card" style="margin-bottom:10px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px;padding:12px 16px">
+      <div>
+        <span style="font-size:14px;font-weight:700"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${it.color};margin-right:6px;vertical-align:middle"></span>${escHtml(it.name)}</span>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:'DM Mono',monospace">
+          ${it.formula?'公式計算 '+escHtml(it.formula):`固定金額 $${fmtNum(it.amount)}`}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="openSalaryItemModal(${it.id})">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSalaryItem(${it.id})">刪除</button>
+      </div>
+    </div>
+  </div>`;
+  allowDiv.innerHTML  = salaryItemsList.filter(i=>i.item_type==='allowance').map(card).join('') || '<div style="color:var(--muted);padding:20px;text-align:center">尚無津貼項目</div>';
+  deductDiv.innerHTML = salaryItemsList.filter(i=>i.item_type==='deduction').map(card).join('') || '<div style="color:var(--muted);padding:20px;text-align:center">尚無扣除項目</div>';
+}
+
+function openSalaryItemModal(id=null) {
+  document.getElementById('sim-title').textContent = id?'編輯薪資項目':'新增薪資項目';
+  document.getElementById('sim-id').value = id||'';
+  if (id) {
+    const it = salaryItemsList.find(x=>x.id===id); if(!it) return;
+    document.getElementById('sim-name').value    = it.name;
+    document.getElementById('sim-type').value    = it.item_type;
+    document.getElementById('sim-formula').value = it.formula||'';
+    document.getElementById('sim-amount').value  = it.amount||0;
+    document.getElementById('sim-color').value   = it.color||'#4a7bda';
+    document.getElementById('sim-sort').value    = it.sort_order||0;
+    document.getElementById('sim-active').value  = it.active?'1':'0';
+  } else {
+    ['sim-name','sim-formula'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('sim-type').value='allowance';
+    document.getElementById('sim-amount').value='0';
+    document.getElementById('sim-color').value='#4a7bda';
+    document.getElementById('sim-sort').value='0';
+    document.getElementById('sim-active').value='1';
+  }
+  document.getElementById('sal-item-modal').style.display='flex';
+}
+function closeSalaryItemModal() { document.getElementById('sal-item-modal').style.display='none'; }
+async function saveSalaryItem() {
+  const id = document.getElementById('sim-id').value;
+  const body = {
+    name:       document.getElementById('sim-name').value.trim(),
+    item_type:  document.getElementById('sim-type').value,
+    formula:    document.getElementById('sim-formula').value.trim(),
+    amount:     parseFloat(document.getElementById('sim-amount').value)||0,
+    color:      document.getElementById('sim-color').value,
+    sort_order: parseInt(document.getElementById('sim-sort').value)||0,
+    active:     document.getElementById('sim-active').value==='1',
+  };
+  if (!body.name) { showToast('請填寫項目名稱','error'); return; }
+  const {ok} = await api(id?`/api/salary/items/${id}`:'/api/salary/items',{method:id?'PUT':'POST',body:JSON.stringify(body)});
+  if (!ok) return;
+  closeSalaryItemModal(); showToast(id?'已更新':'已新增','success'); await loadSalaryItems();
+}
+async function deleteSalaryItem(id) {
+  if (!confirm('確定刪除此薪資項目？')) return;
+  await api(`/api/salary/items/${id}`,{method:'DELETE'});
+  showToast('已刪除','success'); await loadSalaryItems();
+}
+
 // ── Badges ────────────────────────────────────────────────────
 async function refreshBadges() {
-  const [pr, sr1, sr2] = await Promise.all([
+  const [pr, sr1, sr2, lr] = await Promise.all([
     api('/api/punch/requests?status=pending', {}, true),
     api('/api/schedule/admin/requests?status=pending', {}, true),
     api('/api/schedule/admin/requests?status=modified_pending', {}, true),
+    api('/api/leave/requests?status=pending', {}, true),
   ]);
   setBadge('badge-punch', pr.ok && Array.isArray(pr.data) ? pr.data.length : 0);
   const sc = (sr1.ok && Array.isArray(sr1.data) ? sr1.data.length : 0) +
              (sr2.ok && Array.isArray(sr2.data) ? sr2.data.length : 0);
   setBadge('badge-sched', sc);
+  setBadge('badge-leave', lr.ok && Array.isArray(lr.data) ? lr.data.length : 0);
 }
 function setBadge(id, count) {
   const el = document.getElementById(id); if (!el) return;

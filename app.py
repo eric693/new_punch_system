@@ -2093,6 +2093,982 @@ def api_ot_calc_preview():
     })
 
 
+# ═══════════════════════════════════════════════════════════════════
+# Leave Management (請假管理)
+# 2026 勞基法：
+#   特休：到職1年10天、2年15天、3~5年每年+1、滿5年20天(上限)
+#   病假：每年30天(半薪)，超過住院病假 365 天內 30 天(全薪)
+#   事假：每年14天(無薪)
+#   生理假：每月1天(含病假計算，前3天半薪)
+#   婚假：8天全薪
+#   喪假：父母/配偶/子女8天；祖父母/孫子女/兄弟姐妹6天；曾祖父母3天
+#   產假：8週全薪；陪產假：7天全薪
+#   公假：全薪
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Leave Tables ─────────────────────────────────────────────────────────────
+
+def init_leave_db():
+    migrations = [
+        """CREATE TABLE IF NOT EXISTS leave_types (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT NOT NULL UNIQUE,
+            code        TEXT NOT NULL UNIQUE,
+            pay_rate    NUMERIC(4,2) DEFAULT 1.0,
+            max_days    NUMERIC(5,1),
+            description TEXT DEFAULT '',
+            color       TEXT DEFAULT '#4a7bda',
+            active      BOOLEAN DEFAULT TRUE,
+            sort_order  INT DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS leave_requests (
+            id              SERIAL PRIMARY KEY,
+            staff_id        INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            leave_type_id   INT REFERENCES leave_types(id),
+            start_date      DATE NOT NULL,
+            end_date        DATE NOT NULL,
+            start_half      BOOLEAN DEFAULT FALSE,
+            end_half        BOOLEAN DEFAULT FALSE,
+            total_days      NUMERIC(5,1) NOT NULL DEFAULT 0,
+            reason          TEXT DEFAULT '',
+            status          TEXT DEFAULT 'pending',
+            reviewed_by     TEXT DEFAULT '',
+            review_note     TEXT DEFAULT '',
+            reviewed_at     TIMESTAMPTZ,
+            substitute_name TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS leave_balances (
+            id          SERIAL PRIMARY KEY,
+            staff_id    INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            leave_type_id INT REFERENCES leave_types(id),
+            year        INT NOT NULL,
+            total_days  NUMERIC(5,1) DEFAULT 0,
+            used_days   NUMERIC(5,1) DEFAULT 0,
+            note        TEXT DEFAULT '',
+            updated_at  TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(staff_id, leave_type_id, year)
+        )""",
+    ]
+    for sql in migrations:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[leave_init] {str(e)[:80]}")
+
+    # Seed default leave types
+    defaults = [
+        ('特休假',   'annual',      1.0,  30,  '#2e9e6b', 1),
+        ('病假',     'sick',        0.5,  30,  '#e07b2a', 2),
+        ('住院病假', 'hospitalize', 1.0,  30,  '#d64242', 3),
+        ('事假',     'personal',    0.0,  14,  '#8892a4', 4),
+        ('生理假',   'menstrual',   0.5,  12,  '#c45cb8', 5),
+        ('婚假',     'marriage',    1.0,   8,  '#c8a96e', 6),
+        ('喪假',     'funeral',     1.0,   8,  '#4a7bda', 7),
+        ('產假',     'maternity',   1.0,  56,  '#e05c8a', 8),
+        ('陪產假',   'paternity',   1.0,   7,  '#5cb8c4', 9),
+        ('公假',     'official',    1.0, None, '#243d6e', 10),
+        ('補休',     'compensatory',1.0, None, '#8b5cf6', 11),
+    ]
+    try:
+        with get_db() as conn:
+            cnt = conn.execute("SELECT COUNT(*) as c FROM leave_types").fetchone()['c']
+            if cnt == 0:
+                for name, code, pay, maxd, color, sort in defaults:
+                    conn.execute(
+                        "INSERT INTO leave_types (name,code,pay_rate,max_days,color,sort_order) VALUES (%s,%s,%s,%s,%s,%s)",
+                        (name, code, pay, maxd, color, sort)
+                    )
+    except Exception as e:
+        print(f"[leave_seed] {e}")
+
+init_leave_db()
+
+def leave_type_row(row):
+    if not row: return None
+    d = dict(row)
+    if d.get('max_days') is not None: d['max_days'] = float(d['max_days'])
+    if d.get('pay_rate') is not None: d['pay_rate'] = float(d['pay_rate'])
+    if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
+    return d
+
+def leave_req_row(row):
+    if not row: return None
+    d = dict(row)
+    if d.get('start_date'): d['start_date'] = d['start_date'].isoformat()
+    if d.get('end_date'):   d['end_date']   = d['end_date'].isoformat()
+    if d.get('total_days'): d['total_days'] = float(d['total_days'])
+    if d.get('reviewed_at'): d['reviewed_at'] = d['reviewed_at'].isoformat()
+    if d.get('created_at'):  d['created_at']  = d['created_at'].isoformat()
+    if d.get('updated_at'):  d['updated_at']  = d['updated_at'].isoformat()
+    return d
+
+def leave_balance_row(row):
+    if not row: return None
+    d = dict(row)
+    if d.get('total_days') is not None: d['total_days'] = float(d['total_days'])
+    if d.get('used_days')  is not None: d['used_days']  = float(d['used_days'])
+    if d.get('updated_at'): d['updated_at'] = d['updated_at'].isoformat()
+    return d
+
+def _calc_annual_leave_days(hire_date_str):
+    """2026 勞基法特休天數計算"""
+    if not hire_date_str: return 0
+    from datetime import date as _date
+    try:
+        hire = _date.fromisoformat(str(hire_date_str))
+    except Exception:
+        return 0
+    today = _date.today()
+    years = (today - hire).days / 365.25
+    if years < 1:   return 0
+    if years < 2:   return 10
+    if years < 3:   return 15
+    if years < 4:   return 16
+    if years < 5:   return 17
+    return 20  # 滿5年上限20天
+
+def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=False):
+    """計算請假天數（含半天選項），排除週日"""
+    from datetime import date as _date, timedelta as _tdd
+    try:
+        s = _date.fromisoformat(start_date_str)
+        e = _date.fromisoformat(end_date_str)
+    except Exception:
+        return 0.0
+    if e < s: return 0.0
+    days = 0.0
+    cur  = s
+    while cur <= e:
+        if cur.weekday() != 6:  # exclude Sunday (勞基法最低標準)
+            if cur == s and start_half: days += 0.5
+            elif cur == e and end_half: days += 0.5
+            else: days += 1.0
+        cur += _tdd(days=1)
+    return days
+
+# ── Leave Type CRUD ──────────────────────────────────────────────
+
+@app.route('/api/leave/types', methods=['GET'])
+@login_required
+def api_leave_types_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM leave_types ORDER BY sort_order, id").fetchall()
+    return jsonify([leave_type_row(r) for r in rows])
+
+@app.route('/api/leave/types/public', methods=['GET'])
+def api_leave_types_public():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM leave_types WHERE active=TRUE ORDER BY sort_order, id").fetchall()
+    return jsonify([leave_type_row(r) for r in rows])
+
+@app.route('/api/leave/types', methods=['POST'])
+@login_required
+def api_leave_type_create():
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO leave_types (name,code,pay_rate,max_days,description,color,sort_order)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (b['name'], b['code'], float(b.get('pay_rate',1.0)),
+              b.get('max_days') or None, b.get('description',''),
+              b.get('color','#4a7bda'), int(b.get('sort_order',0)))).fetchone()
+    return jsonify(leave_type_row(row)), 201
+
+@app.route('/api/leave/types/<int:tid>', methods=['PUT'])
+@login_required
+def api_leave_type_update(tid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE leave_types SET name=%s,code=%s,pay_rate=%s,max_days=%s,
+              description=%s,color=%s,sort_order=%s,active=%s
+            WHERE id=%s RETURNING *
+        """, (b['name'], b['code'], float(b.get('pay_rate',1.0)),
+              b.get('max_days') or None, b.get('description',''),
+              b.get('color','#4a7bda'), int(b.get('sort_order',0)),
+              bool(b.get('active',True)), tid)).fetchone()
+    return jsonify(leave_type_row(row)) if row else ('', 404)
+
+@app.route('/api/leave/types/<int:tid>', methods=['DELETE'])
+@login_required
+def api_leave_type_delete(tid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM leave_types WHERE id=%s", (tid,))
+    return jsonify({'deleted': tid})
+
+# ── Leave Requests ────────────────────────────────────────────────
+
+@app.route('/api/leave/requests', methods=['GET'])
+@login_required
+def api_leave_requests_list():
+    status   = request.args.get('status', '')
+    month    = request.args.get('month', '')
+    staff_id = request.args.get('staff_id', '')
+    conds, params = ['TRUE'], []
+    if status:   conds.append('lr.status=%s');                            params.append(status)
+    if staff_id: conds.append('lr.staff_id=%s');                          params.append(int(staff_id))
+    if month:    conds.append("to_char(lr.start_date,'YYYY-MM')=%s");     params.append(month)
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT lr.*, ps.name as staff_name, ps.role as staff_role,
+                   lt.name as leave_type_name, lt.code as leave_code,
+                   lt.pay_rate, lt.color as leave_color
+            FROM leave_requests lr
+            JOIN punch_staff ps ON ps.id=lr.staff_id
+            JOIN leave_types  lt ON lt.id=lr.leave_type_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY lr.start_date DESC, lr.created_at DESC LIMIT 300
+        """, params).fetchall()
+    result = []
+    for r in rows:
+        d = leave_req_row(r)
+        d['staff_name']      = r['staff_name']
+        d['staff_role']      = r['staff_role']
+        d['leave_type_name'] = r['leave_type_name']
+        d['leave_code']      = r['leave_code']
+        d['pay_rate']        = float(r['pay_rate'])
+        d['leave_color']     = r['leave_color']
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/leave/requests', methods=['POST'])
+@login_required
+def api_leave_request_admin_create():
+    """管理員直接建立請假記錄"""
+    b = request.get_json(force=True)
+    sid           = b.get('staff_id')
+    leave_type_id = b.get('leave_type_id')
+    start_date    = b.get('start_date', '').strip()
+    end_date      = b.get('end_date', '').strip()
+    start_half    = bool(b.get('start_half', False))
+    end_half      = bool(b.get('end_half', False))
+    reason        = b.get('reason', '').strip()
+    status        = b.get('status', 'approved')
+
+    if not all([sid, leave_type_id, start_date, end_date]):
+        return jsonify({'error': '缺少必要欄位'}), 400
+
+    total_days = _calc_leave_days(start_date, end_date, start_half, end_half)
+    if total_days <= 0:
+        return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
+
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO leave_requests
+              (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
+               total_days, reason, status, reviewed_by, reviewed_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+              CASE WHEN %s='approved' THEN NOW() ELSE NULL END)
+            RETURNING *
+        """, (sid, leave_type_id, start_date, end_date, start_half, end_half,
+              total_days, reason, status, b.get('reviewed_by','管理員'), status)).fetchone()
+        if status == 'approved':
+            _update_leave_balance(conn, sid, leave_type_id, start_date[:4], total_days)
+    return jsonify(leave_req_row(row)), 201
+
+@app.route('/api/leave/requests/<int:rid>', methods=['PUT'])
+@login_required
+def api_leave_request_review(rid):
+    b           = request.get_json(force=True)
+    action      = b.get('action')
+    reviewed_by = b.get('reviewed_by', '').strip()
+    review_note = b.get('review_note', '').strip()
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'invalid action'}), 400
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    with get_db() as conn:
+        old = conn.execute("SELECT * FROM leave_requests WHERE id=%s", (rid,)).fetchone()
+        if not old: return ('', 404)
+        row = conn.execute("""
+            UPDATE leave_requests
+            SET status=%s, reviewed_by=%s, review_note=%s,
+                reviewed_at=NOW(), updated_at=NOW()
+            WHERE id=%s RETURNING *
+        """, (new_status, reviewed_by, review_note, rid)).fetchone()
+        if action == 'approve':
+            _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
+                                  str(old['start_date'])[:4], float(old['total_days']))
+    return jsonify(leave_req_row(row)) if row else ('', 404)
+
+@app.route('/api/leave/requests/<int:rid>', methods=['DELETE'])
+@login_required
+def api_leave_request_delete(rid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM leave_requests WHERE id=%s", (rid,))
+    return jsonify({'deleted': rid})
+
+def _update_leave_balance(conn, staff_id, leave_type_id, year_str, delta_days):
+    year = int(year_str)
+    conn.execute("""
+        INSERT INTO leave_balances (staff_id, leave_type_id, year, total_days, used_days)
+        VALUES (%s, %s, %s, 0, %s)
+        ON CONFLICT (staff_id, leave_type_id, year) DO UPDATE
+          SET used_days = leave_balances.used_days + EXCLUDED.used_days,
+              updated_at = NOW()
+    """, (staff_id, leave_type_id, year, delta_days))
+
+# ── Employee: submit leave request ────────────────────────────────
+
+@app.route('/api/leave/my-requests', methods=['GET'])
+def api_leave_my_list():
+    sid = session.get('punch_staff_id')
+    if not sid: return jsonify({'error': 'not logged in'}), 401
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT lr.*, lt.name as leave_type_name, lt.code as leave_code,
+                   lt.color as leave_color, lt.pay_rate
+            FROM leave_requests lr
+            JOIN leave_types lt ON lt.id=lr.leave_type_id
+            WHERE lr.staff_id=%s
+            ORDER BY lr.start_date DESC LIMIT 30
+        """, (sid,)).fetchall()
+    result = []
+    for r in rows:
+        d = leave_req_row(r)
+        d['leave_type_name'] = r['leave_type_name']
+        d['leave_code']      = r['leave_code']
+        d['leave_color']     = r['leave_color']
+        d['pay_rate']        = float(r['pay_rate'])
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/leave/my-requests', methods=['POST'])
+def api_leave_submit():
+    sid = session.get('punch_staff_id')
+    if not sid: return jsonify({'error': 'not logged in'}), 401
+    b             = request.get_json(force=True)
+    leave_type_id = b.get('leave_type_id')
+    start_date    = b.get('start_date', '').strip()
+    end_date      = b.get('end_date',   '').strip()
+    start_half    = bool(b.get('start_half', False))
+    end_half      = bool(b.get('end_half',   False))
+    reason        = b.get('reason', '').strip()
+    substitute    = b.get('substitute_name', '').strip()
+
+    if not all([leave_type_id, start_date, end_date]):
+        return jsonify({'error': '缺少必要欄位'}), 400
+
+    total_days = _calc_leave_days(start_date, end_date, start_half, end_half)
+    if total_days <= 0:
+        return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
+
+    with get_db() as conn:
+        # Check balance for types with limits
+        lt = conn.execute("SELECT * FROM leave_types WHERE id=%s", (leave_type_id,)).fetchone()
+        if lt and lt['max_days'] is not None:
+            year = start_date[:4]
+            bal  = conn.execute("""
+                SELECT COALESCE(used_days,0) as used
+                FROM leave_balances
+                WHERE staff_id=%s AND leave_type_id=%s AND year=%s
+            """, (sid, leave_type_id, year)).fetchone()
+            used = float(bal['used']) if bal else 0.0
+            if used + total_days > float(lt['max_days']):
+                remaining = float(lt['max_days']) - used
+                return jsonify({'error': f'{lt["name"]}剩餘 {remaining} 天，無法申請 {total_days} 天'}), 422
+
+        row = conn.execute("""
+            INSERT INTO leave_requests
+              (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
+               total_days, reason, substitute_name)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (sid, leave_type_id, start_date, end_date, start_half, end_half,
+              total_days, reason, substitute)).fetchone()
+    return jsonify(leave_req_row(row)), 201
+
+# ── Leave Balance ─────────────────────────────────────────────────
+
+@app.route('/api/leave/balances', methods=['GET'])
+@login_required
+def api_leave_balances():
+    year     = request.args.get('year', '')
+    staff_id = request.args.get('staff_id', '')
+    if not year:
+        from datetime import date as _d2
+        year = str(_d2.today().year)
+    conds, params = ["lb.year=%s"], [int(year)]
+    if staff_id: conds.append("lb.staff_id=%s"); params.append(int(staff_id))
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT lb.*, ps.name as staff_name, lt.name as leave_type_name,
+                   lt.code as leave_code, lt.max_days, lt.color as leave_color
+            FROM leave_balances lb
+            JOIN punch_staff  ps ON ps.id=lb.staff_id
+            JOIN leave_types  lt ON lt.id=lb.leave_type_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY ps.name, lt.sort_order
+        """, params).fetchall()
+    result = []
+    for r in rows:
+        d = leave_balance_row(r)
+        d['staff_name']      = r['staff_name']
+        d['leave_type_name'] = r['leave_type_name']
+        d['leave_code']      = r['leave_code']
+        d['leave_color']     = r['leave_color']
+        d['max_days']        = float(r['max_days']) if r['max_days'] is not None else None
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/leave/balances/init', methods=['POST'])
+@login_required
+def api_leave_balance_init():
+    """初始化/更新員工特休天數（依年資自動計算）"""
+    b    = request.get_json(force=True)
+    year = b.get('year', '')
+    if not year:
+        from datetime import date as _d3
+        year = str(_d3.today().year)
+    with get_db() as conn:
+        staff_list = conn.execute(
+            "SELECT id, hire_date FROM punch_staff WHERE active=TRUE"
+        ).fetchall()
+        lt = conn.execute("SELECT id FROM leave_types WHERE code='annual'").fetchone()
+        if not lt: return jsonify({'error': '找不到特休假類型'}), 404
+        lt_id = lt['id']
+        updated = 0
+        for s in staff_list:
+            days = _calc_annual_leave_days(s['hire_date'])
+            if days > 0:
+                conn.execute("""
+                    INSERT INTO leave_balances (staff_id, leave_type_id, year, total_days, used_days)
+                    VALUES (%s,%s,%s,%s,0)
+                    ON CONFLICT (staff_id, leave_type_id, year) DO UPDATE
+                      SET total_days=EXCLUDED.total_days, updated_at=NOW()
+                """, (s['id'], lt_id, int(year), days))
+                updated += 1
+    return jsonify({'ok': True, 'updated': updated, 'year': year})
+
+@app.route('/api/leave/balances/<int:bid>', methods=['PUT'])
+@login_required
+def api_leave_balance_update(bid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE leave_balances SET total_days=%s, used_days=%s, note=%s, updated_at=NOW()
+            WHERE id=%s RETURNING *
+        """, (float(b.get('total_days',0)), float(b.get('used_days',0)),
+              b.get('note',''), bid)).fetchone()
+    return jsonify(leave_balance_row(row)) if row else ('', 404)
+
+# ── Leave Summary (for salary integration) ───────────────────────
+
+@app.route('/api/leave/summary/<int:staff_id>/<month>', methods=['GET'])
+@login_required
+def api_leave_summary(staff_id, month):
+    """取得員工某月請假摘要（供薪資計算用）"""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT lr.*, lt.name as leave_type_name, lt.code, lt.pay_rate
+            FROM leave_requests lr
+            JOIN leave_types lt ON lt.id=lr.leave_type_id
+            WHERE lr.staff_id=%s
+              AND lr.status='approved'
+              AND to_char(lr.start_date,'YYYY-MM')=%s
+            ORDER BY lr.start_date
+        """, (staff_id, month)).fetchall()
+    total_leave_days = 0.0
+    unpaid_days      = 0.0
+    half_pay_days    = 0.0
+    items = []
+    for r in rows:
+        d = float(r['total_days'])
+        pay_r = float(r['pay_rate'])
+        total_leave_days += d
+        if pay_r == 0:   unpaid_days   += d
+        elif pay_r < 1:  half_pay_days += d
+        items.append({
+            'leave_type': r['leave_type_name'],
+            'code':       r['code'],
+            'days':       d,
+            'pay_rate':   pay_r,
+            'start_date': r['start_date'].isoformat(),
+            'end_date':   r['end_date'].isoformat(),
+        })
+    return jsonify({
+        'staff_id':         staff_id,
+        'month':            month,
+        'total_leave_days': total_leave_days,
+        'unpaid_days':      unpaid_days,
+        'half_pay_days':    half_pay_days,
+        'items':            items,
+    })
+
+# ═══════════════════════════════════════════════════════════════════
+# Salary Management (薪資管理)
+# 2026 勞基法：
+#   勞保費率 10.5%（員工負擔 20%=2.1%，含就業保險）
+#   健保費率 5.17%（員工負擔 30%=1.551%）
+#   勞退提撥 6%（雇主強制提撥，員工自願另計）
+#   最低工資 2026年 NT$28,590（月薪）
+# ═══════════════════════════════════════════════════════════════════
+
+def init_salary_db():
+    migrations = [
+        """CREATE TABLE IF NOT EXISTS salary_items (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT NOT NULL,
+            item_type   TEXT NOT NULL DEFAULT 'allowance',
+            formula     TEXT DEFAULT '',
+            amount      NUMERIC(12,2) DEFAULT 0,
+            description TEXT DEFAULT '',
+            color       TEXT DEFAULT '#4a7bda',
+            active      BOOLEAN DEFAULT TRUE,
+            sort_order  INT DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS salary_records (
+            id              SERIAL PRIMARY KEY,
+            staff_id        INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            month           TEXT NOT NULL,
+            base_salary     NUMERIC(12,2) DEFAULT 0,
+            insured_salary  NUMERIC(12,2) DEFAULT 0,
+            work_days       NUMERIC(5,1)  DEFAULT 0,
+            actual_days     NUMERIC(5,1)  DEFAULT 0,
+            leave_days      NUMERIC(5,1)  DEFAULT 0,
+            unpaid_days     NUMERIC(5,1)  DEFAULT 0,
+            ot_pay          NUMERIC(12,2) DEFAULT 0,
+            allowance_total NUMERIC(12,2) DEFAULT 0,
+            deduction_total NUMERIC(12,2) DEFAULT 0,
+            net_pay         NUMERIC(12,2) DEFAULT 0,
+            items           JSONB         DEFAULT '[]',
+            status          TEXT          DEFAULT 'draft',
+            note            TEXT          DEFAULT '',
+            confirmed_by    TEXT          DEFAULT '',
+            confirmed_at    TIMESTAMPTZ,
+            created_at      TIMESTAMPTZ   DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ   DEFAULT NOW(),
+            UNIQUE(staff_id, month)
+        )""",
+    ]
+    for sql in migrations:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[salary_init] {str(e)[:80]}")
+
+    # Seed default salary items
+    defaults = [
+        ('本薪',        'allowance', 'base_salary+service_years*1000', 0,    '#2e9e6b', 1),
+        ('職務加給',    'allowance', '',                                0,    '#0ea5e9', 2),
+        ('全勤獎金',    'allowance', '',                                0,    '#c8a96e', 3),
+        ('獎金',        'allowance', '',                                0,    '#8b5cf6', 4),
+        ('生日禮金',    'allowance', '',                                1000, '#e05c8a', 5),
+        ('勞退6%',      'allowance', 'base_salary*0.06+service_years*1000*0.06', 0, '#4a7bda', 6),
+        ('病/事/假',    'deduction', '',                                0,    '#8892a4', 7),
+        ('勞保費',      'deduction', 'insured_salary*0.125*0.2',       0,    '#d64242', 8),
+        ('健保費',      'deduction', 'insured_salary*0.0517*0.3',      0,    '#e07b2a', 9),
+        ('勞退提撥6%',  'deduction', 'base_salary*0.06+service_years*1000*0.06', 0, '#4a7bda', 10),
+    ]
+    try:
+        with get_db() as conn:
+            cnt = conn.execute("SELECT COUNT(*) as c FROM salary_items").fetchone()['c']
+            if cnt == 0:
+                for name, itype, formula, amount, color, sort in defaults:
+                    conn.execute("""
+                        INSERT INTO salary_items (name,item_type,formula,amount,color,sort_order)
+                        VALUES (%s,%s,%s,%s,%s,%s)
+                    """, (name, itype, formula, amount, color, sort))
+    except Exception as e:
+        print(f"[salary_seed] {e}")
+
+init_salary_db()
+
+def salary_item_row(row):
+    if not row: return None
+    d = dict(row)
+    if d.get('amount') is not None: d['amount'] = float(d['amount'])
+    if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
+    return d
+
+def salary_record_row(row):
+    if not row: return None
+    d = dict(row)
+    for f in ['base_salary','insured_salary','work_days','actual_days','leave_days',
+              'unpaid_days','ot_pay','allowance_total','deduction_total','net_pay']:
+        if d.get(f) is not None: d[f] = float(d[f])
+    if isinstance(d.get('items'), str):
+        try: d['items'] = _json.loads(d['items'])
+        except: d['items'] = []
+    if d.get('confirmed_at'): d['confirmed_at'] = d['confirmed_at'].isoformat()
+    if d.get('created_at'):   d['created_at']   = d['created_at'].isoformat()
+    if d.get('updated_at'):   d['updated_at']   = d['updated_at'].isoformat()
+    return d
+
+def _eval_formula(formula, base_salary, insured_salary, service_years):
+    """安全計算薪資公式"""
+    if not formula: return 0.0
+    try:
+        result = eval(formula, {"__builtins__": {}}, {
+            'base_salary':    float(base_salary or 0),
+            'insured_salary': float(insured_salary or 0),
+            'service_years':  float(service_years or 0),
+        })
+        return round(float(result), 2)
+    except Exception:
+        return 0.0
+
+def _calc_service_years(hire_date_str):
+    if not hire_date_str: return 0.0
+    from datetime import date as _d4
+    try:
+        hire = _d4.fromisoformat(str(hire_date_str))
+        return round((_d4.today() - hire).days / 365.25, 2)
+    except Exception:
+        return 0.0
+
+def _auto_generate_salary(conn, staff, month, work_days=None):
+    """自動產生員工月薪資料"""
+    import calendar as _cal2
+    y, m = int(month[:4]), int(month[5:])
+    total_work_days = work_days
+    if total_work_days is None:
+        # 計算該月工作日（排除週日）
+        days_in_month = _cal2.monthrange(y, m)[1]
+        from datetime import date as _d5
+        total_work_days = sum(1 for d in range(1, days_in_month+1)
+                              if _d5(y, m, d).weekday() != 6)
+
+    base_salary    = float(staff.get('base_salary') or 0)
+    insured_salary = float(staff.get('insured_salary') or base_salary)
+    service_years  = _calc_service_years(staff.get('hire_date'))
+    hire_date_str  = staff.get('hire_date')
+
+    # 取得已核准加班費
+    ot_rows = conn.execute("""
+        SELECT COALESCE(SUM(ot_pay),0) as total
+        FROM overtime_requests
+        WHERE staff_id=%s AND status='approved'
+          AND to_char(request_date,'YYYY-MM')=%s
+    """, (staff['id'], month)).fetchone()
+    ot_pay = float(ot_rows['total']) if ot_rows else 0.0
+
+    # 取得請假資訊
+    leave_rows = conn.execute("""
+        SELECT lr.total_days, lt.pay_rate, lt.code
+        FROM leave_requests lr
+        JOIN leave_types lt ON lt.id=lr.leave_type_id
+        WHERE lr.staff_id=%s AND lr.status='approved'
+          AND to_char(lr.start_date,'YYYY-MM')=%s
+    """, (staff['id'], month)).fetchall()
+    leave_days  = sum(float(r['total_days']) for r in leave_rows)
+    unpaid_days = sum(float(r['total_days']) for r in leave_rows if float(r['pay_rate']) == 0)
+    half_pay_days = sum(float(r['total_days']) for r in leave_rows if 0 < float(r['pay_rate']) < 1)
+
+    # 出勤天數
+    actual_days = total_work_days - leave_days
+
+    # 日薪（月薪制）
+    daily_wage = base_salary / 30 if base_salary > 0 else 0
+
+    # 取得薪資項目
+    items_rows = conn.execute(
+        "SELECT * FROM salary_items WHERE active=TRUE ORDER BY sort_order, id"
+    ).fetchall()
+
+    items = []
+    allowance_total = 0.0
+    deduction_total = 0.0
+
+    for it in items_rows:
+        formula = it['formula'] or ''
+        amt     = float(it['amount'] or 0)
+
+        if formula:
+            amt = _eval_formula(formula, base_salary, insured_salary, service_years)
+
+        # 加班費（申請）自動加入
+        if it['item_type'] == 'allowance':
+            if unpaid_days > 0 and daily_wage > 0:
+                # 事假/無薪假扣款（在扣除項另算）
+                pass
+
+        calc_note = ''
+        if formula:
+            calc_note = formula
+
+        items.append({
+            'id':        it['id'],
+            'name':      it['name'],
+            'type':      it['item_type'],
+            'amount':    round(amt, 2),
+            'formula':   formula,
+            'calc_note': calc_note,
+        })
+        if it['item_type'] == 'allowance':
+            allowance_total += amt
+        else:
+            deduction_total += amt
+
+    # 加入加班費項目
+    if ot_pay > 0:
+        items.append({
+            'id': 'ot', 'name': '加班費（申請）', 'type': 'allowance',
+            'amount': round(ot_pay, 2), 'formula': '',
+            'calc_note': f'核准加班費合計',
+        })
+        allowance_total += ot_pay
+
+    # 無薪假/事假扣款
+    if unpaid_days > 0 and daily_wage > 0:
+        deduct = round(daily_wage * unpaid_days, 2)
+        items.append({
+            'id': 'unpaid', 'name': '事假/無薪扣款', 'type': 'deduction',
+            'amount': deduct, 'formula': '',
+            'calc_note': f'{unpaid_days}天 × 日薪${round(daily_wage,0)}',
+        })
+        deduction_total += deduct
+
+    # 半薪假扣款（如病假）
+    if half_pay_days > 0 and daily_wage > 0:
+        deduct = round(daily_wage * half_pay_days * 0.5, 2)
+        items.append({
+            'id': 'halfpay', 'name': '病假半薪扣款', 'type': 'deduction',
+            'amount': deduct, 'formula': '',
+            'calc_note': f'{half_pay_days}天 × 日薪${round(daily_wage,0)} × 0.5',
+        })
+        deduction_total += deduct
+
+    net_pay = round(allowance_total - deduction_total, 2)
+
+    return {
+        'staff_id':        staff['id'],
+        'month':           month,
+        'base_salary':     base_salary,
+        'insured_salary':  insured_salary,
+        'work_days':       total_work_days,
+        'actual_days':     actual_days,
+        'leave_days':      leave_days,
+        'unpaid_days':     unpaid_days,
+        'ot_pay':          ot_pay,
+        'allowance_total': round(allowance_total, 2),
+        'deduction_total': round(deduction_total, 2),
+        'net_pay':         net_pay,
+        'items':           items,
+        'status':          'draft',
+    }
+
+# ── Salary Items CRUD ─────────────────────────────────────────────
+
+@app.route('/api/salary/items', methods=['GET'])
+@login_required
+def api_salary_items_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM salary_items ORDER BY sort_order, id").fetchall()
+    return jsonify([salary_item_row(r) for r in rows])
+
+@app.route('/api/salary/items', methods=['POST'])
+@login_required
+def api_salary_item_create():
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO salary_items (name, item_type, formula, amount, description, color, sort_order)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (b['name'], b.get('item_type','allowance'), b.get('formula',''),
+              float(b.get('amount',0)), b.get('description',''),
+              b.get('color','#4a7bda'), int(b.get('sort_order',0)))).fetchone()
+    return jsonify(salary_item_row(row)), 201
+
+@app.route('/api/salary/items/<int:iid>', methods=['PUT'])
+@login_required
+def api_salary_item_update(iid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE salary_items SET name=%s, item_type=%s, formula=%s, amount=%s,
+              description=%s, color=%s, sort_order=%s, active=%s
+            WHERE id=%s RETURNING *
+        """, (b['name'], b.get('item_type','allowance'), b.get('formula',''),
+              float(b.get('amount',0)), b.get('description',''),
+              b.get('color','#4a7bda'), int(b.get('sort_order',0)),
+              bool(b.get('active',True)), iid)).fetchone()
+    return jsonify(salary_item_row(row)) if row else ('', 404)
+
+@app.route('/api/salary/items/<int:iid>', methods=['DELETE'])
+@login_required
+def api_salary_item_delete(iid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM salary_items WHERE id=%s", (iid,))
+    return jsonify({'deleted': iid})
+
+# ── Salary Records ─────────────────────────────────────────────────
+
+@app.route('/api/salary/records', methods=['GET'])
+@login_required
+def api_salary_records_list():
+    month = request.args.get('month', '')
+    if not month:
+        from datetime import date as _d6
+        month = _d6.today().strftime('%Y-%m')
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT sr.*, ps.name as staff_name, ps.role as staff_role,
+                   ps.employee_code, ps.department
+            FROM salary_records sr
+            JOIN punch_staff ps ON ps.id=sr.staff_id
+            WHERE sr.month=%s
+            ORDER BY ps.name
+        """, (month,)).fetchall()
+    result = []
+    for r in rows:
+        d = salary_record_row(r)
+        d['staff_name']    = r['staff_name']
+        d['staff_role']    = r['staff_role']
+        d['employee_code'] = r['employee_code'] or ''
+        d['department']    = r['department'] or ''
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/salary/records/generate', methods=['POST'])
+@login_required
+def api_salary_generate():
+    """自動產生或更新該月薪資"""
+    b     = request.get_json(force=True)
+    month = b.get('month', '').strip()
+    if not month: return jsonify({'error': '請指定月份'}), 400
+    with get_db() as conn:
+        staff_list = conn.execute(
+            "SELECT * FROM punch_staff WHERE active=TRUE"
+        ).fetchall()
+        generated = 0
+        for staff in staff_list:
+            data = _auto_generate_salary(conn, dict(staff), month)
+            items_json = _json.dumps(data['items'], ensure_ascii=False)
+            conn.execute("""
+                INSERT INTO salary_records
+                  (staff_id, month, base_salary, insured_salary, work_days, actual_days,
+                   leave_days, unpaid_days, ot_pay, allowance_total, deduction_total,
+                   net_pay, items, status, updated_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,'draft',NOW())
+                ON CONFLICT (staff_id, month) DO UPDATE
+                  SET base_salary=%s, insured_salary=%s, work_days=%s, actual_days=%s,
+                      leave_days=%s, unpaid_days=%s, ot_pay=%s, allowance_total=%s,
+                      deduction_total=%s, net_pay=%s, items=%s::jsonb,
+                      status=CASE WHEN salary_records.status='confirmed' THEN 'confirmed' ELSE 'draft' END,
+                      updated_at=NOW()
+            """, (
+                data['staff_id'], month, data['base_salary'], data['insured_salary'],
+                data['work_days'], data['actual_days'], data['leave_days'], data['unpaid_days'],
+                data['ot_pay'], data['allowance_total'], data['deduction_total'],
+                data['net_pay'], items_json,
+                data['base_salary'], data['insured_salary'], data['work_days'], data['actual_days'],
+                data['leave_days'], data['unpaid_days'], data['ot_pay'], data['allowance_total'],
+                data['deduction_total'], data['net_pay'], items_json,
+            ))
+            generated += 1
+    return jsonify({'ok': True, 'generated': generated, 'month': month})
+
+@app.route('/api/salary/records/<int:rid>', methods=['GET'])
+@login_required
+def api_salary_record_get(rid):
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT sr.*, ps.name as staff_name, ps.role as staff_role,
+                   ps.employee_code, ps.department, ps.hire_date
+            FROM salary_records sr
+            JOIN punch_staff ps ON ps.id=sr.staff_id
+            WHERE sr.id=%s
+        """, (rid,)).fetchone()
+    if not row: return ('', 404)
+    d = salary_record_row(row)
+    d['staff_name']    = row['staff_name']
+    d['staff_role']    = row['staff_role']
+    d['employee_code'] = row['employee_code'] or ''
+    d['department']    = row['department'] or ''
+    d['hire_date']     = row['hire_date'].isoformat() if row['hire_date'] else ''
+    return jsonify(d)
+
+@app.route('/api/salary/records/<int:rid>', methods=['PUT'])
+@login_required
+def api_salary_record_update(rid):
+    b = request.get_json(force=True)
+    items_json = _json.dumps(b.get('items', []), ensure_ascii=False)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE salary_records SET
+              allowance_total=%s, deduction_total=%s, net_pay=%s,
+              items=%s::jsonb, note=%s, updated_at=NOW()
+            WHERE id=%s RETURNING *
+        """, (float(b.get('allowance_total',0)), float(b.get('deduction_total',0)),
+              float(b.get('net_pay',0)), items_json,
+              b.get('note',''), rid)).fetchone()
+    return jsonify(salary_record_row(row)) if row else ('', 404)
+
+@app.route('/api/salary/records/<int:rid>/confirm', methods=['POST'])
+@login_required
+def api_salary_confirm(rid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE salary_records SET status='confirmed', confirmed_by=%s,
+              confirmed_at=NOW(), updated_at=NOW()
+            WHERE id=%s RETURNING *
+        """, (b.get('confirmed_by','管理員'), rid)).fetchone()
+    return jsonify(salary_record_row(row)) if row else ('', 404)
+
+@app.route('/api/salary/records/<int:rid>', methods=['DELETE'])
+@login_required
+def api_salary_record_delete(rid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM salary_records WHERE id=%s", (rid,))
+    return jsonify({'deleted': rid})
+
+# ── Salary Staff Settings ─────────────────────────────────────────
+
+@app.route('/api/salary/staff', methods=['GET'])
+@login_required
+def api_salary_staff_list():
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT id, name, username, role, active, employee_code, department,
+                   position_title, hire_date, birth_date, base_salary, insured_salary,
+                   daily_hours, ot_rate1, ot_rate2, salary_type, hourly_rate,
+                   vacation_quota, salary_notes
+            FROM punch_staff ORDER BY name
+        """).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        for f in ['base_salary','insured_salary','daily_hours','ot_rate1','ot_rate2','hourly_rate']:
+            if d.get(f) is not None: d[f] = float(d[f])
+        if d.get('hire_date'):  d['hire_date']  = d['hire_date'].isoformat()
+        if d.get('birth_date'): d['birth_date'] = d['birth_date'].isoformat()
+        d['annual_leave_days'] = _calc_annual_leave_days(d.get('hire_date'))
+        d['service_years']     = _calc_service_years(d.get('hire_date'))
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/salary/staff/<int:sid>', methods=['PUT'])
+@login_required
+def api_salary_staff_update(sid):
+    b = request.get_json(force=True)
+    def _f(k, default=0): return float(b.get(k, default) or default)
+    def _s(k): return b.get(k, '').strip() if b.get(k) else None
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE punch_staff SET
+              employee_code=%s, department=%s, position_title=%s,
+              hire_date=%s, birth_date=%s,
+              base_salary=%s, insured_salary=%s, daily_hours=%s,
+              ot_rate1=%s, ot_rate2=%s, salary_type=%s,
+              hourly_rate=%s, vacation_quota=%s, salary_notes=%s
+            WHERE id=%s
+        """, (_s('employee_code'), _s('department'), _s('position_title'),
+              _s('hire_date'), _s('birth_date'),
+              _f('base_salary'), _f('insured_salary'), _f('daily_hours') or 8,
+              _f('ot_rate1') or 1.33, _f('ot_rate2') or 1.67,
+              b.get('salary_type','monthly'),
+              _f('hourly_rate'), b.get('vacation_quota') or None,
+              b.get('salary_notes',''), sid))
+        row = conn.execute("SELECT * FROM punch_staff WHERE id=%s", (sid,)).fetchone()
+    return jsonify(punch_staff_row(row)) if row else ('', 404)
+
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':

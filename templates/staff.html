@@ -312,6 +312,9 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
       </div>
       <!-- 請假申請 tab -->
       <div id="panel-leave" class="tab-body" style="display:none">
+        <!-- 假期餘額總覽 -->
+        <div id="leave-balance-overview" style="margin-bottom:14px"></div>
+
         <div class="month-row" style="margin-bottom:14px">
           <span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">月份</span>
           <input type="month" class="month-inp" id="leave-month-picker" onchange="loadMyLeaveHistory()">
@@ -672,48 +675,196 @@ function initScheduleViewTab(){
   if(!document.getElementById('view-month-picker').value)document.getElementById('view-month-picker').value=ym;
   loadScheduleView();
 }
+let _schedViewData = {};  // cache for schedule popup
+
 async function loadScheduleView(){
-  const month=document.getElementById('view-month-picker').value;if(!month)return;
-  const wrap=document.getElementById('schedule-view-content');
-  wrap.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div>';
-  let cfgData={vacation_quota:8,max_off_per_day:2,off_counts:{},notes:''},reqData=null,shiftData={};
-  try{
-    const safeJ=async r=>{try{return await r.json();}catch(e){return null;}};
-    const[c,r,s]=await Promise.all([
-      fetch('/api/schedule/config/'+month).then(safeJ),
-      fetch('/api/schedule/my-request/'+month).then(safeJ),
-      fetch('/api/shifts/my-schedule?month='+month).then(safeJ),
+  const month = document.getElementById('view-month-picker').value;
+  if (!month) return;
+  const wrap = document.getElementById('schedule-view-content');
+  wrap.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div>';
+
+  let cfgData = {vacation_quota:8,max_off_per_day:2,off_counts:{},notes:''};
+  let reqData  = null;
+  let shiftData = {};
+  try {
+    const safeJ = async r => { try { return await r.json(); } catch(e) { return null; } };
+    const [c, r, s] = await Promise.all([
+      fetch('/api/schedule/config/' + month).then(safeJ),
+      fetch('/api/schedule/my-request/' + month).then(safeJ),
+      fetch('/api/shifts/my-schedule?month=' + month).then(safeJ),
     ]);
-    if(c)cfgData=c;if(r&&!r.error)reqData=r;if(s&&s.shifts)shiftData=s.shifts;
-  }catch(e){}
-  const cfg=cfgData;const req=reqData;
-  const[y,m]=month.split('-').map(Number);const daysInMonth=new Date(y,m,0).getDate();
-  const today=new Date();today.setHours(0,0,0,0);
-  const myDates=new Set((req&&req.dates)||[]);const myStatus=(req&&req.status)||'not_submitted';
-  const statusLabel={pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審',not_submitted:'尚未申請'};
-  const statusColor={pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)',modified_pending:'var(--accent)',not_submitted:'var(--muted)'};
-  let html=`<div style="padding:12px 14px;background:var(--bg);border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--navy)">${y}年 ${m}月</div><div style="font-size:12px;margin-top:3px">申請狀態：<span style="font-weight:700;color:${statusColor[myStatus]}">${statusLabel[myStatus]}</span>${req?`（${myDates.size} 天）`:''}</div>${cfg.notes?`<div style="font-size:11px;color:var(--muted);margin-top:3px">備註：${esc(cfg.notes)}</div>`:''}</div>`;
-  const firstWd=new Date(y,m-1,1).getDay();
-  html+=`<div style="padding:14px"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">${['日','一','二','三','四','五','六'].map((d,i)=>`<div style="text-align:center;font-size:10px;font-weight:700;color:${i===0?'var(--red)':i===6?'var(--accent)':'var(--muted)'};padding:4px 0">${d}</div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">`;
-  for(let i=0;i<firstWd;i++)html+='<div></div>';
-  const offCounts=cfgData.off_counts||{};
-  for(let day=1;day<=daysInMonth;day++){
-    const ds=month+'-'+String(day).padStart(2,'0');const dt=new Date(y,m-1,day);const wd=dt.getDay();
-    const isOff=myDates.has(ds);const isPast=dt<today;
-    let bg='#fff',border='var(--border)',dayColor=wd===0?'var(--red)':wd===6?'var(--accent)':'var(--text)';
-    if(isOff&&myStatus==='approved'){bg='var(--green-light)';border='#a8dfc5';dayColor='var(--green)';}
-    else if(isOff&&myStatus==='pending'){bg='var(--orange-light)';border='#f5c0a0';dayColor='var(--orange)';}
-    else if(isOff&&myStatus==='rejected'){bg='var(--red-light)';border='#f5c0c0';dayColor='var(--red)';}
-    if(isPast)bg='#fafafa';
-    const shift=shiftData[ds];
-    let shiftBadge='';
-    if(shift&&!isOff){border=shift.color;bg=shift.color+'22';shiftBadge=`<span style="font-size:7px;font-weight:700;color:${shift.color};line-height:1.3;text-align:center;display:block">${esc(shift.shift_name)}</span><span style="font-size:7px;color:${shift.color}">${shift.start_time}~${shift.end_time}</span>`;}
-    else if(shift&&isOff){shiftBadge=`<span style="font-size:7px;font-weight:700;color:${shift.color};opacity:.5;line-height:1.3;display:block">${esc(shift.shift_name)}</span>`;}
-    const offLabel={approved:'✓休假',pending:'申請中',modified_pending:'修改中',rejected:'✗退回'};
-    const offBadge=isOff?`<span style="font-size:7px;font-weight:700;color:${dayColor};line-height:1.3">${offLabel[myStatus]||'休假'}</span>`:'';
-    html+=`<div style="border-radius:7px;border:1.5px solid ${border};background:${bg};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3px 2px;gap:0;opacity:${isPast?'.5':'1'};min-height:52px"><span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${dayColor};line-height:1.2">${day}</span>${offBadge}${shiftBadge}</div>`;
+    if (c) cfgData  = c;
+    if (r && !r.error) reqData = r;
+    if (s && s.shifts) shiftData = s.shifts;
+  } catch(e) {}
+
+  _schedViewData = { cfgData, reqData, shiftData };
+
+  const cfg    = cfgData;
+  const req    = reqData;
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const today  = new Date(); today.setHours(0,0,0,0);
+  const myDates   = new Set((req && req.dates) || []);
+  const myStatus  = (req && req.status) || 'not_submitted';
+
+  const statusLabel = {pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審',not_submitted:'尚未申請'};
+  const statusColor = {pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)',modified_pending:'var(--accent)',not_submitted:'var(--muted)'};
+
+  // ── 統計 ──────────────────────────────────────────────────
+  const totalShiftDays = Object.keys(shiftData).filter(ds => ds.startsWith(month)).length;
+
+  let html = `
+  <div style="padding:12px 14px;background:var(--bg);border-bottom:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:700;color:var(--navy)">${y}年 ${m}月</div>
+    <div style="font-size:12px;margin-top:3px">
+      排休狀態：<span style="font-weight:700;color:${statusColor[myStatus]}">${statusLabel[myStatus]}</span>
+      ${req ? `（${myDates.size} 天）` : ''}
+      ${totalShiftDays > 0 ? `　|　本月排班 <strong>${totalShiftDays} 天</strong>` : ''}
+    </div>
+    ${cfg.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">📢 ${esc(cfg.notes)}</div>` : ''}
+  </div>
+  <div style="padding:12px 14px">
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">
+      ${['日','一','二','三','四','五','六'].map((d,i) =>
+        `<div style="text-align:center;font-size:10px;font-weight:700;
+          color:${i===0?'var(--red)':i===6?'var(--accent)':'var(--muted)'};padding:4px 0">${d}</div>`
+      ).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">`;
+
+  const firstWd = new Date(y, m-1, 1).getDay();
+  for (let i = 0; i < firstWd; i++) html += '<div></div>';
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds    = month + '-' + String(day).padStart(2,'0');
+    const dt    = new Date(y, m-1, day);
+    const wd    = dt.getDay();
+    const isOff = myDates.has(ds);
+    const isPast= dt < today;
+    const isToday = dt.getTime() === today.getTime();
+    const shift = shiftData[ds];
+    const hasContent = isOff || !!shift || isToday;
+
+    let bg = '#fff', border = 'var(--border)', dayColor = wd===0?'var(--red)':wd===6?'var(--accent)':'var(--text)';
+    if      (isToday)                              { border = 'var(--accent)'; bg = '#eef3fd'; }
+    else if (isOff && myStatus === 'approved')     { bg = 'var(--green-light)'; border = '#a8dfc5'; dayColor = 'var(--green)'; }
+    else if (isOff && myStatus === 'pending')      { bg = 'var(--orange-light)'; border = '#f5c0a0'; dayColor = 'var(--orange)'; }
+    else if (isOff && myStatus === 'rejected')     { bg = 'var(--red-light)'; border = '#f5c0c0'; dayColor = 'var(--red)'; }
+    else if (shift)                                { border = shift.color; bg = shift.color + '18'; }
+
+    const offLabel = {approved:'休假',pending:'申請中',modified_pending:'修改中',rejected:'退回'};
+    const shiftLabel = shift
+      ? `<div style="font-size:8px;font-weight:700;color:${shift.color};line-height:1.4;margin-top:1px">${esc(shift.shift_name)}</div>
+         <div style="font-size:8px;color:${shift.color};opacity:.8">${shift.start_time}~${shift.end_time}</div>`
+      : '';
+    const offBadge = isOff
+      ? `<div style="font-size:8px;font-weight:700;color:${dayColor};line-height:1.3;margin-top:1px">${offLabel[myStatus]||'休假'}</div>`
+      : '';
+
+    html += `
+    <div onclick="showSchedDayDetail('${ds}')"
+      style="border-radius:8px;border:1.5px solid ${border};background:${bg};
+             display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+             padding:5px 3px 4px;min-height:60px;
+             opacity:${isPast&&!hasContent?'.45':'1'};
+             cursor:${hasContent?'pointer':'default'};
+             -webkit-tap-highlight-color:transparent;position:relative">
+      <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;
+            color:${isToday?'var(--accent)':dayColor};line-height:1.2">
+        ${day}${isToday?'<sup style="font-size:7px;color:var(--accent)">今</sup>':''}
+      </span>
+      ${offBadge}
+      ${shiftLabel}
+    </div>`;
   }
-  html+='</div></div>';wrap.innerHTML=html;
+  html += '</div></div>';
+  wrap.innerHTML = html;
+}
+
+// ── Schedule day detail popup ─────────────────────────────────
+function showSchedDayDetail(ds) {
+  const { reqData, shiftData } = _schedViewData;
+  const shift = shiftData ? shiftData[ds] : null;
+  const myDates  = new Set((reqData && reqData.dates) || []);
+  const myStatus = (reqData && reqData.status) || 'not_submitted';
+  const isOff    = myDates.has(ds);
+
+  const dt   = new Date(ds + 'T00:00:00');
+  const DAYS = ['日','一','二','三','四','五','六'];
+  const title= `${ds}（週${DAYS[dt.getDay()]}）`;
+
+  const old = document.getElementById('sched-day-popup');
+  if (old) old.remove();
+
+  // No content at all → skip
+  if (!shift && !isOff) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sched-day-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,20,45,.55);z-index:300;display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const statusLabel = {pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審'};
+  const statusColor = {pending:'var(--orange)',approved:'var(--green)',rejected:'var(--red)',modified_pending:'var(--accent)'};
+
+  let bodyHtml = '';
+
+  if (shift) {
+    bodyHtml += `
+    <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:.08em">班別</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:10px;height:32px;border-radius:4px;background:${shift.color};flex-shrink:0"></div>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--navy)">${esc(shift.shift_name)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;color:${shift.color};margin-top:2px">
+            ${shift.start_time} ～ ${shift.end_time}
+          </div>
+        </div>
+      </div>
+      ${shift.note ? `<div style="font-size:12px;color:var(--muted);margin-top:8px">備註：${esc(shift.note)}</div>` : ''}
+    </div>`;
+  }
+
+  if (isOff) {
+    bodyHtml += `
+    <div style="padding:14px 0">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:.08em">排休申請</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:22px">🌿</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:${statusColor[myStatus]||'var(--muted)'}">
+            ${statusLabel[myStatus] || myStatus}
+          </div>
+          ${reqData && reqData.submit_note
+            ? `<div style="font-size:12px;color:var(--muted);margin-top:3px">備註：${esc(reqData.submit_note)}</div>`
+            : ''}
+          ${reqData && reqData.review_note
+            ? `<div style="font-size:12px;color:${statusColor[myStatus]};margin-top:3px">審核意見：${esc(reqData.review_note)}</div>`
+            : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  overlay.innerHTML = `
+  <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:460px;
+       padding:0 0 32px">
+    <div style="padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;
+         border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--navy)">${title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">排班 &amp; 排休</div>
+      </div>
+      <button onclick="document.getElementById('sched-day-popup').remove()"
+        style="width:28px;height:28px;border:none;background:var(--bg);border-radius:50%;
+               font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <div style="padding:4px 20px">${bodyHtml}</div>
+  </div>`;
+
+  document.body.appendChild(overlay);
 }
 
 /* 加班申請 */
@@ -823,7 +974,7 @@ async function loadAttendance(){
 
   let records = {};
   try {
-    const res  = await fetch('/api/punch/my-records?month=' + month);
+    const res  = await fetch('/api/punch/my-records?month=' + month + '&_=' + Date.now());
     const data = await res.json();
     if (!res.ok) {
       // Session 過期 → 重新登入
@@ -1164,8 +1315,11 @@ function updateLeaveTypeInfo() {
   const max = opt.getAttribute('data-max');
   const payLabel = pay === 1 ? '全薪' : pay === 0 ? '無薪（不給薪）' : `半薪（給薪 ${pay * 100}%）`;
   const maxLabel = max ? `年度上限 ${max} 天` : '無天數限制';
-  const bal = leaveBalanceMap[sel.value];
-  const balStr = bal != null ? `　|　今年剩餘 <strong style="color:var(--green)">${bal} 天</strong>` : '';
+  const balObj = leaveBalanceMap[sel.value];
+  const remain = balObj != null ? balObj.remain : null;
+  const balStr = remain != null
+    ? `　|　今年剩餘 <strong style="color:${remain<=0?'var(--red)':remain<=3?'var(--orange)':'var(--green)'}">${remain} 天</strong>`
+    : '';
   document.getElementById('leave-type-info').innerHTML =
     `<span style="color:var(--accent)">${payLabel}</span>　${maxLabel}${balStr}`;
   previewLeaveStaff();
@@ -1180,10 +1334,69 @@ async function loadMyLeaveBalance() {
     leaveBalanceMap = {};
     list.forEach(b => {
       const remain = (b.total_days || 0) - (b.used_days || 0);
-      leaveBalanceMap[String(b.leave_type_id)] = remain;
+      leaveBalanceMap[String(b.leave_type_id)] = {
+        remain,
+        total:     b.total_days  || 0,
+        used:      b.used_days   || 0,
+        name:      b.leave_type_name,
+        color:     b.leave_color || '#4a7bda',
+        max_days:  b.max_days,
+      };
     });
+    renderLeaveBalanceOverview();
     updateLeaveTypeInfo();
   } catch(e) {}
+}
+
+function renderLeaveBalanceOverview() {
+  const wrap = document.getElementById('leave-balance-overview');
+  if (!wrap) return;
+  const entries = Object.values(leaveBalanceMap);
+  if (!entries.length) {
+    wrap.innerHTML = `<div style="padding:12px 14px;background:var(--bg);border-radius:10px;border:1.5px solid var(--border);font-size:12px;color:var(--muted);text-align:center">
+      假期餘額尚未設定，請聯絡管理員
+    </div>`;
+    return;
+  }
+  const year = new Date().getFullYear();
+  let html = `<div style="background:#fff;border-radius:12px;border:1.5px solid var(--border);overflow:hidden">
+    <div style="padding:10px 14px;background:var(--navy);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;font-weight:700;color:#fff">${year} 年假期餘額</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.45)">點擊可快速選擇假別</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">`;
+
+  entries.forEach((b, i) => {
+    const pct     = b.total > 0 ? Math.min(100, Math.round((b.remain / b.total) * 100)) : 0;
+    const isLow   = b.total > 0 && b.remain <= b.total * 0.2;
+    const isEmpty = b.remain <= 0;
+    const barColor= isEmpty ? '#e5e7eb' : isLow ? 'var(--orange)' : b.color;
+    const border  = i % 2 === 0 ? 'border-right:1px solid var(--border);' : '';
+    const borderB = i < entries.length - 2 ? 'border-bottom:1px solid var(--border);' : '';
+    // find the option matching this balance
+    const sel = document.getElementById('leave-type-sel');
+    const optVal = sel ? [...sel.options].find(o => o.text.includes(b.name))?.value : '';
+
+    html += `<div style="padding:12px 14px;${border}${borderB}cursor:pointer"
+      onclick="if('${optVal}'){document.getElementById('leave-type-sel').value='${optVal}';updateLeaveTypeInfo();}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${b.color};flex-shrink:0"></span>
+        <span style="font-size:12px;font-weight:600;color:var(--text)">${esc(b.name)}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:5px">
+        <span style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;
+          color:${isEmpty?'#9ca3af':isLow?'var(--orange)':'var(--navy)'}">${b.remain}</span>
+        <span style="font-size:11px;color:var(--muted)">/ ${b.total} 天</span>
+      </div>
+      <div style="height:4px;background:#f0f2f8;border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width .4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">已用 ${b.used} 天${isEmpty?' · <span style=color:var(--red)>已用完</span>':isLow?' · <span style=color:var(--orange)>即將用完</span>':''}</div>
+    </div>`;
+  });
+
+  html += `</div></div>`;
+  wrap.innerHTML = html;
 }
 
 function previewLeaveStaff() {
@@ -1212,10 +1425,14 @@ function previewLeaveStaff() {
   // 檢查餘額
   const sel = document.getElementById('leave-type-sel');
   if (!sel.value) return;
-  const bal = leaveBalanceMap[sel.value];
-  if (bal != null) {
-    const color = days > bal ? 'var(--red)' : 'var(--green)';
-    balInfo.innerHTML = `今年此假別剩餘 <strong style="color:${color}">${bal} 天</strong>，本次申請 <strong>${days} 天</strong>${days > bal ? '　<span style="color:var(--red)">⚠️ 超過剩餘天數</span>' : '　<span style="color:var(--green)">✅ 足夠</span>'}`;
+  const balObj = leaveBalanceMap[sel.value];
+  if (balObj != null) {
+    const bal   = balObj.remain;
+    const color = days > bal ? 'var(--red)' : bal <= 3 ? 'var(--orange)' : 'var(--green)';
+    const warn  = days > bal
+      ? `　<span style="color:var(--red)">⚠️ 超過剩餘天數 ${bal} 天</span>`
+      : `　<span style="color:var(--green)">✅ 足夠（剩 ${bal} 天）</span>`;
+    balInfo.innerHTML = `本次申請 <strong>${days} 天</strong>，今年此假別剩餘 <strong style="color:${color}">${bal} 天</strong>${warn}`;
   } else {
     balInfo.innerHTML = '';
   }

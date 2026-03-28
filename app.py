@@ -265,6 +265,17 @@ def init_db():
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS vacation_quota INT DEFAULT NULL",
         "ALTER TABLE overtime_requests ADD COLUMN IF NOT EXISTS day_type TEXT DEFAULT 'weekday'",
         "ALTER TABLE schedule_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()",
+        """CREATE TABLE IF NOT EXISTS admin_accounts (
+            id              SERIAL PRIMARY KEY,
+            username        TEXT NOT NULL UNIQUE,
+            password_hash   TEXT NOT NULL,
+            display_name    TEXT DEFAULT '',
+            permissions     JSONB DEFAULT '[]',
+            is_super        BOOLEAN DEFAULT FALSE,
+            active          BOOLEAN DEFAULT TRUE,
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            last_login_at   TIMESTAMPTZ
+        )""",
     ]
     for sql in migrations:
         try:
@@ -272,6 +283,20 @@ def init_db():
                 mc.execute(sql)
         except Exception as me:
             print(f"[MIGRATION SKIP] {sql[:70]}: {me}")
+
+    # Seed default super admin if no accounts exist
+    try:
+        with get_db() as conn:
+            cnt = conn.execute("SELECT COUNT(*) as c FROM admin_accounts").fetchone()['c']
+            if cnt == 0:
+                all_modules = _json.dumps(['punch','sched','leave','salary','ann','holiday'])
+                conn.execute("""
+                    INSERT INTO admin_accounts (username, password_hash, display_name, permissions, is_super)
+                    VALUES (%s,%s,'超級管理員',%s,TRUE)
+                """, ('admin', _hash_pw(ADMIN_PASSWORD), all_modules))
+                print("[OK] Default super admin seeded (username: admin)")
+    except Exception as e:
+        print(f"[WARN] admin seed: {e}")
 
     print("[OK] Database initialised")
 
@@ -312,7 +337,37 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('logged_in'):
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'error': '請先登入'}), 401
             return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+def require_module(module):
+    """確認已登入且擁有指定模組權限（超級管理員跳過模組檢查）。"""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('logged_in'):
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'error': '請先登入'}), 401
+                return redirect(url_for('admin_login'))
+            if not session.get('admin_is_super'):
+                perms = session.get('admin_permissions') or []
+                if module not in perms:
+                    return jsonify({'error': f'無「{module}」模組的存取權限'}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+def require_super(f):
+    """只允許超級管理員存取。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'):
+            return jsonify({'error': '請先登入'}), 401
+        if not session.get('admin_is_super'):
+            return jsonify({'error': '需要超級管理員權限'}), 403
         return f(*args, **kwargs)
     return decorated
 
@@ -324,10 +379,31 @@ def index():
 def admin_login():
     error = None
     if request.method == 'POST':
-        if request.form.get('password', '') == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            return redirect(url_for('admin_dashboard'))
-        error = '密碼錯誤'
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        if not username or not password:
+            error = '請輸入帳號與密碼'
+        else:
+            with get_db() as conn:
+                row = conn.execute(
+                    "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
+                    (username,)
+                ).fetchone()
+            if row and row['password_hash'] == _hash_pw(password):
+                perms = row['permissions']
+                if isinstance(perms, str):
+                    try: perms = _json.loads(perms)
+                    except: perms = []
+                session['logged_in']          = True
+                session['admin_id']           = row['id']
+                session['admin_username']     = row['username']
+                session['admin_display_name'] = row['display_name'] or row['username']
+                session['admin_permissions']  = perms
+                session['admin_is_super']     = bool(row['is_super'])
+                with get_db() as conn:
+                    conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (row['id'],))
+                return redirect(url_for('admin_dashboard'))
+            error = '帳號或密碼錯誤'
     return render_template('login.html', error=error)
 
 @app.route('/admin/logout')
@@ -339,7 +415,101 @@ def admin_logout():
 @app.route('/admin/')
 @login_required
 def admin_dashboard():
-    return render_template('admin.html')
+    perms    = session.get('admin_permissions') or []
+    is_super = bool(session.get('admin_is_super'))
+    return render_template('admin.html',
+        admin_display_name=session.get('admin_display_name',''),
+        admin_permissions=perms,
+        admin_is_super=is_super,
+    )
+
+# ── Admin Accounts API ────────────────────────────────────────────────────────
+
+def _admin_row(r):
+    if not r: return None
+    d = dict(r)
+    d.pop('password_hash', None)
+    perms = d.get('permissions')
+    if isinstance(perms, str):
+        try: d['permissions'] = _json.loads(perms)
+        except: d['permissions'] = []
+    if d.get('created_at'):   d['created_at']   = d['created_at'].isoformat()
+    if d.get('last_login_at'): d['last_login_at'] = d['last_login_at'].isoformat()
+    return d
+
+@app.route('/api/admin/me', methods=['GET'])
+@login_required
+def api_admin_me():
+    return jsonify({
+        'id':           session.get('admin_id'),
+        'username':     session.get('admin_username'),
+        'display_name': session.get('admin_display_name'),
+        'permissions':  session.get('admin_permissions') or [],
+        'is_super':     bool(session.get('admin_is_super')),
+    })
+
+@app.route('/api/admin/accounts', methods=['GET'])
+@require_super
+def api_admin_accounts_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM admin_accounts ORDER BY id").fetchall()
+    return jsonify([_admin_row(r) for r in rows])
+
+@app.route('/api/admin/accounts', methods=['POST'])
+@require_super
+def api_admin_account_create():
+    b = request.get_json(force=True)
+    username = b.get('username','').strip()
+    password = b.get('password','').strip()
+    if not username: return jsonify({'error': '帳號為必填'}), 400
+    if not password or len(password) < 4: return jsonify({'error': '密碼至少 4 個字元'}), 400
+    perms = b.get('permissions', [])
+    with get_db() as conn:
+        try:
+            row = conn.execute("""
+                INSERT INTO admin_accounts (username, password_hash, display_name, permissions, is_super, active)
+                VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
+            """, (username, _hash_pw(password), b.get('display_name','').strip(),
+                  _json.dumps(perms), bool(b.get('is_super', False)), True)).fetchone()
+        except Exception as e:
+            if 'unique' in str(e).lower(): return jsonify({'error': '帳號已存在'}), 409
+            return jsonify({'error': str(e)}), 500
+    return jsonify(_admin_row(row)), 201
+
+@app.route('/api/admin/accounts/<int:aid>', methods=['PUT'])
+@require_super
+def api_admin_account_update(aid):
+    b = request.get_json(force=True)
+    username = b.get('username','').strip()
+    if not username: return jsonify({'error': '帳號為必填'}), 400
+    password = b.get('password','').strip()
+    perms = b.get('permissions', [])
+    with get_db() as conn:
+        if password:
+            if len(password) < 4: return jsonify({'error': '密碼至少 4 個字元'}), 400
+            row = conn.execute("""
+                UPDATE admin_accounts SET username=%s, password_hash=%s, display_name=%s,
+                  permissions=%s, is_super=%s, active=%s WHERE id=%s RETURNING *
+            """, (username, _hash_pw(password), b.get('display_name','').strip(),
+                  _json.dumps(perms), bool(b.get('is_super', False)),
+                  bool(b.get('active', True)), aid)).fetchone()
+        else:
+            row = conn.execute("""
+                UPDATE admin_accounts SET username=%s, display_name=%s,
+                  permissions=%s, is_super=%s, active=%s WHERE id=%s RETURNING *
+            """, (username, b.get('display_name','').strip(),
+                  _json.dumps(perms), bool(b.get('is_super', False)),
+                  bool(b.get('active', True)), aid)).fetchone()
+    return jsonify(_admin_row(row)) if row else ('', 404)
+
+@app.route('/api/admin/accounts/<int:aid>', methods=['DELETE'])
+@require_super
+def api_admin_account_delete(aid):
+    if aid == session.get('admin_id'):
+        return jsonify({'error': '不能刪除自己的帳號'}), 400
+    with get_db() as conn:
+        conn.execute("DELETE FROM admin_accounts WHERE id=%s", (aid,))
+    return jsonify({'deleted': aid})
 
 # ─── Shared Helpers ───────────────────────────────────────────────────────────
 
@@ -1534,7 +1704,7 @@ def api_sched_submit():
 # ── Admin: schedule config ────────────────────────────────────────
 
 @app.route('/api/schedule/admin/config/<month>', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_sched_admin_config_get(month):
     with get_db() as conn:
         cfg    = get_schedule_config(conn, month)
@@ -1543,7 +1713,7 @@ def api_sched_admin_config_get(month):
 
 
 @app.route('/api/schedule/admin/config/<month>', methods=['PUT'])
-@login_required
+@require_module('sched')
 def api_sched_admin_config_put(month):
     b       = request.get_json(force=True)
     max_off = int(b.get('max_off_per_day') or 2)
@@ -1562,7 +1732,7 @@ def api_sched_admin_config_put(month):
 # ── Admin: schedule requests ──────────────────────────────────────
 
 @app.route('/api/schedule/admin/requests', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_sched_admin_requests():
     month  = request.args.get('month', '')
     status = request.args.get('status', '')
@@ -1581,7 +1751,7 @@ def api_sched_admin_requests():
 
 
 @app.route('/api/schedule/admin/requests/<int:rid>', methods=['PUT'])
-@login_required
+@require_module('sched')
 def api_sched_admin_review(rid):
     b           = request.get_json(force=True)
     action      = b.get('action')
@@ -1617,7 +1787,7 @@ def api_sched_admin_review(rid):
 
 
 @app.route('/api/schedule/admin/requests/<int:rid>', methods=['DELETE'])
-@login_required
+@require_module('sched')
 def api_sched_admin_delete(rid):
     with get_db() as conn:
         conn.execute("DELETE FROM schedule_requests WHERE id=%s", (rid,))
@@ -1625,7 +1795,7 @@ def api_sched_admin_delete(rid):
 
 
 @app.route('/api/schedule/admin/calendar/<month>', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_sched_admin_calendar(month):
     with get_db() as conn:
         cfg   = get_schedule_config(conn, month)
@@ -1678,7 +1848,7 @@ def api_sched_admin_calendar(month):
 
 
 @app.route('/api/schedule/admin/summary/<month>', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_sched_admin_summary(month):
     with get_db() as conn:
         cfg   = get_schedule_config(conn, month)
@@ -1707,7 +1877,7 @@ def api_sched_admin_summary(month):
 # ── Shift Types CRUD ──────────────────────────────────────────────
 
 @app.route('/api/shifts/types', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_shift_types_list():
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM shift_types ORDER BY sort_order, id").fetchall()
@@ -1723,7 +1893,7 @@ def api_shift_types_public():
     return jsonify([shift_type_row(r) for r in rows])
 
 @app.route('/api/shifts/types', methods=['POST'])
-@login_required
+@require_module('sched')
 def api_shift_type_create():
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -1736,7 +1906,7 @@ def api_shift_type_create():
     return jsonify(shift_type_row(row)), 201
 
 @app.route('/api/shifts/types/<int:sid>', methods=['PUT'])
-@login_required
+@require_module('sched')
 def api_shift_type_update(sid):
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -1752,7 +1922,7 @@ def api_shift_type_update(sid):
     return jsonify(shift_type_row(row)) if row else ('', 404)
 
 @app.route('/api/shifts/types/<int:sid>', methods=['DELETE'])
-@login_required
+@require_module('sched')
 def api_shift_type_delete(sid):
     with get_db() as conn:
         conn.execute("DELETE FROM shift_types WHERE id=%s", (sid,))
@@ -1761,7 +1931,7 @@ def api_shift_type_delete(sid):
 # ── Shift Assignments ─────────────────────────────────────────────
 
 @app.route('/api/shifts/assignments', methods=['GET'])
-@login_required
+@require_module('sched')
 def api_shift_assignments_list():
     month = request.args.get('month', '')
     conds, params = ['TRUE'], []
@@ -1793,7 +1963,7 @@ def api_shift_assignments_list():
 
 
 @app.route('/api/shifts/assignments', methods=['POST'])
-@login_required
+@require_module('sched')
 def api_shift_assignment_create():
     b             = request.get_json(force=True)
     staff_ids     = b.get('staff_ids', [])
@@ -1863,7 +2033,7 @@ def api_shift_assignment_create():
 
 
 @app.route('/api/shifts/assignments/batch-delete', methods=['POST'])
-@login_required
+@require_module('sched')
 def api_shift_assignment_batch_delete():
     b         = request.get_json(force=True)
     staff_ids = b.get('staff_ids', [])
@@ -1883,7 +2053,7 @@ def api_shift_assignment_batch_delete():
 
 
 @app.route('/api/shifts/import', methods=['POST'])
-@login_required
+@require_module('sched')
 def api_shift_import():
     """
     匯入班表 CSV。
@@ -2544,7 +2714,7 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
 # ── Leave Type CRUD ──────────────────────────────────────────────
 
 @app.route('/api/leave/types', methods=['GET'])
-@login_required
+@require_module('leave')
 def api_leave_types_list():
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM leave_types ORDER BY sort_order, id").fetchall()
@@ -2557,7 +2727,7 @@ def api_leave_types_public():
     return jsonify([leave_type_row(r) for r in rows])
 
 @app.route('/api/leave/types', methods=['POST'])
-@login_required
+@require_module('leave')
 def api_leave_type_create():
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -2570,7 +2740,7 @@ def api_leave_type_create():
     return jsonify(leave_type_row(row)), 201
 
 @app.route('/api/leave/types/<int:tid>', methods=['PUT'])
-@login_required
+@require_module('leave')
 def api_leave_type_update(tid):
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -2585,7 +2755,7 @@ def api_leave_type_update(tid):
     return jsonify(leave_type_row(row)) if row else ('', 404)
 
 @app.route('/api/leave/types/<int:tid>', methods=['DELETE'])
-@login_required
+@require_module('leave')
 def api_leave_type_delete(tid):
     with get_db() as conn:
         conn.execute("DELETE FROM leave_types WHERE id=%s", (tid,))
@@ -2594,7 +2764,7 @@ def api_leave_type_delete(tid):
 # ── Leave Requests ────────────────────────────────────────────────
 
 @app.route('/api/leave/requests', methods=['GET'])
-@login_required
+@require_module('leave')
 def api_leave_requests_list():
     status   = request.args.get('status', '')
     month    = request.args.get('month', '')
@@ -2627,7 +2797,7 @@ def api_leave_requests_list():
     return jsonify(result)
 
 @app.route('/api/leave/requests', methods=['POST'])
-@login_required
+@require_module('leave')
 def api_leave_request_admin_create():
     """管理員直接建立請假記錄"""
     b = request.get_json(force=True)
@@ -2662,7 +2832,7 @@ def api_leave_request_admin_create():
     return jsonify(leave_req_row(row)), 201
 
 @app.route('/api/leave/requests/<int:rid>', methods=['PUT'])
-@login_required
+@require_module('leave')
 def api_leave_request_review(rid):
     b           = request.get_json(force=True)
     action      = b.get('action')
@@ -2690,7 +2860,7 @@ def api_leave_request_review(rid):
     return jsonify(leave_req_row(row)) if row else ('', 404)
 
 @app.route('/api/leave/requests/<int:rid>', methods=['DELETE'])
-@login_required
+@require_module('leave')
 def api_leave_request_delete(rid):
     with get_db() as conn:
         conn.execute("DELETE FROM leave_requests WHERE id=%s", (rid,))
@@ -2816,7 +2986,7 @@ def api_leave_balances():
     return jsonify(result)
 
 @app.route('/api/leave/balances/init', methods=['POST'])
-@login_required
+@require_module('leave')
 def api_leave_balance_init():
     """初始化/更新員工特休天數（依勞基法第38條，以到職日精確計算）"""
     b    = request.get_json(force=True)
@@ -2855,7 +3025,7 @@ def api_leave_balance_init():
 
 
 @app.route('/api/leave/annual-schedule/<int:staff_id>', methods=['GET'])
-@login_required
+@require_module('leave')
 def api_annual_leave_schedule(staff_id):
     """回傳員工特休天數完整排程（各里程碑日期與天數）"""
     with get_db() as conn:
@@ -2898,7 +3068,7 @@ def api_annual_leave_schedule_public():
 
 
 @app.route('/api/leave/balances/<int:bid>', methods=['PUT'])
-@login_required
+@require_module('leave')
 def api_leave_balance_update(bid):
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -2912,7 +3082,7 @@ def api_leave_balance_update(bid):
 # ── Leave Summary (for salary integration) ───────────────────────
 
 @app.route('/api/leave/summary/<int:staff_id>/<month>', methods=['GET'])
-@login_required
+@require_module('leave')
 def api_leave_summary(staff_id, month):
     """取得員工某月請假摘要（供薪資計算用）"""
     with get_db() as conn:
@@ -3393,14 +3563,14 @@ def api_my_payslip():
 # ── Salary Items CRUD ─────────────────────────────────────────────
 
 @app.route('/api/salary/items', methods=['GET'])
-@login_required
+@require_module('salary')
 def api_salary_items_list():
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM salary_items ORDER BY sort_order, id").fetchall()
     return jsonify([salary_item_row(r) for r in rows])
 
 @app.route('/api/salary/items', methods=['POST'])
-@login_required
+@require_module('salary')
 def api_salary_item_create():
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -3413,7 +3583,7 @@ def api_salary_item_create():
     return jsonify(salary_item_row(row)), 201
 
 @app.route('/api/salary/items/<int:iid>', methods=['PUT'])
-@login_required
+@require_module('salary')
 def api_salary_item_update(iid):
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -3428,7 +3598,7 @@ def api_salary_item_update(iid):
     return jsonify(salary_item_row(row)) if row else ('', 404)
 
 @app.route('/api/salary/items/<int:iid>', methods=['DELETE'])
-@login_required
+@require_module('salary')
 def api_salary_item_delete(iid):
     with get_db() as conn:
         conn.execute("DELETE FROM salary_items WHERE id=%s", (iid,))
@@ -3437,7 +3607,7 @@ def api_salary_item_delete(iid):
 # ── Salary Records ─────────────────────────────────────────────────
 
 @app.route('/api/salary/records', methods=['GET'])
-@login_required
+@require_module('salary')
 def api_salary_records_list():
     month = request.args.get('month', '')
     if not month:
@@ -3463,7 +3633,7 @@ def api_salary_records_list():
     return jsonify(result)
 
 @app.route('/api/salary/records/generate', methods=['POST'])
-@login_required
+@require_module('salary')
 def api_salary_generate():
     """自動產生或更新該月薪資"""
     b     = request.get_json(force=True)
@@ -3502,7 +3672,7 @@ def api_salary_generate():
     return jsonify({'ok': True, 'generated': generated, 'month': month})
 
 @app.route('/api/salary/records/<int:rid>', methods=['GET'])
-@login_required
+@require_module('salary')
 def api_salary_record_get(rid):
     with get_db() as conn:
         row = conn.execute("""
@@ -3522,7 +3692,7 @@ def api_salary_record_get(rid):
     return jsonify(d)
 
 @app.route('/api/salary/records/<int:rid>', methods=['PUT'])
-@login_required
+@require_module('salary')
 def api_salary_record_update(rid):
     b = request.get_json(force=True)
     items_json = _json.dumps(b.get('items', []), ensure_ascii=False)
@@ -3538,7 +3708,7 @@ def api_salary_record_update(rid):
     return jsonify(salary_record_row(row)) if row else ('', 404)
 
 @app.route('/api/salary/records/<int:rid>/confirm', methods=['POST'])
-@login_required
+@require_module('salary')
 def api_salary_confirm(rid):
     b = request.get_json(force=True)
     with get_db() as conn:
@@ -3553,7 +3723,7 @@ def api_salary_confirm(rid):
     return jsonify(salary_record_row(row)) if row else ('', 404)
 
 @app.route('/api/salary/records/<int:rid>', methods=['DELETE'])
-@login_required
+@require_module('salary')
 def api_salary_record_delete(rid):
     with get_db() as conn:
         conn.execute("DELETE FROM salary_records WHERE id=%s", (rid,))
@@ -3562,7 +3732,7 @@ def api_salary_record_delete(rid):
 # ── Salary Staff Settings ─────────────────────────────────────────
 
 @app.route('/api/salary/staff', methods=['GET'])
-@login_required
+@require_module('salary')
 def api_salary_staff_list():
     with get_db() as conn:
         rows = conn.execute("""
@@ -3585,7 +3755,7 @@ def api_salary_staff_list():
     return jsonify(result)
 
 @app.route('/api/salary/staff/<int:sid>', methods=['PUT'])
-@login_required
+@require_module('salary')
 def api_salary_staff_update(sid):
     b = request.get_json(force=True)
     def _f(k, default=0): return float(b.get(k, default) or default)
@@ -3655,7 +3825,7 @@ def ann_row(row):
 # ── Admin: CRUD ───────────────────────────────────────────────────
 
 @app.route('/api/announcements', methods=['GET'])
-@login_required
+@require_module('ann')
 def api_ann_list_admin():
     with get_db() as conn:
         rows = conn.execute("""
@@ -3666,7 +3836,7 @@ def api_ann_list_admin():
     return jsonify([ann_row(r) for r in rows])
 
 @app.route('/api/announcements', methods=['POST'])
-@login_required
+@require_module('ann')
 def api_ann_create():
     b = request.get_json(force=True)
     if not b.get('title','').strip():
@@ -3688,7 +3858,7 @@ def api_ann_create():
     return jsonify(ann_row(row)), 201
 
 @app.route('/api/announcements/<int:aid>', methods=['PUT'])
-@login_required
+@require_module('ann')
 def api_ann_update(aid):
     b = request.get_json(force=True)
     if not b.get('title','').strip():
@@ -3709,14 +3879,14 @@ def api_ann_update(aid):
     return jsonify(ann_row(row)) if row else ('', 404)
 
 @app.route('/api/announcements/<int:aid>', methods=['DELETE'])
-@login_required
+@require_module('ann')
 def api_ann_delete(aid):
     with get_db() as conn:
         conn.execute("DELETE FROM announcements WHERE id=%s", (aid,))
     return jsonify({'deleted': aid})
 
 @app.route('/api/announcements/<int:aid>/pin', methods=['POST'])
-@login_required
+@require_module('ann')
 def api_ann_toggle_pin(aid):
     with get_db() as conn:
         row = conn.execute(
@@ -3845,7 +4015,7 @@ def _is_holiday(conn, date_str):
 # ── Holiday CRUD API ─────────────────────────────────────────────
 
 @app.route('/api/holidays', methods=['GET'])
-@login_required
+@require_module('holiday')
 def api_holidays_list():
     year = request.args.get('year', '')
     conds, params = ['TRUE'], []
@@ -3877,7 +4047,7 @@ def api_holidays_public():
     return jsonify({r['date'].isoformat(): r['name'] for r in rows})
 
 @app.route('/api/holidays', methods=['POST'])
-@login_required
+@require_module('holiday')
 def api_holiday_create():
     b = request.get_json(force=True)
     if not b.get('date') or not b.get('name','').strip():
@@ -3894,14 +4064,14 @@ def api_holiday_create():
     return jsonify(holiday_row(row)), 201
 
 @app.route('/api/holidays/<int:hid>', methods=['DELETE'])
-@login_required
+@require_module('holiday')
 def api_holiday_delete(hid):
     with get_db() as conn:
         conn.execute("DELETE FROM public_holidays WHERE id=%s", (hid,))
     return jsonify({'deleted': hid})
 
 @app.route('/api/holidays/batch', methods=['POST'])
-@login_required
+@require_module('holiday')
 def api_holiday_batch():
     """Batch import holidays from JSON list"""
     b    = request.get_json(force=True)
@@ -4486,6 +4656,7 @@ if __name__ == '__main__':
 # ═══════════════════════════════════════════════════════════════════
 
 @app.route('/api/salary/records/<int:rid>/pdf', methods=['GET'])
+@require_module('salary')
 def api_salary_pdf(rid):
     """回傳薪資單 HTML（供瀏覽器列印/另存 PDF）"""
     # 允許員工查看自己的薪資單
@@ -5052,7 +5223,7 @@ def api_staff_terminated_list():
 # ═══════════════════════════════════════════════════════════════════
 
 @app.route('/api/salary/formula/preview', methods=['POST'])
-@login_required
+@require_module('salary')
 def api_formula_preview():
     """即時預覽公式計算結果"""
     b             = request.get_json(force=True)

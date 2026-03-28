@@ -46,15 +46,15 @@
   .brand-sub { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; }
   .divider { width: 40px; height: 2px; background: var(--gold); margin: 12px auto; }
   label { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
-  input[type="password"] {
+  input[type="text"], input[type="password"] {
     width: 100%; padding: 12px 16px;
     border: 1.5px solid var(--border); border-radius: 8px;
-    font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text);
     background: var(--bg); outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
-    letter-spacing: 0.15em;
+    margin-bottom: 14px;
   }
-  input[type="password"]:focus {
+  input[type="text"]:focus, input[type="password"]:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(74,123,218,0.12);
     background: #fff;
@@ -84,8 +84,10 @@
     <div class="brand-sub">Management System</div>
   </div>
   <form method="POST">
-    <label for="pw">管理員密碼</label>
-    <input type="password" id="pw" name="password" placeholder="輸入密碼" autofocus autocomplete="current-password">
+    <label for="un">管理員帳號</label>
+    <input type="text" id="un" name="username" placeholder="輸入帳號" autofocus autocomplete="username" autocapitalize="none">
+    <label for="pw">密碼</label>
+    <input type="password" id="pw" name="password" placeholder="輸入密碼" autocomplete="current-password">
     {% if error %}
     <div class="error-msg">{{ error }}</div>
     {% endif %}

@@ -203,6 +203,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-salary" onclick="showPage('salary',event)">薪資管理</a>
     <a href="#" class="nav-item"        id="nav-ann"    onclick="showPage('ann',event)">公告管理</a>
     <a href="#" class="nav-item"        id="nav-holiday" onclick="showPage('holiday',event)">國定假日</a>
+    <a href="#" class="nav-item"        id="nav-adminmgr" onclick="showPage('adminmgr',event)" style="display:none">帳號管理</a>
   </nav>
   <div class="sidebar-bottom">
     <a href="/admin/logout" class="logout-btn">登出系統</a>
@@ -217,7 +218,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </button>
       <span class="topbar-title" id="page-title">打卡管理</span>
     </div>
-    <div class="topbar-actions"></div>
+    <div class="topbar-actions">
+      <span style="font-size:12px;color:var(--muted)" id="topbar-admin-name"></span>
+    </div>
   </header>
 
 
@@ -937,6 +940,22 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div><!-- end page-holiday -->
 
+  <!-- ── 帳號管理 ── -->
+  <div class="page" id="page-adminmgr" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <span style="font-size:13px;color:var(--muted)">管理後台登入帳號，可自由勾選各帳號可存取的模組</span>
+      <button class="btn btn-primary" onclick="openAdminAccModal()">新增帳號</button>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>帳號</th><th>顯示名稱</th><th>可用模組</th><th>類型</th><th>上次登入</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody id="adminacc-tbody"><tr><td colspan="7" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- end page-adminmgr -->
+
 
 </main>
 
@@ -1379,9 +1398,56 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div>
 </div>
 
+<!-- Admin Account Modal -->
+<div class="modal-overlay" id="adminacc-modal" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><span class="modal-title" id="aam-title">新增帳號</span><button class="modal-close" onclick="closeAdminAccModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="aam-id">
+      <div class="form-row">
+        <div><label class="form-label">帳號 *</label><input class="form-input" id="aam-username" placeholder="英文/數字" autocapitalize="none"></div>
+        <div><label class="form-label">顯示名稱</label><input class="form-input" id="aam-display" placeholder="選填"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">密碼</label><input class="form-input" type="password" id="aam-password" placeholder="新增必填，編輯留空不改"><div style="font-size:11px;color:var(--muted);margin-top:3px" id="aam-pw-hint"></div></div>
+        <div><label class="form-label">狀態</label><select class="form-input" id="aam-active"><option value="1">啟用</option><option value="0">停用</option></select></div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label class="form-label" style="margin-bottom:4px">帳號類型</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="aam-is-super" style="width:15px;height:15px;accent-color:var(--green)">
+          超級管理員（可存取全部模組 + 管理其他帳號）
+        </label>
+      </div>
+      <div id="aam-perms-wrap">
+        <label class="form-label" style="margin-bottom:8px;display:block">可存取的模組 <span style="font-weight:400;color:var(--muted);font-size:12px">（超級管理員不受此限）</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 20px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px" id="aam-perms-list"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeAdminAccModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveAdminAcc()">儲存</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
+// ── 管理員身份 & 權限 ─────────────────────────────────────────
+const ADMIN_DISPLAY_NAME = {{ admin_display_name | tojson }};
+const ADMIN_PERMS        = {{ admin_permissions  | tojson }};
+const ADMIN_IS_SUPER     = {{ admin_is_super     | tojson }};
+const ALL_MODULES = [
+  { key:'punch',   label:'打卡管理' },
+  { key:'sched',   label:'排班管理' },
+  { key:'leave',   label:'請假管理' },
+  { key:'salary',  label:'薪資管理' },
+  { key:'ann',     label:'公告管理' },
+  { key:'holiday', label:'國定假日' },
+];
+function hasModule(m) { return ADMIN_IS_SUPER || ADMIN_PERMS.includes(m); }
+
 // ── Unified API helper ────────────────────────────────────────
 // Returns { ok, data } — data.error is set on failure
 // Never throws; always shows toast on non-ok unless silent=true
@@ -2074,22 +2140,29 @@ function closeSidebar() {
 
 function showPage(page, e) {
   if (e) e.preventDefault();
+  // 權限檢查（儀表板和帳號管理不受模組限制）
+  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday' };
+  if (moduleGuard[page] && !hasModule(moduleGuard[page])) {
+    showToast('您沒有此功能的存取權限', 'error'); return;
+  }
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('nav-' + page).classList.add('active');
+  const navEl = document.getElementById('nav-' + page);
+  if (navEl) navEl.classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['dash','punch','sched','leave','salary','ann','holiday'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday','adminmgr'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
-  document.getElementById('page-title').textContent =
-    { dash: '儀表板', punch: '打卡管理', sched: '排班管理', leave: '請假管理', salary: '薪資管理', ann: '公告管理', holiday: '國定假日' }[page];
-  if (page === 'dash')   initDash();
-  if (page === 'punch')  initPunch();
-  if (page === 'sched')  initSched();
-  if (page === 'leave')  initLeave();
-  if (page === 'salary') initSalary();
-  if (page === 'ann')    initAnn();
-  if (page === 'holiday') initHoliday();
+  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', adminmgr:'帳號管理' };
+  document.getElementById('page-title').textContent = titles[page] || page;
+  if (page === 'dash')     initDash();
+  if (page === 'punch')    initPunch();
+  if (page === 'sched')    initSched();
+  if (page === 'leave')    initLeave();
+  if (page === 'salary')   initSalary();
+  if (page === 'ann')      initAnn();
+  if (page === 'holiday')  initHoliday();
+  if (page === 'adminmgr') loadAdminAccounts();
 }
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -4340,6 +4413,114 @@ function setTabDot(id, count) {
 document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterval(refreshBadges, 30000); });
 
 // ── Init ──────────────────────────────────────────────────────
-showPage('dash', null);
+(function initAdminUI() {
+  // 顯示管理員名稱
+  const nameEl = document.getElementById('topbar-admin-name');
+  if (nameEl && ADMIN_DISPLAY_NAME) nameEl.textContent = ADMIN_DISPLAY_NAME;
+
+  // 依權限顯示/隱藏導覽項目
+  const moduleKeys = ['punch','sched','leave','salary','ann','holiday'];
+  moduleKeys.forEach(m => {
+    const el = document.getElementById('nav-' + m);
+    if (el && !hasModule(m)) el.style.display = 'none';
+  });
+  if (ADMIN_IS_SUPER) {
+    const el = document.getElementById('nav-adminmgr');
+    if (el) el.style.display = '';
+  }
+
+  // 導向第一個有權限的頁面
+  const firstPage = ADMIN_IS_SUPER ? 'dash'
+    : (ADMIN_PERMS.length ? ADMIN_PERMS[0] : 'dash');
+  showPage(firstPage, null);
+})();
+
+// ── 帳號管理模組 ──────────────────────────────────────────────
+let adminAccList = [];
+async function loadAdminAccounts() {
+  const { ok, data } = await api('/api/admin/accounts', {}, true);
+  adminAccList = ok ? data : [];
+  const tb = document.getElementById('adminacc-tbody');
+  if (!adminAccList.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無帳號</div></td></tr>'; return;
+  }
+  tb.innerHTML = adminAccList.map(a => {
+    const modLabels = a.is_super
+      ? '<span style="color:var(--green);font-size:12px">全部模組</span>'
+      : (a.permissions||[]).map(m => {
+          const mod = ALL_MODULES.find(x=>x.key===m);
+          return mod ? `<span style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px">${mod.label}</span>` : '';
+        }).join(' ') || '<span style="color:var(--muted);font-size:12px">無</span>';
+    const typeLabel = a.is_super
+      ? '<span class="badge" style="background:rgba(74,123,218,0.15);color:var(--accent)">超級管理員</span>'
+      : '<span class="badge badge-ok" style="opacity:.7">一般管理員</span>';
+    const lastLogin = a.last_login_at ? new Date(a.last_login_at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-weight:600">${escHtml(a.username)}</td>
+      <td>${escHtml(a.display_name||'')}</td>
+      <td style="line-height:1.8">${modLabels}</td>
+      <td>${typeLabel}</td>
+      <td style="font-size:12px;color:var(--muted)">${lastLogin}</td>
+      <td>${a.active ? '<span class="badge badge-ok">啟用</span>' : '<span class="badge badge-warn">停用</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="openAdminAccModal(${a.id})">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAdminAcc(${a.id},'${escHtml(a.username)}')" style="margin-left:4px">刪除</button></td>
+    </tr>`;
+  }).join('');
+}
+function openAdminAccModal(id=null) {
+  document.getElementById('aam-id').value = id||'';
+  document.getElementById('aam-title').textContent = id ? '編輯帳號' : '新增帳號';
+  document.getElementById('aam-password').value = '';
+  document.getElementById('aam-pw-hint').textContent = id ? '留空不修改密碼' : '新增必填';
+  // render module checkboxes
+  document.getElementById('aam-perms-list').innerHTML = ALL_MODULES.map(m =>
+    `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+      <input type="checkbox" data-mod="${m.key}" class="aam-mod-cb" style="width:15px;height:15px;accent-color:var(--green)"> ${m.label}
+    </label>`
+  ).join('');
+  if (id) {
+    const a = adminAccList.find(x=>x.id===id); if (!a) return;
+    document.getElementById('aam-username').value = a.username;
+    document.getElementById('aam-display').value  = a.display_name||'';
+    document.getElementById('aam-active').value   = a.active ? '1' : '0';
+    document.getElementById('aam-is-super').checked = !!a.is_super;
+    const perms = a.permissions||[];
+    document.querySelectorAll('.aam-mod-cb').forEach(cb => { cb.checked = perms.includes(cb.dataset.mod); });
+  } else {
+    document.getElementById('aam-username').value = '';
+    document.getElementById('aam-display').value  = '';
+    document.getElementById('aam-active').value   = '1';
+    document.getElementById('aam-is-super').checked = false;
+    document.querySelectorAll('.aam-mod-cb').forEach(cb => { cb.checked = false; });
+  }
+  document.getElementById('adminacc-modal').style.display = 'flex';
+}
+function closeAdminAccModal() { document.getElementById('adminacc-modal').style.display = 'none'; }
+async function saveAdminAcc() {
+  const id       = document.getElementById('aam-id').value;
+  const username = document.getElementById('aam-username').value.trim();
+  const password = document.getElementById('aam-password').value;
+  if (!username) { showToast('請填寫帳號','error'); return; }
+  if (!id && !password) { showToast('請設定密碼','error'); return; }
+  const perms = [...document.querySelectorAll('.aam-mod-cb')].filter(c=>c.checked).map(c=>c.dataset.mod);
+  const body = {
+    username,
+    display_name: document.getElementById('aam-display').value.trim(),
+    password,
+    is_super: document.getElementById('aam-is-super').checked,
+    active:   document.getElementById('aam-active').value === '1',
+    permissions: perms,
+  };
+  const url = id ? `/api/admin/accounts/${id}` : '/api/admin/accounts';
+  const { ok } = await api(url, { method: id?'PUT':'POST', body: JSON.stringify(body) });
+  if (!ok) return;
+  closeAdminAccModal(); showToast(id?'已更新':'帳號已新增','success'); await loadAdminAccounts();
+}
+async function deleteAdminAcc(id, name) {
+  if (!confirm(`確定刪除帳號「${name}」？`)) return;
+  const { ok } = await api(`/api/admin/accounts/${id}`, { method:'DELETE' });
+  if (!ok) return;
+  showToast('已刪除','success'); await loadAdminAccounts();
+}
 </script>
 </html>

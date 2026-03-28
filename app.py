@@ -5352,10 +5352,12 @@ def api_finance_category_create():
     if not b.get('name','').strip(): return jsonify({'error': '名稱為必填'}), 400
     with get_db() as conn:
         row = conn.execute("""
-            INSERT INTO finance_categories (name,type,color,sort_order,active)
-            VALUES (%s,%s,%s,%s,%s) RETURNING *
+            INSERT INTO finance_categories (name,type,color,sort_order,active,statement_section)
+            VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
         """, (b['name'].strip(), b.get('type','expense'), b.get('color','#4a7bda'),
-              int(b.get('sort_order',0)), bool(b.get('active',True)))).fetchone()
+              int(b.get('sort_order',0)), bool(b.get('active',True)),
+              b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense')
+             )).fetchone()
     return jsonify(_finance_cat_row(row)), 201
 
 @app.route('/api/finance/categories/<int:cid>', methods=['PUT'])
@@ -5364,10 +5366,12 @@ def api_finance_category_update(cid):
     b = request.get_json(force=True)
     with get_db() as conn:
         row = conn.execute("""
-            UPDATE finance_categories SET name=%s,type=%s,color=%s,sort_order=%s,active=%s
+            UPDATE finance_categories SET name=%s,type=%s,color=%s,sort_order=%s,active=%s,statement_section=%s
             WHERE id=%s RETURNING *
         """, (b.get('name','').strip(), b.get('type','expense'), b.get('color','#4a7bda'),
-              int(b.get('sort_order',0)), bool(b.get('active',True)), cid)).fetchone()
+              int(b.get('sort_order',0)), bool(b.get('active',True)),
+              b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense'),
+              cid)).fetchone()
     return jsonify(_finance_cat_row(row)) if row else ('', 404)
 
 @app.route('/api/finance/categories/<int:cid>', methods=['DELETE'])
@@ -5595,3 +5599,397 @@ def api_finance_export():
     return (('\ufeff' + out.getvalue()).encode('utf-8'),
             200, {'Content-Type': 'text/csv; charset=utf-8',
                   'Content-Disposition': f'attachment; filename={fname}'})
+
+# ── Finance Settings & Financial Statements ────────────────────
+
+def init_finance_settings_db():
+    migrations = [
+        "ALTER TABLE finance_categories ADD COLUMN IF NOT EXISTS statement_section TEXT",
+        """CREATE TABLE IF NOT EXISTS finance_settings (
+            id            SERIAL PRIMARY KEY,
+            setting_key   TEXT UNIQUE NOT NULL,
+            setting_value TEXT DEFAULT ''
+        )""",
+    ]
+    for sql in migrations:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[finance_settings_init] {str(e)[:80]}")
+
+    # Set default statement_section based on type for existing rows with NULL
+    section_defaults = {
+        '餐飲內用收入': 'operating_revenue',
+        '外帶收入':     'operating_revenue',
+        '外送收入':     'operating_revenue',
+        '其他收入':     'other_revenue',
+        '食材成本':     'cogs',
+        '薪資支出':     'operating_expense',
+        '租金':         'operating_expense',
+        '水電費':       'operating_expense',
+        '設備維修':     'operating_expense',
+        '消耗品':       'operating_expense',
+        '廣告行銷':     'operating_expense',
+        '其他支出':     'other_expense',
+    }
+    try:
+        with get_db() as conn:
+            # Fill named defaults
+            for name, sec in section_defaults.items():
+                conn.execute(
+                    "UPDATE finance_categories SET statement_section=%s WHERE name=%s AND statement_section IS NULL",
+                    (sec, name)
+                )
+            # Remaining NULLs: income → operating_revenue, expense → operating_expense
+            conn.execute("""
+                UPDATE finance_categories
+                SET statement_section = CASE WHEN type='income' THEN 'operating_revenue' ELSE 'operating_expense' END
+                WHERE statement_section IS NULL
+            """)
+    except Exception as e:
+        print(f"[finance_settings_seed] {e}")
+
+    # Seed settings defaults
+    for k, v in [('company_name', ''), ('opening_cash', '0'), ('opening_equity', '0')]:
+        try:
+            with get_db() as conn:
+                conn.execute(
+                    "INSERT INTO finance_settings (setting_key, setting_value) VALUES (%s,%s) ON CONFLICT (setting_key) DO NOTHING",
+                    (k, v)
+                )
+        except Exception as e:
+            print(f"[finance_settings_default] {e}")
+
+init_finance_settings_db()
+
+
+@app.route('/api/finance/settings', methods=['GET'])
+@require_module('finance')
+def api_finance_settings_get():
+    with get_db() as conn:
+        rows = conn.execute("SELECT setting_key, setting_value FROM finance_settings").fetchall()
+    return jsonify({r['setting_key']: r['setting_value'] for r in rows})
+
+
+@app.route('/api/finance/settings', methods=['POST'])
+@require_module('finance')
+def api_finance_settings_save():
+    data = request.get_json(force=True)
+    with get_db() as conn:
+        for k, v in data.items():
+            conn.execute(
+                "INSERT INTO finance_settings (setting_key, setting_value) VALUES (%s,%s) ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value",
+                (k, str(v))
+            )
+    return jsonify({'ok': True})
+
+
+def _get_finance_settings():
+    try:
+        with get_db() as conn:
+            rows = conn.execute("SELECT setting_key, setting_value FROM finance_settings").fetchall()
+            return {r['setting_key']: r['setting_value'] for r in rows}
+    except:
+        return {}
+
+
+def _roc_year(year):
+    return int(year) - 1911
+
+
+def _month_last_day(year, month):
+    import calendar
+    return calendar.monthrange(int(year), int(month))[1]
+
+
+def _compute_statements(year, month):
+    """Compute all three financial statements for the given year/month."""
+    from collections import defaultdict
+    period = f"{year}-{str(month).zfill(2)}"
+    settings = _get_finance_settings()
+    opening_cash   = float(settings.get('opening_cash',   0) or 0)
+    opening_equity = float(settings.get('opening_equity', 0) or 0)
+    company_name   = settings.get('company_name', '') or '公司名稱'
+
+    with get_db() as conn:
+        records = conn.execute("""
+            SELECT fr.type, fr.amount,
+                   fc.name            AS cat_name,
+                   fc.statement_section AS section
+            FROM finance_records fr
+            LEFT JOIN finance_categories fc ON fc.id = fr.category_id
+            WHERE to_char(fr.record_date,'YYYY-MM') = %s
+        """, (period,)).fetchall()
+
+        # Cumulative net before this month (for balance sheet period-start)
+        prev = conn.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) AS cum_income,
+                COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) AS cum_expense
+            FROM finance_records
+            WHERE record_date < DATE_TRUNC('month', %s::date)
+        """, (f"{period}-01",)).fetchone()
+
+    cum_net_before = float(prev['cum_income']) - float(prev['cum_expense'])
+
+    by_section = defaultdict(float)
+    by_cat     = defaultdict(float)
+    for r in records:
+        sec = r['section'] or ('operating_revenue' if r['type'] == 'income' else 'operating_expense')
+        by_section[sec]               += float(r['amount'])
+        by_cat[(sec, r['cat_name'] or '未分類')] += float(r['amount'])
+
+    operating_revenue = by_section['operating_revenue']
+    other_revenue     = by_section['other_revenue']
+    cogs              = by_section['cogs']
+    operating_expense = by_section['operating_expense']
+    other_expense     = by_section['other_expense']
+
+    gross_profit      = operating_revenue - cogs
+    operating_income  = gross_profit - operating_expense
+    net_income        = operating_income + other_revenue - other_expense
+    total_income      = operating_revenue + other_revenue
+    total_expense     = cogs + operating_expense + other_expense
+
+    cum_net_total     = cum_net_before + net_income
+    cash_balance      = opening_cash + opening_equity + cum_net_total
+    total_equity      = opening_equity + cum_net_total
+
+    def cat_lines(section):
+        return [{'name': k[1], 'amount': round(v, 2)}
+                for k, v in sorted(by_cat.items()) if k[0] == section]
+
+    return {
+        'company_name': company_name,
+        'year': int(year), 'month': int(month),
+        'roc_year': _roc_year(year),
+        'last_day': _month_last_day(year, month),
+        'income_statement': {
+            'operating_revenue':       round(operating_revenue, 2),
+            'operating_revenue_lines': cat_lines('operating_revenue'),
+            'other_revenue':           round(other_revenue, 2),
+            'other_revenue_lines':     cat_lines('other_revenue'),
+            'cogs':                    round(cogs, 2),
+            'cogs_lines':              cat_lines('cogs'),
+            'gross_profit':            round(gross_profit, 2),
+            'operating_expense':       round(operating_expense, 2),
+            'operating_expense_lines': cat_lines('operating_expense'),
+            'operating_income':        round(operating_income, 2),
+            'other_expense':           round(other_expense, 2),
+            'other_expense_lines':     cat_lines('other_expense'),
+            'net_income':              round(net_income, 2),
+        },
+        'balance_sheet': {
+            'cash':                    round(cash_balance, 2),
+            'total_assets':            round(cash_balance, 2),
+            'total_liabilities':       0,
+            'opening_equity':          round(opening_equity, 2),
+            'retained_earnings':       round(cum_net_total, 2),
+            'total_equity':            round(total_equity, 2),
+            'total_liabilities_equity': round(total_equity, 2),
+        },
+        'cash_flow': {
+            'operating_inflow':        round(total_income, 2),
+            'operating_inflow_lines':  cat_lines('operating_revenue') + cat_lines('other_revenue'),
+            'operating_outflow':       round(total_expense, 2),
+            'operating_outflow_lines': cat_lines('cogs') + cat_lines('operating_expense') + cat_lines('other_expense'),
+            'operating_net':           round(total_income - total_expense, 2),
+            'investing_net':           0,
+            'financing_net':           0,
+            'net_change':              round(total_income - total_expense, 2),
+            'opening_cash':            round(opening_cash + opening_equity + cum_net_before, 2),
+            'closing_cash':            round(cash_balance, 2),
+        },
+    }
+
+
+@app.route('/api/finance/statements/<year>/<month>', methods=['GET'])
+@require_module('finance')
+def api_finance_statements(year, month):
+    try:
+        return jsonify(_compute_statements(year, month))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/finance/export/statements/<year>/<month>', methods=['GET'])
+@require_module('finance')
+def api_finance_export_statements(year, month):
+    import openpyxl, io as _io
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    d  = _compute_statements(year, month)
+    co = d['company_name']
+    ry = d['roc_year']
+    m  = d['month']
+    ld = d['last_day']
+    IS = d['income_statement']
+    BS = d['balance_sheet']
+    CF = d['cash_flow']
+
+    wb = openpyxl.Workbook()
+
+    NAVY   = '1C3557'
+    AMT    = '#,##0'
+    FONT   = '標楷體'
+    thin   = Side(style='thin')
+    medium = Side(style='medium')
+
+    def _border(top=False, bottom=False, dbl=False):
+        return Border(
+            top    = thin   if top else None,
+            bottom = medium if dbl  else (thin if bottom else None),
+        )
+
+    def setup_ws(ws, title, date_str):
+        ws.column_dimensions['A'].width = 30
+        ws.column_dimensions['B'].width = 4
+        ws.column_dimensions['C'].width = 18
+        for row_vals, styles in [
+            ([co, '', ''],        {'font': Font(FONT, bold=True, size=14), 'align': 'center', 'merge': True}),
+            ([title, '', ''],     {'font': Font(FONT, bold=True, size=13), 'align': 'center', 'merge': True}),
+            ([date_str, '', ''],  {'font': Font(FONT, size=11),            'align': 'center', 'merge': True}),
+        ]:
+            ws.append(row_vals)
+            r = ws.max_row
+            ws.cell(r, 1).font      = styles['font']
+            ws.cell(r, 1).alignment = Alignment(horizontal=styles['align'])
+            if styles.get('merge'):
+                ws.merge_cells(f'A{r}:C{r}')
+        ws.append([])  # blank
+
+        # column headers
+        ws.append(['項　　目', '', '金　額（元）'])
+        r = ws.max_row
+        ws.cell(r, 1).font      = Font(FONT, bold=True, size=11, color='FFFFFF')
+        ws.cell(r, 3).font      = Font(FONT, bold=True, size=11, color='FFFFFF')
+        ws.cell(r, 1).fill      = PatternFill('solid', fgColor=NAVY)
+        ws.cell(r, 3).fill      = PatternFill('solid', fgColor=NAVY)
+        ws.cell(r, 2).fill      = PatternFill('solid', fgColor=NAVY)
+        ws.cell(r, 1).alignment = Alignment(horizontal='center')
+        ws.cell(r, 3).alignment = Alignment(horizontal='right')
+
+    def row(ws, label, amount=None, indent=0, bold=False, subtotal=False, total=False, dbl=False):
+        prefix = '　' * indent
+        ws.append([prefix + label, '', amount])
+        r = ws.max_row
+        b = bold or subtotal or total
+        ws.cell(r, 1).font      = Font(FONT, bold=b, size=11)
+        ws.cell(r, 1).alignment = Alignment(horizontal='left')
+        if amount is not None:
+            ws.cell(r, 3).font           = Font(FONT, bold=b, size=11)
+            ws.cell(r, 3).number_format  = AMT
+            ws.cell(r, 3).alignment      = Alignment(horizontal='right')
+        if subtotal or total:
+            ws.cell(r, 3).border = _border(top=(subtotal or total), bottom=(subtotal or total), dbl=dbl)
+        elif amount is None:
+            ws.cell(r, 1).font = Font(FONT, bold=True, size=11)
+
+    # ─── 損益表 ──────────────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = '損益表'
+    setup_ws(ws1, '損益表', f'中華民國{ry}年{m}月份')
+
+    row(ws1, '一、營業收入', bold=True)
+    for l in IS['operating_revenue_lines']:
+        row(ws1, l['name'], l['amount'], indent=2)
+    row(ws1, '營業收入合計', IS['operating_revenue'], indent=1, subtotal=True)
+    ws1.append([])
+
+    row(ws1, '二、營業成本', bold=True)
+    for l in IS['cogs_lines']:
+        row(ws1, l['name'], l['amount'], indent=2)
+    row(ws1, '營業成本合計', IS['cogs'], indent=1, subtotal=True)
+    ws1.append([])
+
+    row(ws1, '毛　利', IS['gross_profit'], indent=1, total=True)
+    ws1.append([])
+
+    row(ws1, '三、營業費用', bold=True)
+    for l in IS['operating_expense_lines']:
+        row(ws1, l['name'], l['amount'], indent=2)
+    row(ws1, '營業費用合計', IS['operating_expense'], indent=1, subtotal=True)
+    ws1.append([])
+
+    row(ws1, '營業利益（損失）', IS['operating_income'], indent=1, total=True)
+    ws1.append([])
+
+    if IS['other_revenue'] or IS['other_revenue_lines']:
+        row(ws1, '四、營業外收入', bold=True)
+        for l in IS['other_revenue_lines']:
+            row(ws1, l['name'], l['amount'], indent=2)
+        row(ws1, '營業外收入合計', IS['other_revenue'], indent=1, subtotal=True)
+        ws1.append([])
+
+    if IS['other_expense'] or IS['other_expense_lines']:
+        row(ws1, '五、營業外費用', bold=True)
+        for l in IS['other_expense_lines']:
+            row(ws1, l['name'], l['amount'], indent=2)
+        row(ws1, '營業外費用合計', IS['other_expense'], indent=1, subtotal=True)
+        ws1.append([])
+
+    row(ws1, '本期淨利（損）', IS['net_income'], bold=True, total=True, dbl=True)
+
+    # ─── 資產負債表 ───────────────────────────────────────────────
+    ws2 = wb.create_sheet('資產負債表')
+    setup_ws(ws2, '資產負債表', f'中華民國{ry}年{m}月{ld}日')
+
+    row(ws2, '【資　產】', bold=True)
+    row(ws2, '流動資產', indent=1, bold=True)
+    row(ws2, '現金及約當現金', BS['cash'], indent=2)
+    row(ws2, '資產合計', BS['total_assets'], indent=1, total=True)
+    ws2.append([])
+
+    row(ws2, '【負　債】', bold=True)
+    row(ws2, '流動負債', indent=1, bold=True)
+    row(ws2, '應付帳款', 0, indent=2)
+    row(ws2, '負債合計', BS['total_liabilities'], indent=1, total=True)
+    ws2.append([])
+
+    row(ws2, '【股東權益】', bold=True)
+    row(ws2, '資本額', BS['opening_equity'], indent=2)
+    row(ws2, '保留盈餘', BS['retained_earnings'], indent=2)
+    row(ws2, '股東權益合計', BS['total_equity'], indent=1, total=True)
+    ws2.append([])
+
+    row(ws2, '負債及股東權益合計', BS['total_liabilities_equity'], bold=True, total=True, dbl=True)
+
+    # ─── 現金流量表 ───────────────────────────────────────────────
+    ws3 = wb.create_sheet('現金流量表')
+    setup_ws(ws3, '現金流量表（直接法）', f'中華民國{ry}年{m}月份')
+
+    row(ws3, '一、營業活動之現金流量', bold=True)
+    row(ws3, '（一）收現收入', indent=1, bold=True)
+    for l in CF['operating_inflow_lines']:
+        row(ws3, l['name'], l['amount'], indent=3)
+    row(ws3, '收現合計', CF['operating_inflow'], indent=2, subtotal=True)
+    ws3.append([])
+    row(ws3, '（二）付現費用', indent=1, bold=True)
+    for l in CF['operating_outflow_lines']:
+        row(ws3, l['name'], -l['amount'], indent=3)
+    row(ws3, '付現合計', -CF['operating_outflow'], indent=2, subtotal=True)
+    ws3.append([])
+    row(ws3, '營業活動淨現金流量', CF['operating_net'], indent=1, total=True)
+    ws3.append([])
+
+    row(ws3, '二、投資活動之現金流量', bold=True)
+    row(ws3, '投資活動淨現金流量', CF['investing_net'], indent=1, total=True)
+    ws3.append([])
+
+    row(ws3, '三、籌資活動之現金流量', bold=True)
+    row(ws3, '籌資活動淨現金流量', CF['financing_net'], indent=1, total=True)
+    ws3.append([])
+
+    row(ws3, '四、本期現金增減', CF['net_change'], bold=True, total=True)
+    row(ws3, '五、期初現金及約當現金', CF['opening_cash'], bold=True)
+    row(ws3, '六、期末現金及約當現金', CF['closing_cash'], bold=True, total=True, dbl=True)
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"statements_{year}{str(month).zfill(2)}.xlsx"
+    return (buf.read(), 200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': f'attachment; filename="{fname}"',
+    })

@@ -948,6 +948,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab"        id="fintab-records" onclick="switchFinTab('records')">收支記錄</button>
       <button class="inv-tab"        id="fintab-cats"    onclick="switchFinTab('cats')">類別設定</button>
       <button class="inv-tab"        id="fintab-ocr"     onclick="switchFinTab('ocr')">OCR辨識</button>
+      <button class="inv-tab"        id="fintab-stmts"   onclick="switchFinTab('stmts')">財務報表</button>
+      <button class="inv-tab"        id="fintab-settings" onclick="switchFinTab('settings')">財務設定</button>
     </div>
 
     <!-- 損益儀表板 -->
@@ -1069,6 +1071,86 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <button class="btn btn-primary" onclick="createRecordFromOcr()">建立財務記錄</button>
             <button class="btn btn-outline" onclick="resetOcr()">重新上傳</button>
           </div>
+        </div>
+      </div>
+    </div>
+    <!-- 財務報表 -->
+    <div id="fin-panel-stmts" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">月份</span>
+        <input class="filter-input" type="month" id="fin-stmt-month">
+        <button class="btn btn-primary btn-sm" onclick="loadStatements()">產生報表</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-outline btn-sm" id="fin-stmt-dl-btn" style="display:none" onclick="downloadStatements()">下載 Excel (.xlsx)</button>
+      </div>
+      <div id="fin-stmt-tabs" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:14px">
+          <button class="inv-tab active" id="stmttab-is" onclick="switchStmtTab('is')">損益表</button>
+          <button class="inv-tab"        id="stmttab-bs" onclick="switchStmtTab('bs')">資產負債表</button>
+          <button class="inv-tab"        id="stmttab-cf" onclick="switchStmtTab('cf')">現金流量表</button>
+        </div>
+        <!-- 損益表 -->
+        <div id="fin-stmt-is">
+          <div class="card" style="max-width:640px">
+            <div class="card-header" style="padding:14px 18px"><span class="card-title" id="fin-is-title">損益表</span></div>
+            <div id="fin-is-body" style="padding:0 4px 12px"></div>
+          </div>
+        </div>
+        <!-- 資產負債表 -->
+        <div id="fin-stmt-bs" style="display:none">
+          <div class="card" style="max-width:640px">
+            <div class="card-header" style="padding:14px 18px"><span class="card-title" id="fin-bs-title">資產負債表</span></div>
+            <div id="fin-bs-body" style="padding:0 4px 12px"></div>
+          </div>
+        </div>
+        <!-- 現金流量表 -->
+        <div id="fin-stmt-cf" style="display:none">
+          <div class="card" style="max-width:640px">
+            <div class="card-header" style="padding:14px 18px"><span class="card-title" id="fin-cf-title">現金流量表</span></div>
+            <div id="fin-cf-body" style="padding:0 4px 12px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 財務設定 -->
+    <div id="fin-panel-settings" style="display:none">
+      <div style="max-width:560px">
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <div class="card-title" style="padding:0;margin-bottom:16px">基本設定</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">公司／店鋪名稱</label>
+              <input class="form-input" id="fset-company" placeholder="顯示於報表抬頭">
+            </div>
+            <div class="form-group">
+              <label class="form-label">期初現金餘額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　啟用系統前的現金</span></label>
+              <input class="form-input" type="number" id="fset-cash" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">資本額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　投入資本</span></label>
+              <input class="form-input" type="number" id="fset-equity" min="0" placeholder="0">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:8px" onclick="saveFinSettings()">儲存設定</button>
+        </div>
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:6px">報表科目對照說明</div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">請在「類別設定」→ 編輯類別 → 選擇「報表科目」，才能正確產生三大財務報表。</p>
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr style="background:var(--bg)">
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">科目代碼</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">報表項目</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">類型</th>
+            </tr></thead>
+            <tbody>
+              <tr><td style="padding:5px 10px">operating_revenue</td><td style="padding:5px 10px">營業收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
+              <tr style="background:var(--bg)"><td style="padding:5px 10px">other_revenue</td><td style="padding:5px 10px">營業外收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
+              <tr><td style="padding:5px 10px">cogs</td><td style="padding:5px 10px">營業成本（食材等直接成本）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+              <tr style="background:var(--bg)"><td style="padding:5px 10px">operating_expense</td><td style="padding:5px 10px">營業費用（薪資、租金、水電等）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+              <tr><td style="padding:5px 10px">other_expense</td><td style="padding:5px 10px">營業外費用</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1584,6 +1666,20 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div><label class="form-label">排序</label><input class="form-input" type="number" id="fcm-sort" value="0"></div>
       </div>
       <div><label class="form-label">狀態</label><select class="form-input" id="fcm-active"><option value="1">啟用</option><option value="0">停用</option></select></div>
+      <div>
+        <label class="form-label">報表科目 <span style="font-size:11px;font-weight:400;color:var(--muted)">（影響三大財務報表）</span></label>
+        <select class="form-input" id="fcm-section">
+          <optgroup label="── 收入 ──">
+            <option value="operating_revenue">營業收入</option>
+            <option value="other_revenue">營業外收入</option>
+          </optgroup>
+          <optgroup label="── 支出 ──">
+            <option value="cogs">營業成本</option>
+            <option value="operating_expense">營業費用</option>
+            <option value="other_expense">營業外費用</option>
+          </optgroup>
+        </select>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeFinCatModal()">取消</button>
@@ -4637,18 +4733,20 @@ document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterv
 let finCatList = [], finOcrResult = null, finTrendChart = null, finCatChart = null;
 
 function switchFinTab(tab) {
-  ['dash','records','cats','ocr'].forEach(t => {
+  ['dash','records','cats','ocr','stmts','settings'].forEach(t => {
     document.getElementById('fintab-'+t).classList.toggle('active', t===tab);
     document.getElementById('fin-panel-'+t).style.display = t===tab?'':'none';
   });
   if (tab==='records') loadFinRecords();
   if (tab==='cats')    loadFinCats();
+  if (tab==='settings') loadFinSettings();
 }
 async function initFinance() {
   const now = new Date();
   const m = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  document.getElementById('fin-dash-month').value = m;
-  document.getElementById('fin-rec-month').value  = m;
+  document.getElementById('fin-dash-month').value  = m;
+  document.getElementById('fin-rec-month').value   = m;
+  document.getElementById('fin-stmt-month').value  = m;
   await loadFinCats();
   await loadFinSummary();
   switchFinTab('dash');
@@ -4872,17 +4970,19 @@ function openFinCatModal(id=null) {
   document.getElementById('fcm-title').textContent = id ? '編輯類別' : '新增類別';
   if (id) {
     const c = finCatList.find(x=>x.id===id); if (!c) return;
-    document.getElementById('fcm-name').value   = c.name;
-    document.getElementById('fcm-type').value   = c.type;
-    document.getElementById('fcm-color').value  = c.color||'#4a7bda';
-    document.getElementById('fcm-sort').value   = c.sort_order||0;
-    document.getElementById('fcm-active').value = c.active?'1':'0';
+    document.getElementById('fcm-name').value    = c.name;
+    document.getElementById('fcm-type').value    = c.type;
+    document.getElementById('fcm-color').value   = c.color||'#4a7bda';
+    document.getElementById('fcm-sort').value    = c.sort_order||0;
+    document.getElementById('fcm-active').value  = c.active?'1':'0';
+    document.getElementById('fcm-section').value = c.statement_section || (c.type==='income'?'operating_revenue':'operating_expense');
   } else {
-    ['fcm-name'].forEach(i=>document.getElementById(i).value='');
-    document.getElementById('fcm-type').value='expense';
-    document.getElementById('fcm-color').value='#4a7bda';
-    document.getElementById('fcm-sort').value='0';
-    document.getElementById('fcm-active').value='1';
+    document.getElementById('fcm-name').value   = '';
+    document.getElementById('fcm-type').value   = 'expense';
+    document.getElementById('fcm-color').value  = '#4a7bda';
+    document.getElementById('fcm-sort').value   = '0';
+    document.getElementById('fcm-active').value = '1';
+    document.getElementById('fcm-section').value = 'operating_expense';
   }
   document.getElementById('fin-cat-modal').style.display='flex';
 }
@@ -4890,11 +4990,12 @@ function closeFinCatModal() { document.getElementById('fin-cat-modal').style.dis
 async function saveFinCat() {
   const id = document.getElementById('fcm-id').value;
   const body = {
-    name:       document.getElementById('fcm-name').value.trim(),
-    type:       document.getElementById('fcm-type').value,
-    color:      document.getElementById('fcm-color').value,
-    sort_order: parseInt(document.getElementById('fcm-sort').value)||0,
-    active:     document.getElementById('fcm-active').value==='1',
+    name:              document.getElementById('fcm-name').value.trim(),
+    type:              document.getElementById('fcm-type').value,
+    color:             document.getElementById('fcm-color').value,
+    sort_order:        parseInt(document.getElementById('fcm-sort').value)||0,
+    active:            document.getElementById('fcm-active').value==='1',
+    statement_section: document.getElementById('fcm-section').value,
   };
   if (!body.name) { showToast('請填寫名稱','error'); return; }
   const url = id ? `/api/finance/categories/${id}` : '/api/finance/categories';
@@ -4907,6 +5008,154 @@ async function deleteFinCat(id) {
   const {ok} = await api(`/api/finance/categories/${id}`, {method:'DELETE'});
   if (!ok) return;
   showToast('已刪除','success'); await loadFinCats();
+}
+
+// ── 財務報表 ───────────────────────────────────────────────────
+let stmtData = null;
+function switchStmtTab(tab) {
+  ['is','bs','cf'].forEach(t => {
+    document.getElementById('stmttab-'+t).classList.toggle('active', t===tab);
+    document.getElementById('fin-stmt-'+t).style.display = t===tab?'':'none';
+  });
+}
+const fmtN = v => {
+  if (v === null || v === undefined) return '—';
+  const abs = Math.abs(v);
+  const s = abs.toLocaleString('zh-TW', {minimumFractionDigits:0, maximumFractionDigits:0});
+  return v < 0 ? `(${s})` : s;
+};
+function stmtRow(label, amount, indent=0, bold=false, separator=false) {
+  const pad = '　'.repeat(indent);
+  const bStyle = bold ? 'font-weight:600;' : '';
+  const sepStyle = separator ? 'border-top:1px solid var(--border);' : '';
+  const amtColor = amount < 0 ? 'color:var(--red);' : '';
+  return `<tr style="${sepStyle}">
+    <td style="padding:6px 16px;${bStyle}">${pad}${escHtml(label)}</td>
+    <td style="padding:6px 16px;text-align:right;font-family:'DM Mono',monospace;font-size:13px;${bStyle}${amtColor}">${amount===null||amount===undefined?'':fmtN(amount)}</td>
+  </tr>`;
+}
+function stmtTable(rows) {
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:8px 16px;text-align:left;font-size:12px;color:var(--muted);font-weight:500">項目</th>
+      <th style="padding:8px 16px;text-align:right;font-size:12px;color:var(--muted);font-weight:500">金額（元）</th>
+    </tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>`;
+}
+async function loadStatements() {
+  const m = document.getElementById('fin-stmt-month').value;
+  if (!m) { showToast('請選擇月份','error'); return; }
+  const [year, mon] = m.split('-');
+  const {ok, data} = await api(`/api/finance/statements/${year}/${mon}`, {}, true);
+  if (!ok) return;
+  stmtData = data;
+  const ry = data.roc_year, mo = data.month, ld = data.last_day;
+  const IS = data.income_statement, BS = data.balance_sheet, CF = data.cash_flow;
+
+  // 損益表
+  document.getElementById('fin-is-title').textContent = `損益表　中華民國${ry}年${mo}月份`;
+  const isRows = [];
+  isRows.push(stmtRow('一、營業收入', null, 0, true));
+  IS.operating_revenue_lines.forEach(l => isRows.push(stmtRow(l.name, l.amount, 2)));
+  isRows.push(stmtRow('　　營業收入合計', IS.operating_revenue, 0, true, true));
+  isRows.push(stmtRow(''));
+  isRows.push(stmtRow('二、營業成本', null, 0, true));
+  IS.cogs_lines.forEach(l => isRows.push(stmtRow(l.name, l.amount, 2)));
+  isRows.push(stmtRow('　　營業成本合計', IS.cogs, 0, true, true));
+  isRows.push(stmtRow('　　毛利', IS.gross_profit, 0, true, true));
+  isRows.push(stmtRow(''));
+  isRows.push(stmtRow('三、營業費用', null, 0, true));
+  IS.operating_expense_lines.forEach(l => isRows.push(stmtRow(l.name, l.amount, 2)));
+  isRows.push(stmtRow('　　營業費用合計', IS.operating_expense, 0, true, true));
+  isRows.push(stmtRow('　　營業利益（損失）', IS.operating_income, 0, true, true));
+  if (IS.other_revenue || IS.other_revenue_lines.length) {
+    isRows.push(stmtRow(''));
+    isRows.push(stmtRow('四、營業外收入', null, 0, true));
+    IS.other_revenue_lines.forEach(l => isRows.push(stmtRow(l.name, l.amount, 2)));
+    isRows.push(stmtRow('　　營業外收入合計', IS.other_revenue, 0, true, true));
+  }
+  if (IS.other_expense || IS.other_expense_lines.length) {
+    isRows.push(stmtRow(''));
+    isRows.push(stmtRow('五、營業外費用', null, 0, true));
+    IS.other_expense_lines.forEach(l => isRows.push(stmtRow(l.name, l.amount, 2)));
+    isRows.push(stmtRow('　　營業外費用合計', IS.other_expense, 0, true, true));
+  }
+  isRows.push(stmtRow(''));
+  isRows.push(stmtRow('本期淨利（損）', IS.net_income, 0, true, true));
+  document.getElementById('fin-is-body').innerHTML = stmtTable(isRows);
+
+  // 資產負債表
+  document.getElementById('fin-bs-title').textContent = `資產負債表　中華民國${ry}年${mo}月${ld}日`;
+  const bsRows = [];
+  bsRows.push(stmtRow('【資　產】', null, 0, true));
+  bsRows.push(stmtRow('流動資產', null, 1, true));
+  bsRows.push(stmtRow('現金及約當現金', BS.cash, 2));
+  bsRows.push(stmtRow('　資產合計', BS.total_assets, 0, true, true));
+  bsRows.push(stmtRow(''));
+  bsRows.push(stmtRow('【負　債】', null, 0, true));
+  bsRows.push(stmtRow('流動負債', null, 1, true));
+  bsRows.push(stmtRow('應付帳款', 0, 2));
+  bsRows.push(stmtRow('　負債合計', BS.total_liabilities, 0, true, true));
+  bsRows.push(stmtRow(''));
+  bsRows.push(stmtRow('【股東權益】', null, 0, true));
+  bsRows.push(stmtRow('資本額', BS.opening_equity, 2));
+  bsRows.push(stmtRow('保留盈餘', BS.retained_earnings, 2));
+  bsRows.push(stmtRow('　股東權益合計', BS.total_equity, 0, true, true));
+  bsRows.push(stmtRow(''));
+  bsRows.push(stmtRow('負債及股東權益合計', BS.total_liabilities_equity, 0, true, true));
+  document.getElementById('fin-bs-body').innerHTML = stmtTable(bsRows);
+
+  // 現金流量表
+  document.getElementById('fin-cf-title').textContent = `現金流量表　中華民國${ry}年${mo}月份`;
+  const cfRows = [];
+  cfRows.push(stmtRow('一、營業活動之現金流量', null, 0, true));
+  cfRows.push(stmtRow('（一）收現收入', null, 1, true));
+  CF.operating_inflow_lines.forEach(l => cfRows.push(stmtRow(l.name, l.amount, 3)));
+  cfRows.push(stmtRow('收現合計', CF.operating_inflow, 2, true, true));
+  cfRows.push(stmtRow('（二）付現費用', null, 1, true));
+  CF.operating_outflow_lines.forEach(l => cfRows.push(stmtRow(l.name, -l.amount, 3)));
+  cfRows.push(stmtRow('付現合計', -CF.operating_outflow, 2, true, true));
+  cfRows.push(stmtRow('　　營業活動淨現金流量', CF.operating_net, 0, true, true));
+  cfRows.push(stmtRow(''));
+  cfRows.push(stmtRow('二、投資活動之現金流量', null, 0, true));
+  cfRows.push(stmtRow('　　投資活動淨現金流量', CF.investing_net, 0, true, true));
+  cfRows.push(stmtRow(''));
+  cfRows.push(stmtRow('三、籌資活動之現金流量', null, 0, true));
+  cfRows.push(stmtRow('　　籌資活動淨現金流量', CF.financing_net, 0, true, true));
+  cfRows.push(stmtRow(''));
+  cfRows.push(stmtRow('四、本期現金增減', CF.net_change, 0, true, true));
+  cfRows.push(stmtRow('五、期初現金及約當現金', CF.opening_cash, 0, true));
+  cfRows.push(stmtRow('六、期末現金及約當現金', CF.closing_cash, 0, true, true));
+  document.getElementById('fin-cf-body').innerHTML = stmtTable(cfRows);
+
+  document.getElementById('fin-stmt-tabs').style.display = '';
+  document.getElementById('fin-stmt-dl-btn').style.display = '';
+  switchStmtTab('is');
+}
+function downloadStatements() {
+  const m = document.getElementById('fin-stmt-month').value;
+  if (!m) return;
+  const [year, mon] = m.split('-');
+  window.open(`/api/finance/export/statements/${year}/${mon}`, '_blank');
+}
+
+// ── 財務設定 ───────────────────────────────────────────────────
+async function loadFinSettings() {
+  const {ok, data} = await api('/api/finance/settings', {}, true);
+  if (!ok) return;
+  document.getElementById('fset-company').value = data.company_name || '';
+  document.getElementById('fset-cash').value    = data.opening_cash || '0';
+  document.getElementById('fset-equity').value  = data.opening_equity || '0';
+}
+async function saveFinSettings() {
+  const body = {
+    company_name:   document.getElementById('fset-company').value.trim(),
+    opening_cash:   document.getElementById('fset-cash').value || '0',
+    opening_equity: document.getElementById('fset-equity').value || '0',
+  };
+  const {ok} = await api('/api/finance/settings', {method:'POST', body:JSON.stringify(body)});
+  if (ok) showToast('設定已儲存','success');
 }
 
 // ── OCR 辨識 ──────────────────────────────────────────────────

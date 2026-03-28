@@ -1021,6 +1021,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab"        id="fintab-recurring" onclick="switchFinTab('recurring')">定期分錄</button>
       <button class="inv-tab"        id="fintab-bank"      onclick="switchFinTab('bank')">銀行對帳</button>
       <button class="inv-tab"        id="fintab-tax"       onclick="switchFinTab('tax')">稅務申報</button>
+      <button class="inv-tab"        id="fintab-ap"        onclick="switchFinTab('ap')">應收付款</button>
+      <button class="inv-tab"        id="fintab-budget"    onclick="switchFinTab('budget')">預算管理</button>
+      <button class="inv-tab"        id="fintab-payroll"   onclick="switchFinTab('payroll')">薪資連動</button>
       <button class="inv-tab"        id="fintab-stmts"     onclick="switchFinTab('stmts')">財務報表</button>
       <button class="inv-tab"        id="fintab-settings"  onclick="switchFinTab('settings')">財務設定</button>
     </div>
@@ -1234,6 +1237,68 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
       <div id="tax-empty" style="padding:32px;text-align:center;color:var(--muted);font-size:13px">請選擇年度與期別後點「查詢」</div>
+    </div>
+
+    <!-- 應收付款 -->
+    <div id="fin-panel-ap" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" id="ap-tab-list" onclick="switchApView('list')" style="background:var(--navy);color:#fff">清單</button>
+          <button class="btn btn-outline btn-sm" id="ap-tab-aging" onclick="switchApView('aging')">老化分析</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="filter-input" id="ap-type-filter" onchange="loadApList()" style="min-width:110px">
+            <option value="">全部</option>
+            <option value="payable">應付帳款</option>
+            <option value="receivable">應收帳款</option>
+          </select>
+          <select class="filter-input" id="ap-status-filter" onchange="loadApList()" style="min-width:100px">
+            <option value="">全部狀態</option>
+            <option value="open">未結清</option>
+            <option value="overdue">逾期</option>
+            <option value="paid">已結清</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openApModal()">+ 新增</button>
+        </div>
+      </div>
+      <!-- 老化摘要卡 -->
+      <div id="ap-aging-cards" style="display:none;margin-bottom:14px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px"></div>
+      <div class="card">
+        <div id="ap-list" style="padding:0 4px 12px">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">載入中…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 預算管理 -->
+    <div id="fin-panel-budget" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">年月</span>
+        <input class="filter-input" type="month" id="budget-month" onchange="loadBudgetVsActual()">
+        <button class="btn btn-primary btn-sm" onclick="openBudgetEditModal()">設定預算</button>
+      </div>
+      <!-- 總覽數字 -->
+      <div id="budget-overview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">類別預算 vs 實際支出</span></div>
+        <div id="budget-list" style="padding:0 12px 16px">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">載入中…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 薪資連動 -->
+    <div id="fin-panel-payroll" style="display:none">
+      <div style="margin-bottom:14px;font-weight:600;font-size:15px">薪資費用連動財務</div>
+      <div class="card" style="margin-bottom:14px;padding:14px 18px;font-size:13px;color:var(--muted);line-height:1.8">
+        將已確認的薪資記錄一鍵寫入財務「支出」，科目自動歸類至「薪資支出」。每筆薪資只會同步一次，重複點擊不會重複建立。
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">各月薪資同步狀態</span></div>
+        <div id="payroll-sync-list" style="padding:0 4px 12px">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">載入中…</div>
+        </div>
+      </div>
     </div>
 
     <!-- 財務報表 -->
@@ -1923,6 +1988,84 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeOcrEditModal()">取消</button>
       <button class="btn btn-primary" onclick="saveOcrEdit()">儲存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- AP Entry Modal -->
+<div class="modal-overlay" id="ap-modal" style="display:none">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <span class="modal-title" id="apm-title">新增應付帳款</span>
+      <button class="modal-close" onclick="closeApModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="apm-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label class="form-label">類型</label>
+          <select class="form-input" id="apm-type">
+            <option value="payable">應付帳款</option>
+            <option value="receivable">應收帳款</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">狀態</label>
+          <select class="form-input" id="apm-status">
+            <option value="open">未結清</option>
+            <option value="paid">已結清</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="form-label">標題 *</label>
+          <input class="form-input" id="apm-title-input" placeholder="例：3月份水電費">
+        </div>
+        <div>
+          <label class="form-label">往來對象</label>
+          <input class="form-input" id="apm-party" placeholder="廠商 / 客戶名稱">
+        </div>
+        <div>
+          <label class="form-label">發票號碼</label>
+          <input class="form-input" id="apm-invoice">
+        </div>
+        <div>
+          <label class="form-label">金額 *</label>
+          <input class="form-input" id="apm-amount" type="number" min="0" placeholder="0">
+        </div>
+        <div>
+          <label class="form-label">到期日</label>
+          <input class="form-input" id="apm-due" type="date">
+        </div>
+        <div id="apm-paid-date-wrap">
+          <label class="form-label">結清日期</label>
+          <input class="form-input" id="apm-paid" type="date">
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="form-label">備註</label>
+          <input class="form-input" id="apm-note" placeholder="備註">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeApModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveAp()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Budget Edit Modal -->
+<div class="modal-overlay" id="budget-modal" style="display:none">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="bdm-title">設定月度預算</span>
+      <button class="modal-close" onclick="closeBudgetModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="bdm-list" style="max-height:420px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeBudgetModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveBudgets()">儲存預算</button>
     </div>
   </div>
 </div>
@@ -5576,7 +5719,7 @@ document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterv
 let finCatList = [], finOcrResult = null, finTrendChart = null, finCatChart = null;
 
 function switchFinTab(tab) {
-  ['dash','records','cats','ocr','docs','recurring','bank','tax','stmts','settings'].forEach(t => {
+  ['dash','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings'].forEach(t => {
     const btn = document.getElementById('fintab-'+t);
     const panel = document.getElementById('fin-panel-'+t);
     if (btn)   btn.classList.toggle('active', t===tab);
@@ -5588,6 +5731,9 @@ function switchFinTab(tab) {
   if (tab==='recurring') loadRecurring();
   if (tab==='bank')      loadBankStatements();
   if (tab==='tax')       _initTaxDefaults();
+  if (tab==='ap')        loadApList();
+  if (tab==='budget')    loadBudgetVsActual();
+  if (tab==='payroll')   loadPayrollSyncStatus();
   if (tab==='settings')  loadFinSettings();
 }
 async function initFinance() {
@@ -6841,6 +6987,297 @@ function exportTaxReport() {
   a.href = URL.createObjectURL(blob);
   a.download = `tax_${_taxData.year}_period${_taxData.period}.csv`;
   a.click();
+}
+
+// ── 應收付款 ──────────────────────────────────────────────────
+let _apList = [];
+let _apView = 'list';
+
+function switchApView(view) {
+  _apView = view;
+  document.getElementById('ap-tab-list').style.cssText  = view==='list'  ? 'background:var(--navy);color:#fff' : '';
+  document.getElementById('ap-tab-aging').style.cssText = view==='aging' ? 'background:var(--navy);color:#fff' : '';
+  document.getElementById('ap-aging-cards').style.display = view==='aging' ? 'grid' : 'none';
+  if (view==='aging') loadApAging();
+  else loadApList();
+}
+
+async function loadApList() {
+  const ptype  = document.getElementById('ap-type-filter').value;
+  const status = document.getElementById('ap-status-filter').value;
+  const params = new URLSearchParams();
+  if (ptype)  params.set('type', ptype);
+  if (status) params.set('status', status);
+  const { ok, data } = await api('/api/finance/payables?' + params, {}, true);
+  _apList = ok ? data : [];
+  const wrap = document.getElementById('ap-list');
+  if (!_apList.length) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">無符合資料</div>';
+    return;
+  }
+  const typeLabel  = { payable:'應付', receivable:'應收' };
+  const statusInfo = s => ({
+    open:    ['未結清', 'var(--gold)'],
+    overdue: ['逾期', 'var(--red)'],
+    paid:    ['已結清', 'var(--green)'],
+  }[s] || [s, 'var(--muted)']);
+  wrap.innerHTML = `<table class="data-table" style="margin:0">
+    <thead><tr>
+      <th>類型</th><th>標題</th><th>往來對象</th><th>發票號碼</th>
+      <th style="text-align:right">金額</th><th>到期日</th><th>逾期天數</th><th>狀態</th><th>操作</th>
+    </tr></thead>
+    <tbody>${_apList.map(r => {
+      const [sLabel, sColor] = statusInfo(r.effective_status);
+      const overdueBadge = r.effective_status==='overdue'
+        ? `<span style="color:var(--red);font-size:11px;font-weight:700">逾期 ${r.days_overdue} 天</span>`
+        : (r.status==='open' && r.due_date ? `<span style="font-size:11px;color:var(--muted)">${r.days_overdue < 0 ? '還有 '+Math.abs(r.days_overdue)+' 天' : ''}</span>` : '—');
+      return `<tr>
+        <td><span class="badge" style="background:rgba(74,123,218,0.1);color:var(--accent);font-size:11px">${typeLabel[r.payable_type]||r.payable_type}</span></td>
+        <td style="font-weight:600">${escHtml(r.title)}</td>
+        <td style="font-size:12px;color:var(--muted)">${escHtml(r.party_name||'—')}</td>
+        <td style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace">${escHtml(r.invoice_no||'—')}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600">$${r.amount.toLocaleString()}</td>
+        <td style="font-size:12px">${r.due_date||'—'}</td>
+        <td style="font-size:12px">${overdueBadge}</td>
+        <td><span style="color:${sColor};font-weight:600;font-size:12px">${sLabel}</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" onclick="openApModal(${r.id})">編輯</button>
+          ${r.status==='open'?`<button class="btn btn-primary btn-sm" onclick="markApPaid(${r.id})" style="margin-left:4px">結清</button>`:''}
+          <button class="btn btn-danger btn-sm" onclick="deleteAp(${r.id})" style="margin-left:4px">刪除</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function loadApAging() {
+  const ptype = document.getElementById('ap-type-filter').value || 'payable';
+  const { ok, data } = await api(`/api/finance/payables/aging?type=${ptype}`, {}, true);
+  if (!ok) return;
+  const b = data.buckets;
+  const labels = [
+    ['current', '未到期', 'var(--green)'],
+    ['d1_30',   '逾期 1-30 天', 'var(--gold)'],
+    ['d31_60',  '逾期 31-60 天', '#e07b2a'],
+    ['d61_90',  '逾期 61-90 天', 'var(--red)'],
+    ['d90plus', '逾期 90 天以上', '#8b1a1a'],
+  ];
+  document.getElementById('ap-aging-cards').innerHTML = labels.map(([k, label, color]) => `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 16px;border-top:3px solid ${color}">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+      <div style="font-size:20px;font-weight:700;color:${color}">$${(b[k]||0).toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--muted)">${data.rows[k].length} 筆</div>
+    </div>`).join('');
+  // Show aging detail table
+  const wrap = document.getElementById('ap-list');
+  const allRows = labels.flatMap(([k]) => data.rows[k]);
+  if (!allRows.length) { wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">無未結清款項</div>'; return; }
+  // Reuse same table render by setting _apList
+  _apList = allRows.map(r => ({ ...r, effective_status: r.days_overdue > 0 ? 'overdue' : 'open' }));
+  loadApList();
+}
+
+function openApModal(id=null) {
+  document.getElementById('apm-id').value = id||'';
+  document.getElementById('apm-title').textContent = id ? '編輯帳款' : '新增帳款';
+  if (id) {
+    const r = _apList.find(x => x.id===id);
+    if (r) {
+      document.getElementById('apm-type').value         = r.payable_type;
+      document.getElementById('apm-status').value       = r.status;
+      document.getElementById('apm-title-input').value  = r.title;
+      document.getElementById('apm-party').value        = r.party_name||'';
+      document.getElementById('apm-invoice').value      = r.invoice_no||'';
+      document.getElementById('apm-amount').value       = r.amount;
+      document.getElementById('apm-due').value          = r.due_date||'';
+      document.getElementById('apm-paid').value         = r.paid_date||'';
+      document.getElementById('apm-note').value         = r.note||'';
+    }
+  } else {
+    ['apm-type','apm-title-input','apm-party','apm-invoice','apm-amount','apm-due','apm-paid','apm-note'].forEach(id2 => {
+      const el = document.getElementById(id2);
+      if (el.tagName==='SELECT') el.value = id2==='apm-type' ? 'payable' : 'open';
+      else el.value = '';
+    });
+  }
+  document.getElementById('ap-modal').style.display = 'flex';
+}
+function closeApModal() { document.getElementById('ap-modal').style.display='none'; }
+
+async function saveAp() {
+  const id = document.getElementById('apm-id').value;
+  const body = {
+    payable_type: document.getElementById('apm-type').value,
+    status:       document.getElementById('apm-status').value,
+    title:        document.getElementById('apm-title-input').value.trim(),
+    party_name:   document.getElementById('apm-party').value.trim(),
+    invoice_no:   document.getElementById('apm-invoice').value.trim(),
+    amount:       parseFloat(document.getElementById('apm-amount').value)||0,
+    due_date:     document.getElementById('apm-due').value||null,
+    paid_date:    document.getElementById('apm-paid').value||null,
+    note:         document.getElementById('apm-note').value.trim(),
+  };
+  if (!body.title) { showToast('請填寫標題','error'); return; }
+  const url    = id ? `/api/finance/payables/${id}` : '/api/finance/payables';
+  const method = id ? 'PUT' : 'POST';
+  const { ok } = await api(url, { method, body: JSON.stringify(body) });
+  if (ok) { showToast(id?'已更新':'已新增','success'); closeApModal(); loadApList(); }
+}
+
+async function markApPaid(id) {
+  const today = new Date().toISOString().slice(0,10);
+  const { ok } = await api(`/api/finance/payables/${id}`, {
+    method:'PUT', body: JSON.stringify({ ...(_apList.find(x=>x.id===id)||{}), status:'paid', paid_date:today })
+  });
+  if (ok) { showToast('已標記結清','success'); loadApList(); }
+}
+
+async function deleteAp(id) {
+  if (!confirm('確定刪除？')) return;
+  const { ok } = await api(`/api/finance/payables/${id}`, { method:'DELETE' });
+  if (ok) { showToast('已刪除','success'); loadApList(); }
+}
+
+// ── 預算管理 ──────────────────────────────────────────────────
+let _budgetData = null;
+
+async function loadBudgetVsActual() {
+  const el = document.getElementById('budget-month');
+  if (!el.value) el.value = new Date().toISOString().slice(0,7);
+  const [yr, mo] = el.value.split('-');
+  const { ok, data } = await api(`/api/finance/budgets/vs-actual?year=${yr}&month=${parseInt(mo)}`, {}, true);
+  if (!ok) return;
+  _budgetData = data;
+
+  const expense = data.items.filter(i => i.category_type==='expense');
+  const income  = data.items.filter(i => i.category_type==='income');
+  const totalBudget = expense.reduce((s,i)=>s+i.budget,0);
+  const totalActual = expense.reduce((s,i)=>s+i.actual,0);
+  const overCount   = expense.filter(i=>i.over_budget).length;
+
+  document.getElementById('budget-overview').innerHTML = [
+    ['支出總預算', `$${totalBudget.toLocaleString()}`, 'var(--text)'],
+    ['實際支出',   `$${totalActual.toLocaleString()}`, totalActual>totalBudget?'var(--red)':'var(--green)'],
+    ['超支類別',   `${overCount} 項`, overCount>0?'var(--red)':'var(--green)'],
+  ].map(([l,v,c]) => `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${l}</div>
+    <div style="font-size:22px;font-weight:700;color:${c}">${v}</div>
+  </div>`).join('');
+
+  const renderBudgetRows = rows => rows.map(i => {
+    const pct = i.pct !== null ? i.pct : null;
+    const barColor = pct === null ? 'var(--border)' : pct >= 100 ? 'var(--red)' : pct >= 80 ? '#e07b2a' : 'var(--green)';
+    const barWidth = pct !== null ? Math.min(pct, 100) : 0;
+    const noBudget = i.budget === 0;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:2px;background:${i.color||'#999'};display:inline-block"></span>
+          <span style="font-size:13px;font-weight:500">${escHtml(i.category_name)}</span>
+          ${i.over_budget?'<span style="font-size:10px;color:#fff;background:var(--red);border-radius:4px;padding:1px 6px">超支</span>':''}
+          ${pct!==null&&pct>=80&&!i.over_budget?'<span style="font-size:10px;color:#fff;background:#e07b2a;border-radius:4px;padding:1px 6px">接近上限</span>':''}
+        </div>
+        <div style="font-size:12px;color:var(--muted);text-align:right">
+          <strong style="color:${barColor}">$${i.actual.toLocaleString()}</strong>
+          ${noBudget ? '<span style="color:var(--muted)"> / 未設預算</span>'
+            : ` / $${i.budget.toLocaleString()} (${pct}%)`}
+        </div>
+      </div>
+      ${!noBudget ? `<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${barWidth}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  document.getElementById('budget-list').innerHTML = `
+    <div style="padding:8px 0 4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">支出類別</div>
+    ${expense.length ? renderBudgetRows(expense) : '<div style="color:var(--muted);font-size:13px;padding:8px 0">無支出類別</div>'}
+    <div style="padding:12px 0 4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">收入類別</div>
+    ${income.length ? renderBudgetRows(income) : '<div style="color:var(--muted);font-size:13px;padding:8px 0">無收入類別</div>'}`;
+}
+
+async function openBudgetEditModal() {
+  const el = document.getElementById('budget-month');
+  if (!el.value) el.value = new Date().toISOString().slice(0,7);
+  const [yr, mo] = el.value.split('-');
+  document.getElementById('bdm-title').textContent = `設定預算 — ${el.value}`;
+  const [catsRes, budgetsRes] = await Promise.all([
+    api('/api/finance/categories', {}, true),
+    api(`/api/finance/budgets?year=${yr}&month=${parseInt(mo)}`, {}, true),
+  ]);
+  const cats    = catsRes.ok    ? catsRes.data    : [];
+  const budgets = budgetsRes.ok ? budgetsRes.data : [];
+  const budgetMap = Object.fromEntries(budgets.map(b => [b.category_id, b.budget_amount]));
+  document.getElementById('bdm-list').innerHTML = cats.filter(c=>c.active).map(c => `
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="width:10px;height:10px;border-radius:2px;background:${c.color||'#999'};flex-shrink:0"></span>
+      <span style="flex:1;font-size:13px">${escHtml(c.name)}</span>
+      <span style="font-size:11px;color:var(--muted);min-width:28px">${c.type==='income'?'收入':'支出'}</span>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px;color:var(--muted)">$</span>
+        <input class="form-input bdm-amt" data-cat-id="${c.id}" type="number" min="0"
+               value="${budgetMap[c.id]||''}" placeholder="不設限"
+               style="width:110px;padding:5px 8px;font-size:13px">
+      </div>
+    </div>`).join('');
+  document.getElementById('budget-modal').style.display = 'flex';
+}
+function closeBudgetModal() { document.getElementById('budget-modal').style.display='none'; }
+
+async function saveBudgets() {
+  const el = document.getElementById('budget-month');
+  const [yr, mo] = el.value.split('-');
+  const items = [...document.querySelectorAll('.bdm-amt')].map(inp => ({
+    category_id:   parseInt(inp.dataset.catId),
+    budget_amount: parseFloat(inp.value)||0,
+  }));
+  const { ok } = await api('/api/finance/budgets', {
+    method:'POST', body: JSON.stringify({ year:parseInt(yr), month:parseInt(mo), items })
+  });
+  if (ok) { showToast('預算已儲存','success'); closeBudgetModal(); loadBudgetVsActual(); }
+}
+
+// ── 薪資連動 ──────────────────────────────────────────────────
+async function loadPayrollSyncStatus() {
+  const { ok, data } = await api('/api/finance/payroll/status', {}, true);
+  const wrap = document.getElementById('payroll-sync-list');
+  if (!ok || !data.length) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">尚無薪資記錄</div>';
+    return;
+  }
+  wrap.innerHTML = `<table class="data-table" style="margin:0">
+    <thead><tr>
+      <th>月份</th><th style="text-align:right">薪資人數</th>
+      <th style="text-align:right">薪資總額</th>
+      <th>同步狀態</th><th>操作</th>
+    </tr></thead>
+    <tbody>${data.map(r => {
+      const statusBadge = r.all_synced
+        ? '<span class="badge badge-ok">已全部同步</span>'
+        : r.synced > 0
+          ? `<span class="badge badge-warn">部分同步（${r.synced}/${r.total}）</span>`
+          : '<span class="badge" style="background:rgba(214,66,66,0.1);color:var(--red)">未同步</span>';
+      return `<tr>
+        <td style="font-family:'DM Mono',monospace;font-weight:600">${r.month}</td>
+        <td style="text-align:right">${r.total} 人</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600">$${r.total_net_pay.toLocaleString()}</td>
+        <td>${statusBadge}</td>
+        <td>
+          ${!r.all_synced ? `<button class="btn btn-primary btn-sm" onclick="syncPayroll('${r.month}')">同步至財務</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function syncPayroll(month) {
+  if (!confirm(`確定將 ${month} 薪資同步至財務記錄？`)) return;
+  const { ok, data } = await api('/api/finance/payroll/sync', {
+    method:'POST', body: JSON.stringify({ month })
+  });
+  if (!ok) return;
+  showToast(`已建立 ${data.created} 筆薪資費用記錄`, 'success');
+  loadPayrollSyncStatus();
 }
 
 // ── 帳號管理模組 ──────────────────────────────────────────────

@@ -5551,6 +5551,32 @@ def init_finance_db():
             import_batch        TEXT DEFAULT '',
             created_at          TIMESTAMPTZ DEFAULT NOW()
         )""",
+        """CREATE TABLE IF NOT EXISTS finance_payables (
+            id              SERIAL PRIMARY KEY,
+            payable_type    TEXT NOT NULL DEFAULT 'payable',
+            title           TEXT NOT NULL,
+            party_name      TEXT DEFAULT '',
+            invoice_no      TEXT DEFAULT '',
+            amount          NUMERIC(14,2) NOT NULL DEFAULT 0,
+            due_date        DATE,
+            status          TEXT NOT NULL DEFAULT 'open',
+            paid_date       DATE,
+            linked_record_id INT REFERENCES finance_records(id) ON DELETE SET NULL,
+            note            TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS finance_budgets (
+            id              SERIAL PRIMARY KEY,
+            year            INT NOT NULL,
+            month           INT NOT NULL,
+            category_id     INT REFERENCES finance_categories(id) ON DELETE CASCADE,
+            budget_amount   NUMERIC(14,2) NOT NULL DEFAULT 0,
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(year, month, category_id)
+        )""",
+        "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS finance_synced BOOLEAN DEFAULT FALSE",
     ]
     for sql in migrations:
         try:
@@ -6685,3 +6711,294 @@ def api_finance_tax(year, period):
         'tax_payable': tax_payable,
         'is_refund':   tax_payable < 0,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Feature 4: 應收/應付帳款 (AR/AP Tracking)
+# ═══════════════════════════════════════════════════════════════════
+
+def _payable_row(r):
+    if not r: return None
+    d = dict(r)
+    if d.get('due_date'):   d['due_date']   = str(d['due_date'])
+    if d.get('paid_date'):  d['paid_date']  = str(d['paid_date'])
+    if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
+    if d.get('updated_at'): d['updated_at'] = d['updated_at'].isoformat()
+    if d.get('amount') is not None: d['amount'] = float(d['amount'])
+    return d
+
+@app.route('/api/finance/payables', methods=['GET'])
+@require_module('finance')
+def api_payables_list():
+    from datetime import date as _d
+    ptype  = request.args.get('type', '')      # receivable / payable
+    status = request.args.get('status', '')    # open / paid / overdue
+    conds, params = ['TRUE'], []
+    if ptype:  conds.append("payable_type=%s"); params.append(ptype)
+    if status == 'overdue':
+        conds.append("status='open' AND due_date < CURRENT_DATE")
+    elif status:
+        conds.append("status=%s"); params.append(status)
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT *, CURRENT_DATE - due_date AS days_overdue
+            FROM finance_payables
+            WHERE {' AND '.join(conds)}
+            ORDER BY
+              CASE WHEN status='open' AND due_date < CURRENT_DATE THEN 0
+                   WHEN status='open' THEN 1
+                   ELSE 2 END,
+              due_date
+        """, params).fetchall()
+    result = []
+    for r in rows:
+        d = _payable_row(r)
+        d['days_overdue'] = int(r['days_overdue']) if r['days_overdue'] is not None else 0
+        # Compute effective status
+        if d['status'] == 'open' and d.get('due_date') and str(_d.today()) > d['due_date']:
+            d['effective_status'] = 'overdue'
+        else:
+            d['effective_status'] = d['status']
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/finance/payables', methods=['POST'])
+@require_module('finance')
+def api_payable_create():
+    b = request.get_json(force=True)
+    if not b.get('title','').strip(): return jsonify({'error': '標題為必填'}), 400
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO finance_payables
+              (payable_type, title, party_name, invoice_no, amount, due_date, status, note)
+            VALUES (%s,%s,%s,%s,%s,%s,'open',%s) RETURNING *
+        """, (b.get('payable_type','payable'), b['title'].strip(),
+              b.get('party_name','').strip(), b.get('invoice_no','').strip(),
+              float(b.get('amount',0)), b.get('due_date') or None,
+              b.get('note','').strip())).fetchone()
+    return jsonify(_payable_row(row)), 201
+
+@app.route('/api/finance/payables/<int:pid>', methods=['PUT'])
+@require_module('finance')
+def api_payable_update(pid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE finance_payables SET
+              payable_type=%s, title=%s, party_name=%s, invoice_no=%s,
+              amount=%s, due_date=%s, status=%s,
+              paid_date=%s, note=%s, updated_at=NOW()
+            WHERE id=%s RETURNING *
+        """, (b.get('payable_type','payable'), b.get('title','').strip(),
+              b.get('party_name','').strip(), b.get('invoice_no','').strip(),
+              float(b.get('amount',0)), b.get('due_date') or None,
+              b.get('status','open'), b.get('paid_date') or None,
+              b.get('note','').strip(), pid)).fetchone()
+    return jsonify(_payable_row(row)) if row else ('', 404)
+
+@app.route('/api/finance/payables/<int:pid>', methods=['DELETE'])
+@require_module('finance')
+def api_payable_delete(pid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM finance_payables WHERE id=%s", (pid,))
+    return jsonify({'deleted': pid})
+
+@app.route('/api/finance/payables/aging', methods=['GET'])
+@require_module('finance')
+def api_payables_aging():
+    ptype = request.args.get('type', 'payable')
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT *,
+              CURRENT_DATE - due_date AS days_overdue
+            FROM finance_payables
+            WHERE payable_type=%s AND status='open'
+        """, (ptype,)).fetchall()
+    buckets = {'current': 0, 'd1_30': 0, 'd31_60': 0, 'd61_90': 0, 'd90plus': 0}
+    bucket_rows = {'current': [], 'd1_30': [], 'd31_60': [], 'd61_90': [], 'd90plus': []}
+    for r in rows:
+        do = int(r['days_overdue']) if r['days_overdue'] is not None else 0
+        d = _payable_row(r)
+        d['days_overdue'] = do
+        if do <= 0:    k = 'current'
+        elif do <= 30: k = 'd1_30'
+        elif do <= 60: k = 'd31_60'
+        elif do <= 90: k = 'd61_90'
+        else:          k = 'd90plus'
+        buckets[k]      += float(r['amount'])
+        bucket_rows[k].append(d)
+    return jsonify({'buckets': buckets, 'rows': bucket_rows, 'type': ptype})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Feature 5: 預算管理 (Budget vs Actual)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/finance/budgets', methods=['GET'])
+@require_module('finance')
+def api_budgets_list():
+    year  = request.args.get('year',  '')
+    month = request.args.get('month', '')
+    if not year or not month:
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=8)))
+        year, month = str(now.year), str(now.month)
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT fb.*, fc.name as category_name, fc.type as category_type, fc.color
+            FROM finance_budgets fb
+            JOIN finance_categories fc ON fc.id=fb.category_id
+            WHERE fb.year=%s AND fb.month=%s
+            ORDER BY fc.type, fc.sort_order
+        """, (int(year), int(month))).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d['budget_amount'] = float(d['budget_amount'])
+        if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
+        if d.get('updated_at'): d['updated_at'] = d['updated_at'].isoformat()
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/finance/budgets', methods=['POST'])
+@require_module('finance')
+def api_budgets_save():
+    """Upsert list of budgets: [{category_id, budget_amount}]"""
+    b = request.get_json(force=True)
+    year  = int(b.get('year',  0))
+    month = int(b.get('month', 0))
+    items = b.get('items', [])
+    if not year or not month: return jsonify({'error': '年月為必填'}), 400
+    with get_db() as conn:
+        for it in items:
+            cid = it.get('category_id')
+            amt = float(it.get('budget_amount', 0))
+            if cid is None: continue
+            if amt == 0:
+                conn.execute("DELETE FROM finance_budgets WHERE year=%s AND month=%s AND category_id=%s",
+                             (year, month, cid))
+            else:
+                conn.execute("""
+                    INSERT INTO finance_budgets (year, month, category_id, budget_amount, updated_at)
+                    VALUES (%s,%s,%s,%s,NOW())
+                    ON CONFLICT (year, month, category_id)
+                    DO UPDATE SET budget_amount=EXCLUDED.budget_amount, updated_at=NOW()
+                """, (year, month, cid, amt))
+    return jsonify({'ok': True})
+
+@app.route('/api/finance/budgets/vs-actual', methods=['GET'])
+@require_module('finance')
+def api_budgets_vs_actual():
+    year  = request.args.get('year',  '')
+    month = request.args.get('month', '')
+    if not year or not month:
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=8)))
+        year, month = str(now.year), str(now.month)
+    period = f"{year}-{str(month).zfill(2)}"
+    with get_db() as conn:
+        cats = conn.execute("""
+            SELECT id, name, type, color FROM finance_categories WHERE active=TRUE ORDER BY type, sort_order
+        """).fetchall()
+        budgets = conn.execute("""
+            SELECT category_id, budget_amount FROM finance_budgets WHERE year=%s AND month=%s
+        """, (int(year), int(month))).fetchall()
+        actuals = conn.execute("""
+            SELECT category_id, SUM(amount) as total
+            FROM finance_records
+            WHERE TO_CHAR(record_date,'YYYY-MM')=%s
+            GROUP BY category_id
+        """, (period,)).fetchall()
+    budget_map = {r['category_id']: float(r['budget_amount']) for r in budgets}
+    actual_map = {r['category_id']: float(r['total']) for r in actuals}
+    result = []
+    for c in cats:
+        cid = c['id']
+        bgt = budget_map.get(cid, 0)
+        act = actual_map.get(cid, 0)
+        pct = round(act / bgt * 100, 1) if bgt > 0 else None
+        result.append({
+            'category_id':   cid,
+            'category_name': c['name'],
+            'category_type': c['type'],
+            'color':         c['color'],
+            'budget':        bgt,
+            'actual':        act,
+            'remaining':     round(bgt - act, 2),
+            'pct':           pct,
+            'over_budget':   bgt > 0 and act > bgt,
+        })
+    return jsonify({'year': year, 'month': month, 'items': result})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Feature 6: 薪資費用連動 (Payroll → Finance)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/finance/payroll/status', methods=['GET'])
+@require_module('finance')
+def api_payroll_status():
+    """列出各月薪資是否已同步至財務"""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT month,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN finance_synced THEN 1 ELSE 0 END) as synced,
+                   SUM(net_pay) as total_net_pay
+            FROM salary_records
+            WHERE status IN ('confirmed','draft')
+            GROUP BY month ORDER BY month DESC LIMIT 24
+        """).fetchall()
+    return jsonify([{
+        'month':         r['month'],
+        'total':         int(r['total']),
+        'synced':        int(r['synced']),
+        'total_net_pay': float(r['total_net_pay'] or 0),
+        'all_synced':    int(r['synced']) == int(r['total']),
+    } for r in rows])
+
+@app.route('/api/finance/payroll/sync', methods=['POST'])
+@require_module('finance')
+def api_payroll_sync():
+    """將指定月份已確認薪資寫入財務記錄"""
+    b     = request.get_json(force=True)
+    month = b.get('month', '')
+    if not month: return jsonify({'error': '請提供月份'}), 400
+    # Find or create 薪資支出 category
+    with get_db() as conn:
+        cat = conn.execute("""
+            SELECT id FROM finance_categories WHERE name='薪資支出' AND type='expense' LIMIT 1
+        """).fetchone()
+        if not cat:
+            cat = conn.execute("""
+                INSERT INTO finance_categories (name,type,color,sort_order)
+                VALUES ('薪資支出','expense','#e07b2a',11) RETURNING *
+            """).fetchone()
+        cat_id = cat['id']
+
+        records = conn.execute("""
+            SELECT sr.*, ps.name as staff_name
+            FROM salary_records sr
+            JOIN punch_staff ps ON ps.id=sr.staff_id
+            WHERE sr.month=%s AND sr.finance_synced=FALSE
+        """, (month,)).fetchall()
+
+        if not records:
+            return jsonify({'created': 0, 'message': '無需同步的薪資記錄'})
+
+        record_date = f"{month}-{str(28).zfill(2)}"  # Use 28th as payroll date
+        created = 0
+        for sr in records:
+            # Main salary entry
+            conn.execute("""
+                INSERT INTO finance_records
+                  (record_date, category_id, type, title, amount, note, created_by)
+                VALUES (%s,%s,'expense',%s,%s,%s,'payroll-sync')
+            """, (record_date, cat_id,
+                  f"{sr['staff_name']} {month} 薪資",
+                  float(sr['net_pay']),
+                  f"薪資記錄 #{sr['id']}"))
+            conn.execute("UPDATE salary_records SET finance_synced=TRUE WHERE id=%s", (sr['id'],))
+            created += 1
+
+    return jsonify({'created': created, 'month': month})

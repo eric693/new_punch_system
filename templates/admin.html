@@ -627,6 +627,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="shift-month" onchange="loadShiftCalendar()">
         <span style="flex:1"></span>
+        <button class="btn btn-outline btn-sm" onclick="openShiftImportModal()">匯入班表</button>
         <button class="btn btn-primary btn-sm" onclick="openShiftAssignModal()">指派班別</button>
         <button class="btn btn-outline btn-sm" onclick="loadShiftCalendar()">重新整理</button>
       </div>
@@ -1093,6 +1094,53 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div>
 </div>
 
+
+<!-- Shift Import Modal -->
+<div class="modal-overlay" id="shift-import-modal" style="display:none">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <span class="modal-title">匯入班表</span>
+      <button class="modal-close" onclick="closeShiftImportModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- 格式說明 -->
+      <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--text)">CSV 格式說明</div>
+        <div style="color:var(--muted);line-height:1.8">
+          第一列為表頭：<code style="background:var(--border);padding:1px 5px;border-radius:4px">姓名,日期,班別,備註</code>（備註可省略）<br>
+          或使用員工代碼：<code style="background:var(--border);padding:1px 5px;border-radius:4px">代碼,日期,班別,備註</code><br>
+          日期格式：<code style="background:var(--border);padding:1px 5px;border-radius:4px">YYYY-MM-DD</code>（例：2026-04-01）<br>
+          班別名稱需與系統班別設定完全相符
+        </div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="downloadShiftImportSample()">下載範例 CSV</button>
+      </div>
+      <!-- 上傳區 -->
+      <div id="sim-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s"
+           onclick="document.getElementById('sim-file-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--green)'"
+           ondragleave="this.style.borderColor='var(--border)'"
+           ondrop="handleSimDrop(event)">
+        <div style="font-size:13px;color:var(--muted)">點擊選擇 CSV 檔案，或將檔案拖曳至此</div>
+        <div id="sim-filename" style="font-size:12px;color:var(--green);margin-top:6px"></div>
+        <input type="file" id="sim-file-input" accept=".csv,text/csv" style="display:none" onchange="handleSimFile(this.files[0])">
+      </div>
+      <!-- 選項 -->
+      <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="sim-force" style="width:15px;height:15px;accent-color:var(--green)">
+        <label for="sim-force" style="font-size:13px;cursor:pointer">強制匯入（忽略排休衝突，直接覆蓋）</label>
+      </div>
+      <!-- 結果區 -->
+      <div id="sim-result" style="margin-top:14px;display:none">
+        <div id="sim-result-msg" style="font-size:13px;font-weight:600;margin-bottom:8px"></div>
+        <div id="sim-result-detail" style="font-size:12px;max-height:180px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeShiftImportModal()">關閉</button>
+      <button class="btn btn-primary" id="sim-upload-btn" onclick="doShiftImport()" disabled>上傳匯入</button>
+    </div>
+  </div>
+</div>
 
 <!-- Holiday Modal -->
 <div class="modal-overlay" id="holiday-modal" style="display:none">
@@ -3027,6 +3075,87 @@ async function deleteShiftType(id) {
   showToast('已刪除','success'); await loadShiftTypes();
 }
 
+
+// ── 匯入班表 ─────────────────────────────────────────────────
+let simFile = null;
+function openShiftImportModal() {
+  simFile = null;
+  document.getElementById('sim-file-input').value = '';
+  document.getElementById('sim-filename').textContent = '';
+  document.getElementById('sim-force').checked = false;
+  document.getElementById('sim-result').style.display = 'none';
+  document.getElementById('sim-upload-btn').disabled = true;
+  document.getElementById('shift-import-modal').style.display = 'flex';
+}
+function closeShiftImportModal() { document.getElementById('shift-import-modal').style.display = 'none'; }
+function handleSimFile(file) {
+  if (!file) return;
+  simFile = file;
+  document.getElementById('sim-filename').textContent = `已選擇：${file.name}`;
+  document.getElementById('sim-upload-btn').disabled = false;
+  document.getElementById('sim-result').style.display = 'none';
+}
+function handleSimDrop(e) {
+  e.preventDefault();
+  document.getElementById('sim-drop-zone').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (file) handleSimFile(file);
+}
+function downloadShiftImportSample() {
+  const items = shiftTypes.length ? shiftTypes.slice(0,3).map(t=>t.name) : ['外場A班','外場B班','廚房A班'];
+  const staff = punchStaffList.length ? punchStaffList.slice(0,3).map(s=>s.name) : ['張小明','李小花','王大華'];
+  const today = new Date(); const y = today.getFullYear(); const m = String(today.getMonth()+2).padStart(2,'0');
+  const rows = [
+    '姓名,日期,班別,備註',
+    `${staff[0]||'張小明'},${y}-${m}-01,${items[0]||'外場A班'},`,
+    `${staff[1]||'李小花'},${y}-${m}-01,${items[1]||'外場B班'},`,
+    `${staff[0]||'張小明'},${y}-${m}-02,${items[0]||'外場A班'},`,
+    `${staff[2]||'王大華'},${y}-${m}-03,${items[2]||'廚房A班'},加班`,
+    '',
+    '# 說明：代碼欄位可替換姓名欄，例：',
+    `代碼,日期,班別,備註`,
+    `EMP001,${y}-${m}-01,${items[0]||'外場A班'},`,
+  ];
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `班表匯入範例_${y}${m}.csv`; a.click();
+}
+async function doShiftImport() {
+  if (!simFile) return;
+  const force = document.getElementById('sim-force').checked;
+  const btn = document.getElementById('sim-upload-btn');
+  btn.disabled = true; btn.textContent = '匯入中...';
+  const formData = new FormData(); formData.append('file', simFile);
+  const resp = await fetch(`/api/shifts/import${force?'?force=1':''}`, {method:'POST', body: formData});
+  btn.textContent = '上傳匯入';
+  const data = await resp.json();
+  const resultDiv = document.getElementById('sim-result');
+  const msgDiv    = document.getElementById('sim-result-msg');
+  const detailDiv = document.getElementById('sim-result-detail');
+  resultDiv.style.display = 'block';
+  if (!resp.ok && data.error) {
+    msgDiv.style.color = 'var(--red)'; msgDiv.textContent = data.error; detailDiv.innerHTML = ''; btn.disabled = false; return;
+  }
+  msgDiv.style.color = data.errors?.length ? 'var(--yellow,#e07b2a)' : 'var(--green)';
+  msgDiv.textContent = data.message || `匯入完成：${data.created} 筆`;
+  let detail = '';
+  if (data.skipped?.length) {
+    detail += `<div style="color:var(--yellow,#e07b2a);margin-bottom:4px;font-weight:600">排休衝突跳過（${data.skipped.length} 筆）</div>`;
+    detail += data.skipped.map(x=>`<div style="padding:2px 0;color:var(--muted)">第 ${x.row} 列：${escHtml(x.reason)}</div>`).join('');
+  }
+  if (data.errors?.length) {
+    detail += `<div style="color:var(--red);margin-top:6px;margin-bottom:4px;font-weight:600">錯誤（${data.errors.length} 筆）</div>`;
+    detail += data.errors.map(x=>`<div style="padding:2px 0;color:var(--muted)">第 ${x.row} 列：${escHtml(x.reason)}</div>`).join('');
+  }
+  detailDiv.innerHTML = detail;
+  if (data.created > 0) {
+    btn.disabled = true;
+    await loadShiftCalendar();
+    showToast(data.message || `成功匯入 ${data.created} 筆排班`, 'success');
+  } else {
+    btn.disabled = false;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 // 請假管理模組

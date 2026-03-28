@@ -1878,6 +1878,134 @@ def api_shift_assignment_batch_delete():
     return jsonify({'deleted': deleted})
 
 
+@app.route('/api/shifts/import', methods=['POST'])
+@login_required
+def api_shift_import():
+    """
+    匯入班表 CSV。
+    表頭（第一列）：姓名,日期,班別,備註  或  代碼,日期,班別,備註
+    日期格式：YYYY-MM-DD
+    force=1 query param 可強制覆蓋排休衝突。
+    """
+    import csv, io as _io
+    force = request.args.get('force', '0') == '1'
+
+    # 支援 multipart file 或 raw text/csv body
+    if 'file' in request.files:
+        raw = request.files['file'].read().decode('utf-8-sig')
+    else:
+        raw = request.get_data(as_text=True)
+
+    if not raw.strip():
+        return jsonify({'error': '檔案內容為空'}), 400
+
+    reader = csv.DictReader(_io.StringIO(raw))
+    # 正規化欄位名稱（去空白）
+    if reader.fieldnames is None:
+        return jsonify({'error': '無法解析 CSV 欄位'}), 400
+    reader.fieldnames = [f.strip() for f in reader.fieldnames]
+
+    # 確認必要欄位存在
+    has_name = '姓名' in reader.fieldnames
+    has_code = '代碼' in reader.fieldnames
+    if not (has_name or has_code):
+        return jsonify({'error': 'CSV 缺少「姓名」或「代碼」欄位'}), 400
+    if '日期' not in reader.fieldnames:
+        return jsonify({'error': 'CSV 缺少「日期」欄位'}), 400
+    if '班別' not in reader.fieldnames:
+        return jsonify({'error': 'CSV 缺少「班別」欄位'}), 400
+
+    rows = list(reader)
+    if not rows:
+        return jsonify({'error': 'CSV 無資料列'}), 400
+
+    with get_db() as conn:
+        # 預先建立索引，避免逐列查詢
+        staff_by_name = {r['name']: r['id'] for r in conn.execute(
+            "SELECT id, name FROM punch_staff WHERE active=TRUE"
+        ).fetchall()}
+        staff_by_code = {r['employee_code']: r['id'] for r in conn.execute(
+            "SELECT id, employee_code FROM punch_staff WHERE active=TRUE AND employee_code IS NOT NULL AND employee_code!=''",
+        ).fetchall()}
+        shift_by_name = {r['name']: r['id'] for r in conn.execute(
+            "SELECT id, name FROM shift_types WHERE active=TRUE"
+        ).fetchall()}
+
+        # 預先讀取所有涉及員工的核准排休（僅在非強制時）
+        leave_lookup = {}   # { staff_id: set(date_str) }
+        if not force:
+            leave_rows = conn.execute("""
+                SELECT staff_id, dates FROM schedule_requests
+                WHERE status='approved'
+            """).fetchall()
+            for lr in leave_rows:
+                sid = lr['staff_id']
+                dates_val = lr['dates']
+                if isinstance(dates_val, str):
+                    try: dates_val = _json.loads(dates_val)
+                    except: dates_val = []
+                if sid not in leave_lookup:
+                    leave_lookup[sid] = set()
+                leave_lookup[sid].update(dates_val or [])
+
+        created = 0
+        skipped = []   # 衝突（排休）
+        errors  = []   # 找不到員工/班別、日期格式錯誤
+
+        for i, row in enumerate(rows, start=2):   # 從第2列計算（第1列是表頭）
+            name_val = row.get('姓名', '').strip()
+            code_val = row.get('代碼', '').strip()
+            date_str = row.get('日期', '').strip()
+            shift_name = row.get('班別', '').strip()
+            note = row.get('備註', '').strip()
+
+            # 找員工 ID
+            staff_id = None
+            if code_val:
+                staff_id = staff_by_code.get(code_val)
+            if staff_id is None and name_val:
+                staff_id = staff_by_name.get(name_val)
+            if staff_id is None:
+                errors.append({'row': i, 'reason': f'找不到員工：{code_val or name_val}'})
+                continue
+
+            # 找班別 ID
+            shift_id = shift_by_name.get(shift_name)
+            if shift_id is None:
+                errors.append({'row': i, 'reason': f'找不到班別：{shift_name}'})
+                continue
+
+            # 驗證日期
+            try:
+                from datetime import date as _date
+                _date.fromisoformat(date_str)
+            except ValueError:
+                errors.append({'row': i, 'reason': f'日期格式錯誤：{date_str}（應為 YYYY-MM-DD）'})
+                continue
+
+            # 排休衝突檢查
+            if not force and date_str in leave_lookup.get(staff_id, set()):
+                display = name_val or code_val
+                skipped.append({'row': i, 'reason': f'{display} 於 {date_str} 有核准排休'})
+                continue
+
+            # 寫入（衝突則覆蓋）
+            conn.execute("""
+                INSERT INTO shift_assignments (staff_id, shift_type_id, shift_date, note)
+                VALUES (%s,%s,%s,%s)
+                ON CONFLICT (staff_id, shift_date) DO UPDATE
+                  SET shift_type_id=%s, note=%s, created_at=NOW()
+            """, (staff_id, shift_id, date_str, note, shift_id, note))
+            created += 1
+
+    result = {'created': created, 'skipped': skipped, 'errors': errors}
+    if errors or skipped:
+        result['message'] = f'匯入完成：{created} 筆成功，{len(skipped)} 筆排休衝突跳過，{len(errors)} 筆錯誤'
+    else:
+        result['message'] = f'匯入完成：共 {created} 筆排班'
+    return jsonify(result), 201
+
+
 @app.route('/api/shifts/my-schedule', methods=['GET'])
 def api_my_shift_schedule():
     sid = session.get('punch_staff_id')

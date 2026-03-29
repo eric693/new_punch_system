@@ -274,6 +274,23 @@ def init_db():
         "ALTER TABLE overtime_requests ADD COLUMN IF NOT EXISTS day_type TEXT DEFAULT 'weekday'",
         "ALTER TABLE overtime_requests ALTER COLUMN start_time DROP NOT NULL",
         "ALTER TABLE overtime_requests ALTER COLUMN end_time DROP NOT NULL",
+        # 員工個人/保險欄位
+        "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS national_id TEXT DEFAULT ''",
+        "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT ''",
+        "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS insurance_type TEXT DEFAULT 'regular'",
+        "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''",
+        # 多店
+        """CREATE TABLE IF NOT EXISTS stores (
+            id         SERIAL PRIMARY KEY,
+            name       TEXT NOT NULL,
+            code       TEXT UNIQUE,
+            address    TEXT DEFAULT '',
+            active     BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id) ON DELETE SET NULL",
+        "ALTER TABLE punch_locations ADD COLUMN IF NOT EXISTS store_id INT REFERENCES stores(id) ON DELETE SET NULL",
+        "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS store_ids JSONB DEFAULT '[]'",
         "ALTER TABLE schedule_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()",
         """CREATE TABLE IF NOT EXISTS shift_staffing_requirements (
             id            SERIAL PRIMARY KEY,
@@ -316,6 +333,15 @@ def init_db():
                 print("[OK] Default super admin seeded (username: admin)")
     except Exception as e:
         print(f"[WARN] admin seed: {e}")
+
+    # 確保預設店家存在，並補齊舊資料
+    try:
+        with get_db() as conn:
+            conn.execute("INSERT INTO stores (name, code) VALUES ('主店','main') ON CONFLICT (code) DO NOTHING")
+            conn.execute("UPDATE punch_staff     SET store_id=(SELECT id FROM stores WHERE code='main') WHERE store_id IS NULL")
+            conn.execute("UPDATE punch_locations SET store_id=(SELECT id FROM stores WHERE code='main') WHERE store_id IS NULL")
+    except Exception as e:
+        print(f"[WARN] store seed: {e}")
 
     print("[OK] Database initialised")
 
@@ -3617,6 +3643,7 @@ def init_salary_db():
         )""",
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS salary_item_ids JSONB DEFAULT NULL",
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS salary_item_overrides JSONB DEFAULT NULL",
+        "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS income_tax_withheld NUMERIC(12,2) DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS salary_records (
             id              SERIAL PRIMARY KEY,
             staff_id        INT REFERENCES punch_staff(id) ON DELETE CASCADE,
@@ -4343,7 +4370,8 @@ def api_salary_staff_update(sid):
               base_salary=%s, insured_salary=%s, daily_hours=%s,
               ot_rate1=%s, ot_rate2=%s, salary_type=%s,
               hourly_rate=%s, vacation_quota=%s, salary_notes=%s,
-              salary_item_ids=%s, salary_item_overrides=%s
+              salary_item_ids=%s, salary_item_overrides=%s,
+              national_id=%s, gender=%s, insurance_type=%s, address=%s
             WHERE id=%s
         """, (_s('employee_code'), _s('department'), _s('position_title'),
               _s('hire_date'), _s('birth_date'),
@@ -4351,7 +4379,12 @@ def api_salary_staff_update(sid):
               _f('ot_rate1') or 1.33, _f('ot_rate2') or 1.67,
               b.get('salary_type','monthly'),
               _f('hourly_rate'), b.get('vacation_quota') or None,
-              b.get('salary_notes',''), salary_item_ids_json, overrides_json, sid))
+              b.get('salary_notes',''), salary_item_ids_json, overrides_json,
+              (b.get('national_id') or '').strip(),
+              (b.get('gender') or '').strip(),
+              (b.get('insurance_type') or 'regular').strip(),
+              (b.get('address') or '').strip(),
+              sid))
         row = conn.execute("SELECT * FROM punch_staff WHERE id=%s", (sid,)).fetchone()
     return jsonify(punch_staff_row(row)) if row else ('', 404)
 
@@ -5519,6 +5552,340 @@ def api_dashboard_leave_distribution():
             'pct':   round(float(r['days']) / total * 100, 1) if total > 0 else 0,
         } for r in rows],
     })
+
+
+# ── 年度扣繳憑單 ────────────────────────────────────────────────────────────
+
+@app.route('/api/export/withholding', methods=['GET'])
+@require_module('salary')
+def api_export_withholding():
+    """年度薪資所得扣繳憑單（所得類別50）"""
+    from datetime import date as _dwh
+    year   = request.args.get('year', str(_dwh.today().year))
+    fmt    = request.args.get('format', 'html')
+
+    fs = _get_finance_settings()
+    company_name   = fs.get('company_name', '')
+    company_tax_id = fs.get('company_tax_id', '')
+    company_address= fs.get('company_address', '')
+
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT ps.id, ps.name, ps.national_id, ps.address,
+                   COALESCE(SUM(sr.allowance_total), 0)       AS gross_salary,
+                   COALESCE(SUM(sr.income_tax_withheld), 0)   AS tax_withheld,
+                   COALESCE(AVG(sr.insured_salary), 0)        AS avg_insured
+            FROM salary_records sr
+            JOIN punch_staff ps ON ps.id = sr.staff_id
+            WHERE sr.month LIKE %s AND sr.status='confirmed'
+            GROUP BY ps.id, ps.name, ps.national_id, ps.address
+            ORDER BY ps.name
+        """, (f'{year}-%',)).fetchall()
+
+    # 計算二代健保補充費
+    def supp_nhi(gross, insured):
+        base = float(gross) - float(insured) * 12
+        return max(0, round(base * 0.0211, 0)) if base > 0 else 0
+
+    data = []
+    for i, r in enumerate(rows, 1):
+        gross = float(r['gross_salary'])
+        insured = float(r['avg_insured'])
+        data.append({
+            'no':          i,
+            'name':        r['name'],
+            'national_id': r['national_id'] or '—',
+            'address':     r['address'] or '—',
+            'gross':       gross,
+            'supp_nhi':    supp_nhi(gross, insured),
+            'tax':         float(r['tax_withheld']),
+        })
+
+    if fmt == 'xlsx':
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from io import BytesIO
+        wb = wb2 = openpyxl.Workbook()
+        ws = wb.active; ws.title = f'{year}年扣繳憑單'
+        hfill = PatternFill('solid', fgColor='0F1C3A')
+        thin  = Border(*[Side(style='thin', color='DDDDDD')]*4)
+        hdrs  = ['序號','姓名','身分證字號','地址','年度薪資合計','二代健保補充費','扣繳稅額']
+        ws.append(hdrs)
+        for ci, h in enumerate(hdrs, 1):
+            c = ws.cell(1, ci); c.font = Font(bold=True, color='FFFFFF', size=10); c.fill = hfill
+            c.alignment = Alignment(horizontal='center', vertical='center'); c.border = thin
+        ws.column_dimensions['A'].width = 5; ws.column_dimensions['B'].width = 12
+        ws.column_dimensions['C'].width = 14; ws.column_dimensions['D'].width = 30
+        ws.column_dimensions['E'].width = 16; ws.column_dimensions['F'].width = 16; ws.column_dimensions['G'].width = 12
+        for d in data:
+            ws.append([d['no'], d['name'], d['national_id'], d['address'],
+                       d['gross'], d['supp_nhi'], d['tax']])
+        buf = BytesIO(); wb.save(buf); buf.seek(0)
+        from flask import Response as _FR2
+        return _FR2(buf.read(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename=withholding_{year}.xlsx'})
+
+    # HTML printable
+    rows_html = ''.join(f"""
+      <tr>
+        <td style="text-align:center">{d['no']}</td>
+        <td>{d['name']}</td>
+        <td style="font-family:monospace">{d['national_id']}</td>
+        <td style="font-size:11px">{d['address']}</td>
+        <td style="text-align:right;font-family:monospace">{d['gross']:,.0f}</td>
+        <td style="text-align:right;font-family:monospace">{d['supp_nhi']:,.0f}</td>
+        <td style="text-align:right;font-family:monospace">{d['tax']:,.0f}</td>
+      </tr>""" for d in data)
+    html = f"""<!DOCTYPE html><html lang="zh-TW"><head>
+<meta charset="UTF-8"><title>{year}年度薪資扣繳憑單</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:'Noto Sans TC',sans-serif;font-size:12px;padding:20px;color:#1e2a45}}
+h2{{font-size:16px;font-weight:700;margin-bottom:4px}}
+.meta{{font-size:11px;color:#666;margin-bottom:16px}}
+table{{width:100%;border-collapse:collapse;margin-bottom:20px}}
+th{{background:#0f1c3a;color:#fff;padding:7px 10px;font-size:11px;font-weight:600;text-align:left}}
+td{{padding:6px 10px;border-bottom:1px solid #eee;font-size:12px}}
+tr:nth-child(even){{background:#f8f9fb}}
+.note{{font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px}}
+@media print{{button{{display:none}}}}
+</style></head><body>
+<button onclick="window.print()" style="margin-bottom:16px;padding:6px 16px;background:#0f1c3a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">列印</button>
+<h2>{year} 年度薪資所得扣繳憑單（所得類別 50）</h2>
+<div class="meta">扣繳義務人：{company_name}　統一編號：{company_tax_id}　地址：{company_address}　製表日期：{_dwh.today().isoformat()}</div>
+<table>
+<thead><tr><th>#</th><th>員工姓名</th><th>身分證字號</th><th>地址</th><th>年度薪資合計(元)</th><th>二代健保補充費(元)</th><th>扣繳稅額(元)</th></tr></thead>
+<tbody>{rows_html}</tbody>
+</table>
+<div class="note">※ 本報表依薪資紀錄計算，二代健保補充費 = 超出投保薪資部分 × 2.11%。扣繳稅額請依各月薪資記錄人工確認。</div>
+</body></html>"""
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+
+# ── 勞健保 EDI 申報 ─────────────────────────────────────────────────────────
+
+def _get_insurance_settings():
+    try:
+        with get_db() as conn:
+            rows = conn.execute("SELECT setting_key, setting_value FROM insurance_settings").fetchall()
+        return {r['setting_key']: r['setting_value'] for r in rows}
+    except Exception:
+        return {}
+
+def _roc_date(date_str):
+    """Convert YYYY-MM-DD to YYYMMDD (ROC year)"""
+    if not date_str: return '0000000'
+    try:
+        from datetime import date as _dedi
+        d = _dedi.fromisoformat(str(date_str)[:10])
+        return f'{d.year - 1911:03d}{d.month:02d}{d.day:02d}'
+    except Exception:
+        return '0000000'
+
+def _edi_bytes(val, width, numeric=False):
+    """Encode value to fixed-width bytes (Big5 for text, ASCII-padded for numeric)"""
+    s = str(val or '')
+    if numeric:
+        return s.rjust(width, '0').encode('ascii', errors='replace')[:width]
+    try:
+        b = s.encode('big5', errors='replace')
+    except Exception:
+        b = s.encode('ascii', errors='replace')
+    if len(b) < width:
+        b = b + b' ' * (width - len(b))
+    return b[:width]
+
+
+@app.route('/api/insurance/settings', methods=['GET'])
+@require_module('salary')
+def api_insurance_settings_get():
+    return jsonify(_get_insurance_settings())
+
+@app.route('/api/insurance/settings', methods=['PUT'])
+@require_module('salary')
+def api_insurance_settings_put():
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        for k in ('labor_insurance_no', 'health_insurance_no', 'employer_name', 'employer_id'):
+            conn.execute(
+                "INSERT INTO insurance_settings VALUES (%s,%s) ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value",
+                (k, str(b.get(k, '')).strip()))
+    return jsonify({'ok': True})
+
+
+def _get_edi_staff(staff_ids_str):
+    """Fetch staff rows for EDI, optionally filtered by comma-separated IDs."""
+    with get_db() as conn:
+        if staff_ids_str:
+            ids = [int(x) for x in staff_ids_str.split(',') if x.strip().isdigit()]
+            rows = conn.execute(
+                f"SELECT * FROM punch_staff WHERE id = ANY(%s) AND active=TRUE ORDER BY name",
+                (ids,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM punch_staff WHERE active=TRUE ORDER BY name").fetchall()
+    return rows
+
+
+@app.route('/api/export/edi/labor-enroll', methods=['GET'])
+@require_module('salary')
+def api_edi_labor_enroll():
+    """勞工保險加退保申報 EDI（Big5 固定寬度格式）"""
+    event_type  = request.args.get('event_type', 'in')   # in=加保 out=退保
+    staff_ids   = request.args.get('staff_ids', '')
+    event_date  = request.args.get('event_date', '')
+    cfg         = _get_insurance_settings()
+    labor_no    = cfg.get('labor_insurance_no', '').ljust(8)[:8]
+    event_code  = b'1' if event_type == 'in' else b'2'
+    event_roc   = _roc_date(event_date).encode('ascii')
+
+    lines = []
+    for s in _get_edi_staff(staff_ids):
+        gender_code = b'1' if (s.get('gender') or '').upper() in ('M', '男') else b'2'
+        insured = str(int(float(s.get('insured_salary') or 0))).rjust(6, '0').encode('ascii')
+        line = (
+            _edi_bytes(labor_no, 8) +
+            _edi_bytes(s['name'], 20) +
+            _edi_bytes(s.get('national_id', ''), 10) +
+            _roc_date(s.get('birth_date')).encode('ascii') +
+            event_roc +
+            event_code +
+            insured +
+            gender_code +
+            b'00'   # 職業類別（一般）
+        )
+        lines.append(line)
+    content = b'\r\n'.join(lines)
+    fname   = f'labor_{"enroll" if event_type=="in" else "exit"}_{event_date or "date"}.edi'
+    from flask import Response as _FRe
+    return _FRe(content, mimetype='application/octet-stream',
+                headers={'Content-Disposition': f'attachment; filename={fname}'})
+
+
+@app.route('/api/export/edi/labor-salary', methods=['GET'])
+@require_module('salary')
+def api_edi_labor_salary():
+    """勞工保險投保薪資調整申報 EDI"""
+    month     = request.args.get('month', '')
+    staff_ids = request.args.get('staff_ids', '')
+    cfg       = _get_insurance_settings()
+    labor_no  = cfg.get('labor_insurance_no', '').ljust(8)[:8]
+    if not month:
+        from datetime import date as _dm2
+        month = _dm2.today().strftime('%Y-%m')
+    month_roc = f"{int(month[:4]) - 1911:03d}{month[5:7]}".encode('ascii')
+
+    lines = []
+    for s in _get_edi_staff(staff_ids):
+        insured = str(int(float(s.get('insured_salary') or 0))).rjust(6, '0').encode('ascii')
+        line = (
+            _edi_bytes(labor_no, 8) +
+            _edi_bytes(s['name'], 20) +
+            _edi_bytes(s.get('national_id', ''), 10) +
+            insured +
+            month_roc
+        )
+        lines.append(line)
+    content = b'\r\n'.join(lines)
+    from flask import Response as _FRs
+    return _FRs(content, mimetype='application/octet-stream',
+                headers={'Content-Disposition': f'attachment; filename=labor_salary_{month}.edi'})
+
+
+@app.route('/api/export/edi/health-enroll', methods=['GET'])
+@require_module('salary')
+def api_edi_health_enroll():
+    """全民健康保險加退保申報 EDI"""
+    event_type = request.args.get('event_type', 'in')
+    staff_ids  = request.args.get('staff_ids', '')
+    event_date = request.args.get('event_date', '')
+    cfg        = _get_insurance_settings()
+    health_no  = cfg.get('health_insurance_no', '').ljust(10)[:10]
+    event_code = b'1' if event_type == 'in' else b'2'
+    event_roc  = _roc_date(event_date).encode('ascii')
+
+    lines = []
+    for s in _get_edi_staff(staff_ids):
+        gender_code = b'1' if (s.get('gender') or '').upper() in ('M', '男') else b'2'
+        insured = str(int(float(s.get('insured_salary') or 0))).rjust(6, '0').encode('ascii')
+        line = (
+            _edi_bytes(health_no, 10) +
+            _edi_bytes(s['name'], 20) +
+            _edi_bytes(s.get('national_id', ''), 10) +
+            _roc_date(s.get('birth_date')).encode('ascii') +
+            event_roc +
+            event_code +
+            insured +
+            gender_code
+        )
+        lines.append(line)
+    content = b'\r\n'.join(lines)
+    fname   = f'health_{"enroll" if event_type=="in" else "exit"}_{event_date or "date"}.edi'
+    from flask import Response as _FRh
+    return _FRh(content, mimetype='application/octet-stream',
+                headers={'Content-Disposition': f'attachment; filename={fname}'})
+
+
+# ── 多店管理 ─────────────────────────────────────────────────────────────────
+
+@app.route('/api/stores', methods=['GET'])
+@login_required
+def api_stores_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM stores ORDER BY id").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/stores', methods=['POST'])
+@login_required
+def api_stores_create():
+    b = request.get_json(force=True)
+    name = (b.get('name') or '').strip()
+    code = (b.get('code') or '').strip() or None
+    if not name: return jsonify({'error': '店名為必填'}), 400
+    with get_db() as conn:
+        row = conn.execute(
+            "INSERT INTO stores (name, code, address) VALUES (%s,%s,%s) RETURNING *",
+            (name, code, (b.get('address') or '').strip())
+        ).fetchone()
+    return jsonify(dict(row)), 201
+
+@app.route('/api/stores/<int:sid>', methods=['PUT'])
+@login_required
+def api_stores_update(sid):
+    b = request.get_json(force=True)
+    with get_db() as conn:
+        row = conn.execute("""
+            UPDATE stores SET name=%s, code=%s, address=%s, active=%s WHERE id=%s RETURNING *
+        """, ((b.get('name') or '').strip(), (b.get('code') or None),
+              (b.get('address') or '').strip(), bool(b.get('active', True)), sid)).fetchone()
+    return jsonify(dict(row)) if row else ('', 404)
+
+@app.route('/api/stores/<int:sid>', methods=['DELETE'])
+@login_required
+def api_stores_delete(sid):
+    with get_db() as conn:
+        conn.execute("UPDATE punch_staff     SET store_id=NULL WHERE store_id=%s", (sid,))
+        conn.execute("UPDATE punch_locations SET store_id=NULL WHERE store_id=%s", (sid,))
+        conn.execute("DELETE FROM stores WHERE id=%s", (sid,))
+    return jsonify({'deleted': sid})
+
+@app.route('/api/stores/<int:sid>/staff', methods=['GET'])
+@login_required
+def api_store_staff(sid):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, name, role, active FROM punch_staff WHERE store_id=%s ORDER BY name", (sid,)
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/staff/<int:sid>/store', methods=['PUT'])
+@login_required
+def api_staff_assign_store(sid):
+    b = request.get_json(force=True)
+    store_id = b.get('store_id')
+    with get_db() as conn:
+        conn.execute("UPDATE punch_staff SET store_id=%s WHERE id=%s", (store_id, sid))
+    return jsonify({'ok': True})
 
 
 # ── 排班需求 & 自動排班 ──────────────────────────────────────────────────────
@@ -6855,7 +7222,8 @@ def init_finance_settings_db():
         print(f"[finance_settings_seed] {e}")
 
     # Seed settings defaults
-    for k, v in [('company_name', ''), ('opening_cash', '0'), ('opening_equity', '0')]:
+    for k, v in [('company_name', ''), ('opening_cash', '0'), ('opening_equity', '0'),
+                  ('company_tax_id', ''), ('company_address', '')]:
         try:
             with get_db() as conn:
                 conn.execute(
@@ -6866,6 +7234,27 @@ def init_finance_settings_db():
             print(f"[finance_settings_default] {e}")
 
 init_finance_settings_db()
+
+
+def init_insurance_db():
+    try:
+        with get_db() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS insurance_settings (
+                    setting_key   TEXT PRIMARY KEY,
+                    setting_value TEXT DEFAULT ''
+                )
+            """)
+        for k, v in [('labor_insurance_no', ''), ('health_insurance_no', ''),
+                     ('employer_name', ''), ('employer_id', '')]:
+            with get_db() as conn:
+                conn.execute(
+                    "INSERT INTO insurance_settings (setting_key, setting_value) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+                    (k, v))
+    except Exception as e:
+        print(f"[insurance_init] {e}")
+
+init_insurance_db()
 
 
 @app.route('/api/finance/settings', methods=['GET'])

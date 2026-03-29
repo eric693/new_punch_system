@@ -206,6 +206,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-finance" onclick="showPage('finance',event)">財務管理</a>
     <a href="#" class="nav-item"        id="nav-expense-review" onclick="showPage('expense-review',event)">費用審核<span class="nav-badge" id="badge-expense-review" style="display:none"></span></a>
     <a href="#" class="nav-item"        id="nav-perf" onclick="showPage('perf',event)">績效考核</a>
+    <a href="#" class="nav-item"        id="nav-stores"   onclick="showPage('stores',event)">門市管理</a>
     <a href="#" class="nav-item"        id="nav-adminmgr" onclick="showPage('adminmgr',event)" style="display:none">帳號管理</a>
   </nav>
   <div class="sidebar-bottom">
@@ -950,9 +951,11 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   <!-- ── 薪資管理 ── -->
   <div class="page" id="page-salary" style="display:none">
     <div class="inv-tab-bar">
-      <button class="inv-tab active" id="salarytab-calc"     onclick="switchSalaryTab('calc')">月薪計算</button>
-      <button class="inv-tab"        id="salarytab-settings" onclick="switchSalaryTab('settings')">薪資設定</button>
-      <button class="inv-tab"        id="salarytab-items"    onclick="switchSalaryTab('items')">薪資項目</button>
+      <button class="inv-tab active" id="salarytab-calc"        onclick="switchSalaryTab('calc')">月薪計算</button>
+      <button class="inv-tab"        id="salarytab-settings"    onclick="switchSalaryTab('settings')">薪資設定</button>
+      <button class="inv-tab"        id="salarytab-items"       onclick="switchSalaryTab('items')">薪資項目</button>
+      <button class="inv-tab"        id="salarytab-withholding" onclick="switchSalaryTab('withholding')">扣繳憑單</button>
+      <button class="inv-tab"        id="salarytab-edi"         onclick="switchSalaryTab('edi')">勞健保 EDI</button>
     </div>
 
     <!-- 月薪計算 -->
@@ -1024,6 +1027,68 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
     </div>
+    <!-- 扣繳憑單 -->
+    <div id="salary-panel-withholding" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">年度</span>
+        <select id="wh-year" class="filter-input" style="width:100px"></select>
+        <button class="btn btn-outline btn-sm" onclick="openWithholdingReport('html')">產生報表（列印）</button>
+        <button class="btn btn-outline btn-sm" onclick="openWithholdingReport('xlsx')">匯出 Excel</button>
+      </div>
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="padding:0;margin-bottom:12px">統一編號與公司資訊（用於憑單表頭）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px">
+          <div><label class="form-label">公司名稱</label><input class="form-input" id="wh-company-name" style="width:100%"></div>
+          <div><label class="form-label">統一編號</label><input class="form-input" id="wh-tax-id" style="width:100%"></div>
+          <div style="grid-column:1/-1"><label class="form-label">公司地址</label><input class="form-input" id="wh-company-addr" style="width:100%"></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:12px" onclick="saveWhSettings()">儲存公司資訊</button>
+        <div id="wh-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:10px">※ 員工身分證字號與地址請至薪資設定→各員工薪資設定中填入。扣繳稅額請在各月薪資紀錄中填入「扣繳稅額」欄位。</div>
+      </div>
+    </div>
+
+    <!-- 勞健保 EDI -->
+    <div id="salary-panel-edi" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <!-- 投保單位設定 -->
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:12px">投保單位設定</div>
+          <div style="display:grid;gap:10px">
+            <div><label class="form-label">勞保證號（8 碼）</label><input class="form-input" id="edi-labor-no" style="width:100%"></div>
+            <div><label class="form-label">健保費類代號</label><input class="form-input" id="edi-health-no" style="width:100%"></div>
+            <div><label class="form-label">投保單位名稱</label><input class="form-input" id="edi-employer-name" style="width:100%"></div>
+            <div><label class="form-label">統一編號</label><input class="form-input" id="edi-employer-id" style="width:100%"></div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="saveEdiSettings()">儲存設定</button>
+          <div id="edi-cfg-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
+        </div>
+
+        <!-- 申報產生 -->
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:12px">產生申報檔</div>
+          <div style="display:grid;gap:10px;margin-bottom:14px">
+            <div>
+              <label class="form-label">員工（多選，空=全部）</label>
+              <select id="edi-staff-sel" class="form-input" multiple style="width:100%;height:100px"></select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label class="form-label">事件日期</label><input type="date" id="edi-event-date" class="form-input" style="width:100%"></div>
+              <div><label class="form-label">薪資調整月份</label><input type="month" id="edi-salary-month" class="form-input" style="width:100%"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="downloadEdi('labor-enroll','in')">勞保 加保申報 (.edi)</button>
+            <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-enroll','out')">勞保 退保申報 (.edi)</button>
+            <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-salary','')">勞保 投保薪資調整 (.edi)</button>
+            <button class="btn btn-primary btn-sm" onclick="downloadEdi('health-enroll','in')">健保 加保申報 (.edi)</button>
+            <button class="btn btn-outline btn-sm" onclick="downloadEdi('health-enroll','out')">健保 退保申報 (.edi)</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">※ EDI 為 Big5 固定寬度格式，產出後請以勞保局網路申報系統驗證後再送出。</div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- end page-salary -->
 
   <!-- ── 公告管理 ── -->
@@ -1482,6 +1547,45 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div><!-- end page-adminmgr -->
 
+  <!-- ── 門市管理 ── -->
+  <div class="page" id="page-stores" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <span style="font-size:13px;color:var(--muted)">管理多個門市，並為員工指派所屬門市</span>
+      <button class="btn btn-primary btn-sm" onclick="openStoreModal()">新增門市</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <!-- 門市列表 -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">門市列表</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>門市名稱</th><th>代碼</th><th>地址</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="stores-tbody"><tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 員工門市指派 -->
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="padding:0;margin-bottom:12px">員工門市指派</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select id="store-assign-store" class="filter-input" style="flex:1">
+            <option value="">選擇門市</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="loadStoreStaff()">查看員工</button>
+        </div>
+        <div id="store-staff-list" style="font-size:13px;color:var(--muted)">請選擇門市</div>
+        <div style="margin-top:14px">
+          <div class="form-label" style="margin-bottom:6px">調整員工門市</div>
+          <div style="display:flex;gap:8px">
+            <select id="store-assign-staff" class="filter-input" style="flex:1"><option value="">選擇員工</option></select>
+            <select id="store-assign-target" class="filter-input" style="width:120px"><option value="">選擇門市</option></select>
+            <button class="btn btn-primary btn-sm" onclick="assignStaffStore()">指派</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end page-stores -->
+
   <!-- ── 費用審核 ── -->
   <div class="page" id="page-expense-review" style="display:none">
     <div class="filter-bar" style="margin-bottom:20px">
@@ -1629,6 +1733,24 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
 
 </main>
+
+<!-- Store Modal -->
+<div class="modal-overlay" id="store-modal" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><span class="modal-title" id="store-modal-title">新增門市</span><button class="modal-close" onclick="document.getElementById('store-modal').style.display='none'">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="store-modal-id">
+      <div style="margin-bottom:12px"><label class="form-label">門市名稱 *</label><input class="form-input" id="store-modal-name" placeholder="例：信義店" style="width:100%"></div>
+      <div style="margin-bottom:12px"><label class="form-label">代碼</label><input class="form-input" id="store-modal-code" placeholder="例：xinyi" style="width:100%"></div>
+      <div style="margin-bottom:12px"><label class="form-label">地址</label><input class="form-input" id="store-modal-addr" placeholder="門市地址" style="width:100%"></div>
+      <div style="margin-bottom:12px"><label class="form-label"><input type="checkbox" id="store-modal-active" checked style="margin-right:6px">營業中</label></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('store-modal').style.display='none'">取消</button>
+      <button class="btn btn-primary" onclick="saveStoreModal()">儲存</button>
+    </div>
+  </div>
+</div>
 
 <!-- Punch Staff Modal -->
 <div class="modal-overlay" id="punch-staff-modal" style="display:none">
@@ -2024,6 +2146,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div class="form-group"><label class="form-label">加班費率1（前2h）</label><input class="form-input" type="number" id="ssm-ot1" value="1.33" step="0.01"></div>
         <div class="form-group"><label class="form-label">加班費率2（後續）</label><input class="form-input" type="number" id="ssm-ot2" value="1.67" step="0.01"></div>
         <div class="form-group full-width"><label class="form-label">薪資備註</label><input class="form-input" id="ssm-notes" placeholder="選填"></div>
+        <div class="form-group"><label class="form-label">身分證字號</label><input class="form-input" id="ssm-national-id" placeholder="A123456789（扣繳憑單/EDI用）"></div>
+        <div class="form-group"><label class="form-label">性別</label><select class="form-input" id="ssm-gender"><option value="">—</option><option value="M">男</option><option value="F">女</option></select></div>
+        <div class="form-group"><label class="form-label">投保類別</label><select class="form-input" id="ssm-ins-type"><option value="regular">一般</option><option value="part_time">部分工時</option><option value="none">不投保</option></select></div>
+        <div class="form-group full-width"><label class="form-label">戶籍地址</label><input class="form-input" id="ssm-address" placeholder="（扣繳憑單用）"></div>
       </div>
       <div id="ssm-annual-info" style="font-size:12px;color:var(--green);margin-top:8px"></div>
       <div style="margin-top:14px">
@@ -3314,10 +3440,10 @@ function showPage(page, e) {
   const navEl = document.getElementById('nav-' + page);
   if (navEl) navEl.classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','perf'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','perf','stores'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
-  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', perf:'績效考核' };
+  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', perf:'績效考核', stores:'門市管理' };
   document.getElementById('page-title').textContent = titles[page] || page;
   if (page === 'dash')            initDash();
   if (page === 'punch')           initPunch();
@@ -3330,6 +3456,7 @@ function showPage(page, e) {
   if (page === 'adminmgr')        loadAdminAccounts();
   if (page === 'expense-review')  loadExpenseReview();
   if (page === 'perf')            initPerf();
+  if (page === 'stores')          loadStores();
 }
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -5137,13 +5264,15 @@ function initSalary() {
 }
 
 function switchSalaryTab(tab) {
-  ['calc','settings','items'].forEach(t=>{
+  ['calc','settings','items','withholding','edi'].forEach(t=>{
     document.getElementById('salarytab-'+t).classList.toggle('active',t===tab);
     document.getElementById('salary-panel-'+t).style.display=t===tab?'':'none';
   });
-  if (tab==='calc')     loadSalaryRecords();
-  if (tab==='settings') { loadSalaryStaff(); loadSalaryItems(); }
-  if (tab==='items')    loadSalaryItems();
+  if (tab==='calc')        loadSalaryRecords();
+  if (tab==='settings')    { loadSalaryStaff(); loadSalaryItems(); }
+  if (tab==='items')       loadSalaryItems();
+  if (tab==='withholding') initWithholdingTab();
+  if (tab==='edi')         initEdiTab();
 }
 
 // ── 月薪計算 ─────────────────────────────────────────────────
@@ -5550,8 +5679,12 @@ function openSalStaffModal(id) {
   document.getElementById('ssm-daily-h').value  = s.daily_hours||8;
   document.getElementById('ssm-ot1').value      = s.ot_rate1||1.33;
   document.getElementById('ssm-ot2').value      = s.ot_rate2||1.67;
-  document.getElementById('ssm-vq').value       = s.vacation_quota!=null?s.vacation_quota:'';
-  document.getElementById('ssm-notes').value    = s.salary_notes||'';
+  document.getElementById('ssm-vq').value          = s.vacation_quota!=null?s.vacation_quota:'';
+  document.getElementById('ssm-notes').value       = s.salary_notes||'';
+  document.getElementById('ssm-national-id').value = s.national_id||'';
+  document.getElementById('ssm-gender').value      = s.gender||'';
+  document.getElementById('ssm-ins-type').value    = s.insurance_type||'regular';
+  document.getElementById('ssm-address').value     = s.address||'';
   toggleSalType();
   const days = s.annual_leave_days||0;
   const yrs  = s.service_years?s.service_years.toFixed(1):0;
@@ -5656,6 +5789,10 @@ async function saveSalStaff() {
     salary_notes:  document.getElementById('ssm-notes').value.trim(),
     salary_item_ids:       selectedItemIds,
     salary_item_overrides: hasOverride ? salaryItemOverrides : null,
+    national_id:    document.getElementById('ssm-national-id').value.trim(),
+    gender:         document.getElementById('ssm-gender').value,
+    insurance_type: document.getElementById('ssm-ins-type').value,
+    address:        document.getElementById('ssm-address').value.trim(),
   };
   const {ok} = await api(`/api/salary/staff/${id}`, apiPUT(body));
   if (!ok) return;
@@ -8531,6 +8668,232 @@ async function runAutoGenerate() {
     if (shiftM) shiftM.value = month;
     switchSchedTab('shift');
   }, 1500);
+}
+
+/* =====================================================================
+   扣繳憑單 (Withholding Certificate) functions
+   ===================================================================== */
+async function initWithholdingTab() {
+  // Populate year selector (current year and 3 prior years)
+  const sel = document.getElementById('wh-year');
+  if (!sel) return;
+  const thisYear = new Date().getFullYear();
+  sel.innerHTML = '';
+  for (let y = thisYear; y >= thisYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = `${y} 年（民國 ${y - 1911} 年）`;
+    sel.appendChild(opt);
+  }
+  // Load company settings
+  const r = await api('/api/finance/settings');
+  if (r.ok && r.data) {
+    const s = r.data;
+    const nameEl = document.getElementById('wh-company-name');
+    const taxEl  = document.getElementById('wh-company-tax-id');
+    const addrEl = document.getElementById('wh-company-address');
+    if (nameEl) nameEl.value = s.company_name || '';
+    if (taxEl)  taxEl.value  = s.company_tax_id || '';
+    if (addrEl) addrEl.value = s.company_address || '';
+  }
+}
+
+async function saveWhSettings() {
+  const company_name    = document.getElementById('wh-company-name')?.value.trim();
+  const company_tax_id  = document.getElementById('wh-company-tax-id')?.value.trim();
+  const company_address = document.getElementById('wh-company-address')?.value.trim();
+  const r = await api('/api/finance/settings', apiJSON({ company_name, company_tax_id, company_address }));
+  showToast(r.ok ? '公司資訊已儲存' : ('儲存失敗：' + (r.error || '')), r.ok ? 'success' : 'error');
+}
+
+function openWithholdingReport(format) {
+  const year = document.getElementById('wh-year')?.value;
+  if (!year) { showToast('請選擇年度', 'error'); return; }
+  window.open(`/api/export/withholding?year=${year}&format=${format}`, '_blank');
+}
+
+/* =====================================================================
+   勞健保 EDI functions
+   ===================================================================== */
+async function initEdiTab() {
+  // Load insurance settings into form
+  const r = await api('/api/insurance/settings');
+  if (r.ok && r.data) {
+    const d = r.data;
+    const map = { labor_insurance_no: 'edi-labor-no', health_insurance_no: 'edi-health-no',
+                  employer_name: 'edi-employer-name', employer_id: 'edi-employer-id' };
+    Object.entries(map).forEach(([key, elId]) => {
+      const el = document.getElementById(elId);
+      if (el) el.value = d[key] || '';
+    });
+  }
+  // Populate staff multi-select
+  const sel = document.getElementById('edi-staff-sel');
+  if (!sel) return;
+  const sr = await api('/api/salary/staff');
+  if (sr.ok) {
+    sel.innerHTML = sr.data.map(s =>
+      `<option value="${s.id}">${escHtml(s.name)}${s.department ? ' (' + escHtml(s.department) + ')' : ''}</option>`
+    ).join('');
+  }
+  // Default event date to today
+  const edEl = document.getElementById('edi-event-date');
+  if (edEl && !edEl.value) edEl.value = new Date().toISOString().slice(0, 10);
+  // Default salary month to current month
+  const smEl = document.getElementById('edi-salary-month');
+  if (smEl && !smEl.value) smEl.value = new Date().toISOString().slice(0, 7);
+}
+
+async function saveEdiSettings() {
+  const body = {
+    labor_insurance_no:  document.getElementById('edi-labor-no')?.value.trim(),
+    health_insurance_no: document.getElementById('edi-health-no')?.value.trim(),
+    employer_name:       document.getElementById('edi-employer-name')?.value.trim(),
+    employer_id:         document.getElementById('edi-employer-id')?.value.trim(),
+  };
+  const r = await api('/api/insurance/settings', apiJSON(body));
+  showToast(r.ok ? '保險設定已儲存' : ('儲存失敗：' + (r.error || '')), r.ok ? 'success' : 'error');
+}
+
+function downloadEdi(type, eventType) {
+  const sel = document.getElementById('edi-staff-sel');
+  const staffIds = sel ? Array.from(sel.selectedOptions).map(o => o.value) : [];
+  let url = `/api/export/edi/${type}`;
+  const params = new URLSearchParams();
+  if (staffIds.length) params.set('staff_ids', staffIds.join(','));
+  if (eventType) params.set('event_type', eventType);
+  const eventDate = document.getElementById('edi-event-date')?.value;
+  if (eventDate) params.set('event_date', eventDate);
+  const salaryMonth = document.getElementById('edi-salary-month')?.value;
+  if (salaryMonth) params.set('month', salaryMonth);
+  const qs = params.toString();
+  window.open(url + (qs ? '?' + qs : ''), '_blank');
+}
+
+/* =====================================================================
+   門市管理 (Store Management) functions
+   ===================================================================== */
+async function loadStores() {
+  const r = await api('/api/stores');
+  if (!r.ok) { showToast('載入門市失敗', 'error'); return; }
+  const tbody = document.getElementById('stores-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = r.data.length === 0
+    ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">尚無門市資料</td></tr>'
+    : r.data.map(s => `
+      <tr>
+        <td>${escHtml(s.name)}</td>
+        <td>${escHtml(s.code || '')}</td>
+        <td>${escHtml(s.address || '')}</td>
+        <td><span style="padding:2px 10px;border-radius:10px;font-size:11px;background:${s.active ? 'var(--green-light)' : 'var(--red-light)'};color:${s.active ? 'var(--green)' : 'var(--red)'}">${s.active ? '營業中' : '停用'}</span></td>
+        <td>
+          <button class="btn btn-sm" onclick="openStoreModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">編輯</button>
+          <button class="btn btn-sm" onclick="loadStoreStaff(${s.id})">查看員工</button>
+        </td>
+      </tr>`).join('');
+
+  // Populate store selectors in assignment panel
+  const storeSel = document.getElementById('store-assign-store');
+  const targetSel = document.getElementById('store-assign-target');
+  const opts = '<option value="">-- 選擇門市 --</option>' +
+    r.data.filter(s => s.active).map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+  if (storeSel)  storeSel.innerHTML  = opts;
+  if (targetSel) targetSel.innerHTML = opts;
+
+  // Populate staff selector for assignment
+  await loadAllStaffForAssign();
+}
+
+function openStoreModal(store) {
+  const isNew = !store;
+  document.getElementById('store-modal-title').textContent = isNew ? '新增門市' : '編輯門市';
+  document.getElementById('store-modal-id').value   = store?.id || '';
+  document.getElementById('store-modal-name').value = store?.name || '';
+  document.getElementById('store-modal-code').value = store?.code || '';
+  document.getElementById('store-modal-addr').value = store?.address || '';
+  document.getElementById('store-modal-active').checked = store ? store.active : true;
+  document.getElementById('store-modal').style.display = 'flex';
+}
+
+async function saveStoreModal() {
+  const id     = document.getElementById('store-modal-id').value;
+  const body   = {
+    name:    document.getElementById('store-modal-name').value.trim(),
+    code:    document.getElementById('store-modal-code').value.trim(),
+    address: document.getElementById('store-modal-addr').value.trim(),
+    active:  document.getElementById('store-modal-active').checked,
+  };
+  if (!body.name) { showToast('門市名稱不可空白', 'error'); return; }
+  const r = id
+    ? await api(`/api/stores/${id}`, apiJSON(body, 'PUT'))
+    : await api('/api/stores', apiJSON(body));
+  if (r.ok) {
+    document.getElementById('store-modal').style.display = 'none';
+    showToast(id ? '門市已更新' : '門市已新增', 'success');
+    loadStores();
+  } else {
+    showToast('儲存失敗：' + (r.error || ''), 'error');
+  }
+}
+
+async function deleteStore(id) {
+  if (!confirm('確定要刪除此門市嗎？')) return;
+  const r = await api(`/api/stores/${id}`, { method: 'DELETE' });
+  if (r.ok) { showToast('已刪除', 'success'); loadStores(); }
+  else showToast('刪除失敗：' + (r.error || ''), 'error');
+}
+
+async function loadStoreStaff(storeId) {
+  if (storeId) {
+    const storeSel = document.getElementById('store-assign-store');
+    if (storeSel) storeSel.value = storeId;
+  } else {
+    storeId = document.getElementById('store-assign-store')?.value;
+  }
+  if (!storeId) return;
+
+  const listEl = document.getElementById('store-staff-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<span style="color:var(--muted)">載入中...</span>';
+
+  const r = await api(`/api/stores/${storeId}/staff`);
+  if (!r.ok) { listEl.innerHTML = '<span style="color:var(--red)">載入失敗</span>'; return; }
+  listEl.innerHTML = r.data.length === 0
+    ? '<span style="color:var(--muted)">此門市尚無員工</span>'
+    : r.data.map(s => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span>${escHtml(s.name)} <span style="color:var(--muted);font-size:11px">${escHtml(s.department || '')}</span></span>
+        <button class="btn btn-sm" style="font-size:11px" onclick="removeStaffFromStore(${s.id})">移出</button>
+      </div>`).join('');
+}
+
+async function assignStaffStore() {
+  const storeId = document.getElementById('store-assign-target')?.value;
+  const staffId = document.getElementById('store-assign-staff')?.value;
+  if (!storeId || !staffId) { showToast('請選擇員工與目標門市', 'error'); return; }
+  const r = await api(`/api/staff/${staffId}/store`, apiJSON({ store_id: parseInt(storeId) }, 'PUT'));
+  if (r.ok) {
+    showToast('已指派', 'success');
+    // Refresh list if viewing the target store
+    const viewStoreId = document.getElementById('store-assign-store')?.value;
+    if (viewStoreId === storeId) loadStoreStaff(storeId);
+  } else showToast('指派失敗：' + (r.error || ''), 'error');
+}
+
+async function removeStaffFromStore(staffId) {
+  const storeId = document.getElementById('store-assign-store')?.value;
+  const r = await api(`/api/staff/${staffId}/store`, apiJSON({ store_id: null }, 'PUT'));
+  if (r.ok) { showToast('已移出', 'success'); if (storeId) loadStoreStaff(storeId); }
+  else showToast('移出失敗：' + (r.error || ''), 'error');
+}
+
+async function loadAllStaffForAssign() {
+  const sel = document.getElementById('store-assign-staff');
+  if (!sel) return;
+  const r = await api('/api/salary/staff');
+  if (!r.ok) return;
+  sel.innerHTML = '<option value="">-- 選擇員工 --</option>' +
+    r.data.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
 }
 </script>
 </html>

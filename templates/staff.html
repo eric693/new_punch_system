@@ -151,6 +151,17 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
       <div class="fl">密碼</div>
       <input class="fi" type="password" id="inp-pass" placeholder="請輸入密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
       <button class="login-btn" id="login-btn" onclick="doLogin()">登入</button>
+      <!-- WebAuthn biometric (shown only when supported) -->
+      <div id="bio-sep" style="display:none;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:10px;color:var(--muted);letter-spacing:.08em">或</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <button class="login-btn" id="bio-login-btn" onclick="doBioLogin()" style="background:var(--navy-mid);display:flex;align-items:center;justify-content:center;gap:8px">
+          <span id="bio-icon">☝️</span><span id="bio-label">指紋 / Face ID 登入</span>
+        </button>
+      </div>
       <div class="login-err" id="login-err"></div>
     </div>
   </div>
@@ -178,6 +189,7 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
         <button class="tab"        id="tab-payslip"       onclick="switchTab('payslip')">薪資單</button>
         <button class="tab"        id="tab-expense"       onclick="switchTab('expense')" style="position:relative">費用報帳<span id="expense-badge" style="display:none;position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center"></span></button>
         <button class="tab"        id="tab-myperf"        onclick="switchTab('myperf')">我的考核</button>
+        <button class="tab"        id="tab-biodev"        onclick="switchTab('biodev')">安全裝置</button>
       </div>
 
       <!-- 打卡 tab -->
@@ -384,6 +396,26 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
         </div>
       </div>
 
+      <!-- 安全裝置 tab -->
+      <div id="panel-biodev" class="tab-body" style="display:none">
+        <div style="margin-bottom:16px">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            綁定裝置後，下次可直接使用 Face ID 或指紋登入，無需輸入密碼。生物資料僅存於您的裝置中，伺服器不儲存任何生物特徵。
+          </div>
+          <div id="bio-supported-msg" style="display:none;background:var(--red-light);color:var(--red);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:12px">
+            此裝置不支援 WebAuthn 生物辨識
+          </div>
+          <button onclick="doRegisterBio()" id="bio-reg-btn"
+            style="width:100%;padding:12px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-family:'Noto Sans TC',sans-serif;font-size:14px;font-weight:700;cursor:pointer">
+            ＋ 綁定此裝置
+          </button>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">已綁定裝置</div>
+        <div id="bio-cred-list">
+          <div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">載入中...</div>
+        </div>
+      </div>
+
       <!-- 費用報帳 tab -->
       <div id="panel-expense" class="tab-body" style="display:none">
         <!-- 新增費用申請 -->
@@ -523,7 +555,7 @@ function showMain(){
   switchTab('punch');
 }
 function switchTab(tab){
-  ['ann','punch','sched','leave','schedule-view','overtime','attendance','payslip','expense','myperf'].forEach(t=>{
+  ['ann','punch','sched','leave','schedule-view','overtime','attendance','payslip','expense','myperf','biodev'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('panel-'+t).style.display=t===tab?'':'none';
   });
@@ -537,6 +569,7 @@ function switchTab(tab){
   if(tab==='payslip')initPayslipTab();
   if(tab==='expense')initExpenseTab();
   if(tab==='myperf')loadMyPerf();
+  if(tab==='biodev')initBiodevTab();
 }
 
 /* GPS */
@@ -2121,6 +2154,163 @@ async function loadMyPerf() {
       </div>
     </div>`;
   }).join('');
+}
+
+/* ═══════════════════════════════
+   WebAuthn / 生物辨識
+═══════════════════════════════ */
+function _b2b64url(buf){
+  const b=new Uint8Array(buf);let s='';
+  b.forEach(x=>s+=String.fromCharCode(x));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function _b64url2buf(s){
+  const b=s.replace(/-/g,'+').replace(/_/g,'/');
+  const bin=atob(b);const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  return u.buffer;
+}
+
+// Show biometric login button if WebAuthn is supported
+(function(){
+  if(!window.PublicKeyCredential){return;}
+  if(PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(ok=>{
+      if(ok)document.getElementById('bio-sep').style.display='';
+    });
+  } else {
+    document.getElementById('bio-sep').style.display='';
+  }
+})();
+
+async function doBioLogin(){
+  const btn=document.getElementById('bio-login-btn');
+  const err=document.getElementById('login-err');
+  err.textContent='';btn.disabled=true;
+  const origText=document.getElementById('bio-label').textContent;
+  document.getElementById('bio-label').textContent='驗證中...';
+  const username=document.getElementById('inp-user').value.trim()||null;
+  try{
+    const beginRes=await fetch('/api/webauthn/auth/begin',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    if(!beginRes.ok){const d=await beginRes.json();err.textContent=d.error||'找不到已綁定的裝置';return;}
+    const opts=await beginRes.json();
+    opts.challenge=_b64url2buf(opts.challenge);
+    if(opts.allowCredentials){
+      opts.allowCredentials=opts.allowCredentials.map(c=>({...c,id:_b64url2buf(c.id)}));
+    }
+    const cred=await navigator.credentials.get({publicKey:opts});
+    const completeRes=await fetch('/api/webauthn/auth/complete',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        id:cred.id,rawId:_b2b64url(cred.rawId),
+        response:{
+          authenticatorData:_b2b64url(cred.response.authenticatorData),
+          clientDataJSON:_b2b64url(cred.response.clientDataJSON),
+          signature:_b2b64url(cred.response.signature),
+          userHandle:cred.response.userHandle?_b2b64url(cred.response.userHandle):null
+        },
+        type:cred.type
+      })
+    });
+    const result=await completeRes.json();
+    if(!completeRes.ok){err.textContent=result.error||'驗證失敗';return;}
+    // Session is now set by server — reload me info
+    const r=await fetch('/api/punch/me');
+    if(r.ok){me=await r.json();showMain();loadAnnStaff();}
+    else{err.textContent='登入失敗，請重試';}
+  }catch(e){
+    if(e.name==='NotAllowedError'){err.textContent='已取消或逾時';}
+    else{err.textContent='驗證失敗：'+e.message;}
+  }finally{
+    btn.disabled=false;
+    document.getElementById('bio-label').textContent=origText;
+  }
+}
+
+function initBiodevTab(){
+  if(!window.PublicKeyCredential){
+    document.getElementById('bio-supported-msg').style.display='';
+    document.getElementById('bio-reg-btn').disabled=true;
+  }
+  loadBioCredList();
+}
+
+async function loadBioCredList(){
+  const el=document.getElementById('bio-cred-list');
+  try{
+    const r=await fetch('/api/webauthn/credentials');
+    if(!r.ok){el.innerHTML='<div style="color:var(--red);font-size:13px;padding:10px">載入失敗</div>';return;}
+    const list=await r.json();
+    if(!list.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">尚未綁定任何裝置</div>';return;}
+    el.innerHTML=list.map(c=>`
+      <div style="display:flex;align-items:center;background:var(--bg);border-radius:9px;padding:12px 14px;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(c.device_name||'未知裝置')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">綁定時間：${c.created_at?c.created_at.slice(0,16):'-'}</div>
+        </div>
+        <button onclick="deleteBioCred('${escHtml(c.id)}')"
+          style="padding:6px 12px;border-radius:6px;border:1.5px solid var(--red);background:transparent;color:var(--red);font-size:12px;font-weight:600;cursor:pointer">
+          移除
+        </button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:13px;padding:10px">載入失敗</div>';}
+}
+
+async function doRegisterBio(){
+  if(!window.PublicKeyCredential){alert('此裝置不支援 WebAuthn');return;}
+  const btn=document.getElementById('bio-reg-btn');
+  btn.disabled=true;btn.textContent='綁定中...';
+  try{
+    const beginRes=await fetch('/api/webauthn/register/begin',{method:'POST'});
+    if(!beginRes.ok){const d=await beginRes.json();alert(d.error||'綁定失敗');return;}
+    const opts=await beginRes.json();
+    opts.challenge=_b64url2buf(opts.challenge);
+    opts.user.id=_b64url2buf(opts.user.id);
+    if(opts.excludeCredentials){
+      opts.excludeCredentials=opts.excludeCredentials.map(c=>({...c,id:_b64url2buf(c.id)}));
+    }
+    const cred=await navigator.credentials.create({publicKey:opts});
+    const deviceName=navigator.userAgent.includes('iPhone')?'iPhone':
+                     navigator.userAgent.includes('iPad')?'iPad':
+                     navigator.userAgent.includes('Android')?'Android 裝置':
+                     navigator.userAgent.includes('Mac')?'Mac':'此裝置';
+    const completeRes=await fetch('/api/webauthn/register/complete',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        id:cred.id,rawId:_b2b64url(cred.rawId),
+        response:{
+          attestationObject:_b2b64url(cred.response.attestationObject),
+          clientDataJSON:_b2b64url(cred.response.clientDataJSON)
+        },
+        type:cred.type,
+        device_name:deviceName
+      })
+    });
+    const result=await completeRes.json();
+    if(!completeRes.ok){alert(result.error||'綁定失敗');return;}
+    alert('裝置綁定成功！下次可直接使用生物辨識登入。');
+    loadBioCredList();
+  }catch(e){
+    if(e.name==='NotAllowedError'){alert('已取消或逾時');}
+    else if(e.name==='InvalidStateError'){alert('此裝置已綁定');}
+    else{alert('綁定失敗：'+e.message);}
+  }finally{
+    btn.disabled=false;btn.textContent='＋ 綁定此裝置';
+  }
+}
+
+async function deleteBioCred(credId){
+  if(!confirm('確定要移除此裝置？'))return;
+  const r=await fetch('/api/webauthn/credentials/'+encodeURIComponent(credId),{method:'DELETE'});
+  if(r.ok){loadBioCredList();}
+  else{alert('移除失敗');}
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>

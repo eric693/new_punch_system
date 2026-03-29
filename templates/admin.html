@@ -211,6 +211,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-adminmgr" onclick="showPage('adminmgr',event)" style="display:none">帳號管理</a>
   </nav>
   <div class="sidebar-bottom">
+    <a href="#" class="logout-btn" onclick="openBioPanel(event)" style="display:block;margin-bottom:8px;color:rgba(255,255,255,0.35)" id="bio-nav-link">☝️ 生物辨識綁定</a>
     <a href="/admin/logout" class="logout-btn">登出系統</a>
   </div>
 </aside>
@@ -1824,6 +1825,32 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 </main>
 
 <!-- Salary Preview Modal -->
+<!-- ── 生物辨識 Modal ── -->
+<div class="modal-overlay" id="bio-panel-modal" style="display:none">
+  <div class="modal" style="max-width:480px;width:95vw">
+    <div class="modal-header">
+      <span class="modal-title">生物辨識綁定管理</span>
+      <button class="modal-close" onclick="document.getElementById('bio-panel-modal').style.display='none'">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+        綁定後，下次登入可直接使用 Face ID 或指紋，免輸入密碼。生物資料僅存於您的裝置中，伺服器不儲存任何生物特徵。
+      </p>
+      <div id="bio-panel-unsupported" style="display:none;background:#fdf0f0;color:var(--red);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px">
+        此裝置或瀏覽器不支援 WebAuthn 生物辨識
+      </div>
+      <button id="bio-panel-reg-btn" onclick="adminRegisterBio()"
+        style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:20px">
+        ＋ 綁定此裝置
+      </button>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">已綁定裝置</div>
+      <div id="bio-panel-cred-list">
+        <div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">載入中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="salary-preview-modal" style="display:none">
   <div class="modal" style="max-width:900px;width:95vw">
     <div class="modal-header">
@@ -9327,6 +9354,104 @@ async function previewSalary() {
       </tr>`;
   }
   content.style.display = '';
+}
+
+/* ═══════════════════════════════
+   Admin WebAuthn / 生物辨識
+═══════════════════════════════ */
+function _ab2b64url(buf){
+  const b=new Uint8Array(buf);let s='';
+  b.forEach(x=>s+=String.fromCharCode(x));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function _ab64url2buf(s){
+  const b=s.replace(/-/g,'+').replace(/_/g,'/');
+  const bin=atob(b);const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  return u.buffer;
+}
+
+function openBioPanel(e){
+  if(e)e.preventDefault();
+  if(!window.PublicKeyCredential){
+    document.getElementById('bio-panel-unsupported').style.display='';
+    document.getElementById('bio-panel-reg-btn').disabled=true;
+  }
+  loadAdminBioCredList();
+  document.getElementById('bio-panel-modal').style.display='flex';
+}
+
+async function loadAdminBioCredList(){
+  const el=document.getElementById('bio-panel-cred-list');
+  try{
+    const r=await fetch('/api/webauthn/credentials');
+    if(!r.ok){el.innerHTML='<div style="color:var(--red);font-size:13px;padding:10px">載入失敗</div>';return;}
+    const list=await r.json();
+    if(!list.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">尚未綁定任何裝置</div>';return;}
+    el.innerHTML=list.map(c=>`
+      <div style="display:flex;align-items:center;background:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${escStr(c.device_name||'未知裝置')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">綁定時間：${c.created_at?c.created_at.slice(0,16):'-'}</div>
+        </div>
+        <button onclick="deleteAdminBioCred('${escStr(c.id)}')"
+          style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--red);background:transparent;color:var(--red);font-size:12px;font-weight:600;cursor:pointer">
+          移除
+        </button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:13px;padding:10px">載入失敗</div>';}
+}
+
+async function adminRegisterBio(){
+  if(!window.PublicKeyCredential){alert('此裝置不支援 WebAuthn');return;}
+  const btn=document.getElementById('bio-panel-reg-btn');
+  btn.disabled=true;btn.textContent='綁定中...';
+  try{
+    const beginRes=await fetch('/api/webauthn/register/begin',{method:'POST'});
+    if(!beginRes.ok){const d=await beginRes.json();alert(d.error||'綁定失敗');return;}
+    const opts=await beginRes.json();
+    opts.challenge=_ab64url2buf(opts.challenge);
+    opts.user.id=_ab64url2buf(opts.user.id);
+    if(opts.excludeCredentials){
+      opts.excludeCredentials=opts.excludeCredentials.map(c=>({...c,id:_ab64url2buf(c.id)}));
+    }
+    const cred=await navigator.credentials.create({publicKey:opts});
+    const ua=navigator.userAgent;
+    const deviceName=ua.includes('iPhone')?'iPhone':ua.includes('iPad')?'iPad':ua.includes('Android')?'Android 裝置':ua.includes('Mac')?'Mac':'此裝置';
+    const completeRes=await fetch('/api/webauthn/register/complete',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        id:cred.id,rawId:_ab2b64url(cred.rawId),
+        response:{
+          attestationObject:_ab2b64url(cred.response.attestationObject),
+          clientDataJSON:_ab2b64url(cred.response.clientDataJSON)
+        },
+        type:cred.type,
+        device_name:deviceName
+      })
+    });
+    const result=await completeRes.json();
+    if(!completeRes.ok){alert(result.error||'綁定失敗');return;}
+    alert('裝置綁定成功！下次登入可直接使用生物辨識。');
+    loadAdminBioCredList();
+  }catch(e){
+    if(e.name==='NotAllowedError'){alert('已取消或逾時');}
+    else if(e.name==='InvalidStateError'){alert('此裝置已綁定');}
+    else{alert('綁定失敗：'+e.message);}
+  }finally{
+    btn.disabled=false;btn.textContent='＋ 綁定此裝置';
+  }
+}
+
+async function deleteAdminBioCred(credId){
+  if(!confirm('確定要移除此裝置？'))return;
+  const r=await fetch('/api/webauthn/credentials/'+encodeURIComponent(credId),{method:'DELETE'});
+  if(r.ok){loadAdminBioCredList();}
+  else{alert('移除失敗');}
+}
+
+function escStr(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </html>

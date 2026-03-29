@@ -74,6 +74,22 @@
   button[type="submit"]:hover { background: var(--navy-light); }
   button[type="submit"]:active { transform: scale(0.98); }
   .footer-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 24px; letter-spacing: 0.05em; }
+  .bio-btn {
+    width: 100%; padding: 12px; margin-bottom: 16px;
+    background: #fff; border: 2px solid var(--accent); border-radius: 8px;
+    font-family: 'Noto Sans TC', sans-serif; font-size: 14px; font-weight: 600;
+    color: var(--accent); cursor: pointer; display: flex; align-items: center;
+    justify-content: center; gap: 8px; transition: background 0.2s, transform 0.1s;
+  }
+  .bio-btn:hover { background: rgba(74,123,218,0.05); }
+  .bio-btn:active { transform: scale(0.98); }
+  .bio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .divider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .divider-line { flex: 1; height: 1px; background: var(--border); }
+  .divider-text { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .bio-msg { font-size: 12px; text-align: center; margin-top: 6px; min-height: 16px; }
+  .bio-msg.err { color: var(--red); }
+  .bio-msg.ok  { color: #2e9e6b; }
 </style>
 </head>
 <body>
@@ -83,7 +99,20 @@
     <div class="divider"></div>
     <div class="brand-sub">Management System</div>
   </div>
-  <form method="POST">
+
+  <!-- WebAuthn biometric button (shown when supported) -->
+  <div id="bio-section" style="display:none">
+    <button type="button" class="bio-btn" id="bio-btn" onclick="doBioLogin()">
+      <span id="bio-icon">☝️</span> <span id="bio-label">指紋 / Face ID 登入</span>
+    </button>
+    <div class="divider-row">
+      <div class="divider-line"></div>
+      <span class="divider-text">或使用密碼登入</span>
+      <div class="divider-line"></div>
+    </div>
+  </div>
+
+  <form method="POST" id="login-form">
     <label for="un">管理員帳號</label>
     <input type="text" id="un" name="username" placeholder="輸入帳號" autofocus autocomplete="username" autocapitalize="none">
     <label for="pw">密碼</label>
@@ -93,7 +122,85 @@
     {% endif %}
     <button type="submit">登入</button>
   </form>
+  <div class="bio-msg" id="bio-msg"></div>
   <div class="footer-note">打卡 &amp; 排班管理系統</div>
 </div>
+
+<script>
+// ── WebAuthn helpers ──────────────────────────────────────────────
+function b2b64url(buf){
+  const b=new Uint8Array(buf);let s='';
+  b.forEach(x=>s+=String.fromCharCode(x));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function b64url2buf(s){
+  const b=s.replace(/-/g,'+').replace(/_/g,'/');
+  const bin=atob(b);const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  return u.buffer;
+}
+function bioMsg(msg,type){
+  const el=document.getElementById('bio-msg');
+  el.textContent=msg;el.className='bio-msg'+(type?' '+type:'');
+}
+
+// Show biometric button if WebAuthn is supported
+if(window.PublicKeyCredential){
+  document.getElementById('bio-section').style.display='';
+  // Detect platform authenticator type (face vs fingerprint is OS-level, we just show generic label)
+  if(PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(ok=>{
+      if(!ok) document.getElementById('bio-section').style.display='none';
+    });
+  }
+}
+
+async function doBioLogin(){
+  const btn=document.getElementById('bio-btn');
+  btn.disabled=true;
+  bioMsg('正在驗證...');
+  // Use username from input if filled, otherwise let server return all credentials
+  const username=document.getElementById('un').value.trim()||null;
+  try{
+    const beginRes=await fetch('/api/webauthn/auth/begin',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    if(!beginRes.ok){const d=await beginRes.json();bioMsg(d.error||'找不到已綁定的裝置','err');return;}
+    const opts=await beginRes.json();
+    // Convert base64url → ArrayBuffer
+    opts.challenge=b64url2buf(opts.challenge);
+    if(opts.allowCredentials){
+      opts.allowCredentials=opts.allowCredentials.map(c=>({...c,id:b64url2buf(c.id)}));
+    }
+    const cred=await navigator.credentials.get({publicKey:opts});
+    const completeRes=await fetch('/api/webauthn/auth/complete',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        id:cred.id,
+        rawId:b2b64url(cred.rawId),
+        response:{
+          authenticatorData:b2b64url(cred.response.authenticatorData),
+          clientDataJSON:b2b64url(cred.response.clientDataJSON),
+          signature:b2b64url(cred.response.signature),
+          userHandle:cred.response.userHandle?b2b64url(cred.response.userHandle):null
+        },
+        type:cred.type
+      })
+    });
+    const result=await completeRes.json();
+    if(!completeRes.ok){bioMsg(result.error||'驗證失敗','err');return;}
+    bioMsg('驗證成功，正在跳轉...','ok');
+    window.location.href='/admin';
+  }catch(e){
+    if(e.name==='NotAllowedError'){bioMsg('已取消或逾時','err');}
+    else{bioMsg('驗證失敗：'+e.message,'err');}
+  }finally{
+    btn.disabled=false;
+  }
+}
+</script>
 </body>
 </html>

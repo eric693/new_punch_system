@@ -7831,7 +7831,7 @@ def api_perf_review_create():
         ).fetchone()
 
     # LINE 通知
-    grade_labels = {'A': '優秀 🌟', 'B': '良好 👍', 'C': '待加強 📚', 'D': '需改善 ⚠️'}
+    grade_labels = {'A': '優秀', 'B': '良好', 'C': '待加強', 'D': '需改善'}
     msg = (f"[績效考核] {period_label} 考核結果\n"
            f"總分：{total:.1f} / {max_s:.0f}（{pct:.0f}%）\n"
            f"評級：{grade} {grade_labels.get(grade,'')}\n"
@@ -8098,14 +8098,14 @@ def _line_query_performance(staff, user_id):
         _send_line_punch(user_id, f'查詢失敗：{e}')
         return
     if not row:
-        _send_line_punch(user_id, f'📈 {staff["name"]}\n尚無績效考核記錄。')
+        _send_line_punch(user_id, f'{staff["name"]}\n尚無績效考核記錄。')
         return
-    grade_label = {'A':'優秀 🌟','B':'良好 👍','C':'待加強 📚','D':'需改善 ⚠️'}
+    grade_label = {'A':'優秀','B':'良好','C':'待加強','D':'需改善'}
     pct = float(row['total_score']) / float(row['max_score']) * 100 if row['max_score'] else 0
     adj = f"\n薪資調整：NT$ {float(row['salary_delta']):+,.0f}" if row['salary_adjusted'] else ''
     reviewed = str(row['reviewed_at'])[:10] if row['reviewed_at'] else ''
     _send_line_punch(user_id,
-        f'📈 {staff["name"]} 最近考核\n\n'
+        f'{staff["name"]} 最近考核\n\n'
         f'期間：{row["period_label"]}\n'
         f'範本：{row["tpl_name"] or "—"}\n'
         f'得分：{float(row["total_score"]):.1f} / {float(row["max_score"]):.0f}（{pct:.0f}%）\n'
@@ -8125,7 +8125,7 @@ def _line_show_help(staff, user_id):
         '─── 查詢 ───\n'
         '🌿 查餘假 → 本年假期餘額\n'
         '💰 查薪資 → 最近薪資單\n'
-        '📈 考核 → 最近績效考核\n\n'
+        '考核 → 最近績效考核\n\n'
         '─── 申請 ───\n'
         '📝 請假 [假別] [日期] → 送出請假\n'
         '   範例：請假 特休 2026-04-01\n'

@@ -1479,6 +1479,10 @@ def _handle_line_punch_event(event, cfg):
             _line_query_performance(staff, user_id)
         elif text in ('假別', '假別清單', '假別列表'):
             _line_show_leave_types(staff, user_id)
+        elif (text in ('出勤紀錄', '出勤記錄', '月出勤', '打卡紀錄', '打卡記錄', '出勤查詢')
+              or text.startswith('出勤紀錄 ') or text.startswith('出勤記錄 ')
+              or text.startswith('打卡紀錄 ') or text.startswith('打卡記錄 ')):
+            _line_query_monthly_records(staff, user_id, text)
         elif text in ('選單', '功能', '菜單', '?', '？', 'help', 'Help', 'HELP'):
             _line_show_help(staff, user_id)
         else:
@@ -8184,6 +8188,112 @@ def _line_query_performance(staff, user_id):
         + f'考核日：{reviewed}')
 
 
+def _line_query_monthly_records(staff, user_id, text):
+    """查詢員工月出勤記錄與打卡明細。
+    格式：出勤紀錄 [YYYY-MM]（省略月份則查本月）
+    """
+    import re as _rem
+    from datetime import date as _dm, timezone as _tzm, timedelta as _tdm, datetime as _dtm
+    TW = _tzm(_tdm(hours=8))
+
+    # 解析月份
+    parts = text.strip().split()
+    month = None
+    if len(parts) >= 2:
+        m = _rem.match(r'^(\d{4})-(\d{1,2})$', parts[1])
+        if m:
+            month = f"{m.group(1)}-{m.group(2).zfill(2)}"
+    if not month:
+        month = _dtm.now(TW).strftime('%Y-%m')
+
+    try:
+        with get_db() as conn:
+            rows = conn.execute("""
+                SELECT punch_type, punched_at, is_manual
+                FROM punch_records
+                WHERE staff_id=%s
+                  AND to_char(punched_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') = %s
+                ORDER BY punched_at ASC
+            """, (staff['id'], month)).fetchall()
+    except Exception as e:
+        _send_line_punch(user_id, f'查詢失敗：{e}')
+        return
+
+    if not rows:
+        _send_line_punch(user_id, f'📋 {staff["name"]} {month}\n該月尚無打卡記錄。')
+        return
+
+    WDAY = ['一', '二', '三', '四', '五', '六', '日']
+
+    # 依日期分組
+    days = {}
+    for r in rows:
+        pa = r['punched_at']
+        if pa.tzinfo is None:
+            from datetime import timezone as _utzm
+            pa = pa.replace(tzinfo=_utzm.utc)
+        pa_tw = pa.astimezone(TW)
+        ds = pa_tw.strftime('%Y-%m-%d')
+        if ds not in days:
+            days[ds] = []
+        days[ds].append({'type': r['punch_type'], 'time': pa_tw.strftime('%H:%M'), 'manual': bool(r['is_manual'])})
+
+    total_mins = 0
+    anomaly_days = 0
+    lines = []
+
+    for ds in sorted(days.keys()):
+        recs = days[ds]
+        d = _dm.fromisoformat(ds)
+        wday = WDAY[d.weekday()]
+
+        clock_in  = next((r['time'] for r in recs if r['type'] == 'in'),  None)
+        clock_out = next((r['time'] for r in recs if r['type'] == 'out'), None)
+        has_manual = any(r['manual'] for r in recs)
+
+        if clock_in and clock_out:
+            ci = _dtm.strptime(f'{ds} {clock_in}',  '%Y-%m-%d %H:%M')
+            co = _dtm.strptime(f'{ds} {clock_out}', '%Y-%m-%d %H:%M')
+            mins = max(0, int((co - ci).total_seconds() / 60))
+            total_mins += mins
+            h, m = divmod(mins, 60)
+            dur = f'{h}h{m:02d}' if m else f'{h}h'
+        elif clock_in:
+            dur = '⚠️缺下班'
+            anomaly_days += 1
+        else:
+            dur = '⚠️缺上班'
+            anomaly_days += 1
+
+        manual_mark = '【補】' if has_manual else ''
+        ci_str = clock_in  or '--:--'
+        co_str = clock_out or '--:--'
+        lines.append(f'{ds[5:]}({wday}) {ci_str}↑{co_str}↓ {dur}{manual_mark}')
+
+    th, tm = divmod(total_mins, 60)
+    total_str = f'{th}h{tm:02d}' if tm else f'{th}h'
+    anomaly_str = f'｜異常 {anomaly_days} 天' if anomaly_days else ''
+    header = (f'📋 {staff["name"]} {month} 出勤\n'
+              f'出勤 {len(days)} 天｜工時 {total_str}{anomaly_str}\n'
+              + '─' * 20)
+
+    # 訊息過長時分批送出（LINE 單則上限約 5000 字）
+    full = header + '\n' + '\n'.join(lines)
+    if len(full) <= 4500:
+        _send_line_punch(user_id, full)
+    else:
+        _send_line_punch(user_id, header)
+        chunk, chunk_len = [], 0
+        for line in lines:
+            if chunk_len + len(line) + 1 > 1800:
+                _send_line_punch(user_id, '\n'.join(chunk))
+                chunk, chunk_len = [], 0
+            chunk.append(line)
+            chunk_len += len(line) + 1
+        if chunk:
+            _send_line_punch(user_id, '\n'.join(chunk))
+
+
 def _line_show_help(staff, user_id):
     _send_line_punch(user_id,
         f'哈囉 {staff["name"]}！以下是可用的指令：\n\n'
@@ -8194,6 +8304,8 @@ def _line_show_help(staff, user_id):
         '─── 查詢 ───\n'
         '🌿 查餘假 → 本年假期餘額\n'
         '💰 查薪資 → 最近薪資單\n'
+        '📊 出勤紀錄 → 本月出勤明細\n'
+        '   出勤紀錄 2026-03 → 指定月份\n'
         '考核 → 最近績效考核\n\n'
         '─── 申請 ───\n'
         '📝 請假 [假別] [日期] → 送出請假\n'

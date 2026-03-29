@@ -7875,9 +7875,9 @@ async function initPerfNewForm() {
         list.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
     }
   }
-  // 填充範本選單
+  // 填充範本選單（快取清空時強制重載）
   const tmplSel = document.getElementById('pf-template');
-  if (tmplSel && tmplSel.options.length <= 1) {
+  if (tmplSel && (tmplSel.options.length <= 1 || _perfTemplates.length === 0)) {
     await _loadPerfTemplateOptions();
   }
   // 預設本月
@@ -7974,7 +7974,13 @@ async function submitPerfReview() {
   });
   if (!res.ok) { showToast('送出失敗', 'error'); return; }
   showToast('考核已送出並通知員工', 'success');
+  document.getElementById('pf-staff').value = '';
+  document.getElementById('pf-template').value = '';
+  document.getElementById('pf-reviewer').value = '';
   document.getElementById('pf-comments').value = '';
+  document.getElementById('pf-items-section').style.display = 'none';
+  const _now = new Date();
+  document.getElementById('pf-period').value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
   switchPerfTab('reviews');
 }
 
@@ -8177,6 +8183,7 @@ async function savePerfConfig() {
     min_pct: parseFloat(row.querySelector('.pcfg-min').value) || 0
   })).filter(g => g.grade && g.label);
   if (!grades.length) { showToast('請至少設定一個評級', 'error'); return; }
+  if (!grades.some(g => g.min_pct === 0)) { showToast('必須有一個評級的門檻設為 0%（作為最低等級）', 'error'); return; }
   const res = await api('/api/performance/config', {
     method: 'PUT',
     body: JSON.stringify({ grades })

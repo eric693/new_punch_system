@@ -7832,7 +7832,7 @@ def api_perf_review_create():
                 "SELECT items FROM performance_templates WHERE id=%s", (template_id,)
             ).fetchone()
         if tpl:
-            items = tpl['items']
+            items = tpl.get('items') or []
             if isinstance(items, str):
                 try: items = _json.loads(items)
                 except: items = []

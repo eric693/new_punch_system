@@ -1666,110 +1666,30 @@ def _call_line_api(cfg, method, path, body=None):
 
 
 def _make_richmenu_png():
-    """Generate a 2500×1686 rich-menu PNG with labelled buttons using PIL."""
-    import io, os
-    from PIL import Image, ImageDraw, ImageFont
-
+    """Generate a simple 2500×1686 PNG with 4 colored quadrants (no external deps)."""
+    import struct, zlib
     W, H = 2500, 1686
-    CW, CH = W // 2, H // 2          # cell width / height
-    PAD  = 40                          # inner padding
-    DIVIDER_W = 6
+    colors = [(0x2e,0x9e,0x6b), (0xd6,0x42,0x42), (0xe0,0x7b,0x2a), (0x4a,0x7b,0xda)]
+    rows = []
+    for y in range(H):
+        row = bytearray()
+        for x in range(W):
+            p = (0 if y < 843 else 1) * 2 + (0 if x < 1250 else 1)
+            r, g, b = colors[p]
+            if x in (1249, 1250) or y in (842, 843):
+                r, g, b = 0x0f, 0x1c, 0x3a
+            row += bytes([r, g, b])
+        rows.append(bytes([0]) + bytes(row))
+    compressed = zlib.compress(b''.join(rows), 1)
 
-    # ── Palette ──────────────────────────────────────────────────────
-    BG       = (18, 30, 48)           # deep navy
-    CARDS = [
-        {'zh': '上班打卡', 'en': 'CLOCK IN',    'accent': (46, 204, 113),  'bg': (24, 58, 40)},
-        {'zh': '下班打卡', 'en': 'CLOCK OUT',   'accent': (231, 76,  60),  'bg': (58, 24, 24)},
-        {'zh': '休息開始', 'en': 'BREAK',       'accent': (230, 126, 34),  'bg': (58, 44, 18)},
-        {'zh': '休息結束', 'en': 'BACK TO WORK','accent': (52,  152, 219), 'bg': (18, 40, 58), 'icon': '回'},
-    ]
-    POSITIONS = [(0, 0), (CW, 0), (0, CH), (CW, CH)]
+    def chunk(name, data):
+        c = struct.pack('>I', len(data)) + name + data
+        return c + struct.pack('>I', zlib.crc32(c[4:]) & 0xffffffff)
 
-    img  = Image.new('RGB', (W, H), BG)
-    draw = ImageDraw.Draw(img)
-
-    # ── Find CJK font ─────────────────────────────────────────────────
-    _font_candidates = [
-        '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
-        '/usr/share/fonts/wqy/wqy-microhei.ttc',
-        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
-        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
-        '/usr/share/fonts/noto-cjk/NotoSansCJKtc-Regular.otf',
-        '/tmp/wqy-microhei.ttc',
-    ]
-    font_path = next((p for p in _font_candidates if os.path.exists(p)), None)
-    if not font_path:
-        try:
-            import urllib.request as _ur
-            _ur.urlretrieve(
-                'https://github.com/anthonyfok/fonts-wqy-microhei/raw/master/wqy-microhei.ttc',
-                '/tmp/wqy-microhei.ttc'
-            )
-            font_path = '/tmp/wqy-microhei.ttc'
-        except Exception:
-            pass
-
-    def _font(size):
-        if font_path:
-            try: return ImageFont.truetype(font_path, size)
-            except Exception: pass
-        return ImageFont.load_default()
-
-    f_zh   = _font(140)   # main Chinese label
-    f_en   = _font(52)    # English sub-label
-    f_icon = _font(200)   # single-char icon inside circle
-
-    # ── Draw each card ────────────────────────────────────────────────
-    for card, (ox, oy) in zip(CARDS, POSITIONS):
-        ac  = card['accent']
-        bg  = card['bg']
-
-        # Cell background
-        draw.rectangle([ox, oy, ox + CW - 1, oy + CH - 1], fill=bg)
-
-        # Top accent bar
-        draw.rectangle([ox, oy, ox + CW - 1, oy + 18], fill=ac)
-
-        # ── Icon circle ───────────────────────────────────────────────
-        cx = ox + CW // 2
-        cy = oy + CH // 2 - 80
-        R  = 160
-
-        # Outer glow ring (semi-transparent via blending)
-        for dr in range(20, 0, -1):
-            alpha = int(80 * (1 - dr / 20))
-            shade = tuple(min(255, int(c * 0.6 + BG[i] * 0.4)) for i, c in enumerate(ac))
-            draw.ellipse([cx - R - dr, cy - R - dr, cx + R + dr, cy + R + dr],
-                         outline=shade + (alpha,) if False else shade,
-                         width=1)
-
-        # Solid filled circle
-        draw.ellipse([cx - R, cy - R, cx + R, cy + R], fill=ac)
-
-        # Inner dark circle
-        IR = R - 22
-        draw.ellipse([cx - IR, cy - IR, cx + IR, cy + IR], fill=bg)
-
-        # First character of zh label inside circle (colored)
-        icon_ch = card.get('icon', card['zh'][0])
-        draw.text((cx, cy), icon_ch, font=f_icon, fill=ac, anchor='mm')
-
-        # ── Text labels ───────────────────────────────────────────────
-        draw.text((cx, oy + CH // 2 + 120), card['zh'], font=f_zh,
-                  fill=(255, 255, 255), anchor='mm')
-        draw.text((cx, oy + CH // 2 + 230), card['en'],  font=f_en,
-                  fill=ac, anchor='mm')
-
-    # ── Dividers ─────────────────────────────────────────────────────
-    draw.rectangle([CW - DIVIDER_W // 2, 0,
-                    CW + DIVIDER_W // 2, H], fill=BG)
-    draw.rectangle([0, CH - DIVIDER_W // 2,
-                    W, CH + DIVIDER_W // 2], fill=BG)
-
-    buf = io.BytesIO()
-    img.save(buf, 'PNG', optimize=True)
-    return buf.getvalue()
+    return (b'\x89PNG\r\n\x1a\n'
+            + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', compressed)
+            + chunk(b'IEND', b''))
 
 
 @app.route('/api/line-punch/richmenu/create', methods=['POST'])
@@ -1783,8 +1703,8 @@ def api_richmenu_create():
     body = {
         "size": {"width": 2500, "height": 1686},
         "selected": True,
-        "name": "打卡選單",
-        "chatBarText": "打卡",
+        "name": "Punch Menu",
+        "chatBarText": "Punch",
         "areas": [
             {"bounds": {"x": 0,    "y": 0,   "width": 1250, "height": 843}, "action": {"type": "message", "text": "上班"}},
             {"bounds": {"x": 1250, "y": 0,   "width": 1250, "height": 843}, "action": {"type": "message", "text": "下班"}},

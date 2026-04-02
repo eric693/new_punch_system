@@ -1306,33 +1306,6 @@ def api_punch_reqs_list():
         """, params).fetchall()
     return jsonify([punch_req_row(r) for r in rows])
 
-@app.route('/api/punch/requests/<int:rid>', methods=['PUT'])
-@login_required
-def api_punch_req_review(rid):
-    b           = request.get_json(force=True)
-    action      = b.get('action')
-    reviewed_by = b.get('reviewed_by', '').strip()
-    review_note = b.get('review_note', '').strip()
-    if action not in ('approve', 'reject'):
-        return jsonify({'error': 'invalid action'}), 400
-    new_status = 'approved' if action == 'approve' else 'rejected'
-    with get_db() as conn:
-        row = conn.execute("""
-            UPDATE punch_requests
-            SET status=%s, reviewed_by=%s, review_note=%s, reviewed_at=NOW()
-            WHERE id=%s
-            RETURNING *, (SELECT name FROM punch_staff WHERE id=staff_id) as staff_name
-        """, (new_status, reviewed_by, review_note, rid)).fetchone()
-        if not row: return ('', 404)
-        if action == 'approve':
-            conn.execute("""
-                INSERT INTO punch_records
-                  (staff_id, punch_type, punched_at, note, is_manual, manual_by)
-                VALUES (%s,%s,%s,%s,TRUE,%s)
-            """, (row['staff_id'], row['punch_type'], row['requested_at'],
-                  f'補打卡申請 #{rid}：{row["reason"]}', reviewed_by))
-    return jsonify(punch_req_row(row))
-
 @app.route('/api/punch/requests/<int:rid>', methods=['DELETE'])
 @login_required
 def api_punch_req_delete(rid):
@@ -5168,9 +5141,6 @@ def _patch_reviews_with_notifications():
     """
     pass
 
-# Override punch request review to add LINE notification
-_orig_punch_req_review = app.view_functions.get('api_punch_req_review')
-
 @app.route('/api/punch/requests/<int:rid>', methods=['PUT'])
 @login_required
 def api_punch_req_review_v2(rid):
@@ -7957,7 +7927,7 @@ def api_bank_import():
     def _is_date(s):
         s = s.strip().replace('/', '-').replace('.', '-')
         for fmt in ('%Y-%m-%d','%Y-%m-%d','%m-%d-%Y','%d-%m-%Y'):
-            try: _dt2.strptime(s, fmt); return True
+            try: _dt.strptime(s, fmt); return True
             except: pass
         # ROC year: 民國 e.g. 113/01/15
         import re
@@ -9523,7 +9493,7 @@ _MOBILE_JWT_SECRET = os.environ.get('MOBILE_JWT_SECRET', app.secret_key)
 _JWT_EXPIRE_HOURS  = 24 * 7   # 7 days
 
 def _make_jwt(payload: dict) -> str:
-    payload['exp'] = _dt.utcnow() + _td(hours=_JWT_EXPIRE_HOURS)
+    payload['exp'] = _dt.now(_tz.utc) + _td(hours=_JWT_EXPIRE_HOURS)
     return _pyjwt.encode(payload, _MOBILE_JWT_SECRET, algorithm='HS256')
 
 def _decode_jwt(token: str):

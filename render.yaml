@@ -26,3 +26,7 @@ services:
         fromDatabase:
           name: punch-db
           property: connectionString
+      - key: WEBAUTHN_RP_ID
+        sync: false
+      - key: WEBAUTHN_ORIGIN
+        sync: false

@@ -998,14 +998,36 @@ def api_punch_staff_create():
     if not username: return jsonify({'error': '帳號為必填'}), 400
     if not password or len(password) < 4:
         return jsonify({'error': '密碼至少 4 個字元'}), 400
-    employee_code = b.get('employee_code', '') or None
-    if employee_code: employee_code = employee_code.strip() or None
+    employee_code  = (b.get('employee_code') or '').strip() or None
+    department     = (b.get('department') or '').strip()
+    role           = (b.get('role') or '').strip()
+    position_title = (b.get('position_title') or '').strip()
+    hire_date      = b.get('hire_date') or None
+    birth_date     = b.get('birth_date') or None
+    national_id    = (b.get('national_id') or '').strip()
+    gender         = (b.get('gender') or '').strip()
+    address        = (b.get('address') or '').strip()
+    bank_code      = (b.get('bank_code') or '').strip()
+    bank_name      = (b.get('bank_name') or '').strip()
+    bank_branch    = (b.get('bank_branch') or '').strip()
+    bank_account   = (b.get('bank_account') or '').strip()
+    account_holder = (b.get('account_holder') or '').strip()
+    active         = bool(b.get('active', True))
     try:
         with get_db() as conn:
             row = conn.execute("""
-                INSERT INTO punch_staff (name, username, password_hash, role, employee_code)
-                VALUES (%s,%s,%s,%s,%s) RETURNING *
-            """, (name, username, _hash_pw(password), b.get('role', '').strip(), employee_code)).fetchone()
+                INSERT INTO punch_staff
+                  (name, username, password_hash, role, employee_code,
+                   department, position_title, hire_date, birth_date,
+                   national_id, gender, address,
+                   bank_code, bank_name, bank_branch, bank_account, account_holder,
+                   active)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+            """, (name, username, _hash_pw(password), role, employee_code,
+                  department, position_title, hire_date, birth_date,
+                  national_id, gender, address,
+                  bank_code, bank_name, bank_branch, bank_account, account_holder,
+                  active)).fetchone()
         return jsonify(punch_staff_row(row)), 201
     except psycopg.errors.UniqueViolation:
         return jsonify({'error': '姓名或帳號已存在，請換一個'}), 409
@@ -10762,13 +10784,11 @@ def mobile_admin_anomalies():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# WebAuthn (Face ID / 指紋) — 網頁生物辨識登入
+# WebAuthn (Face ID / 指紋) — using py_webauthn library
 # ═══════════════════════════════════════════════════════════════════════════════
 import base64 as _b64
-import struct as _struct
 
-# RP_ID 必須與瀏覽器的網域完全一致
-_WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID', 'punch-system.onrender.com')
+_WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID',  'punch-system.onrender.com')
 _WEBAUTHN_RP_NAME = '打卡系統'
 _WEBAUTHN_ORIGIN  = os.environ.get('WEBAUTHN_ORIGIN', 'https://punch-system.onrender.com')
 
@@ -10776,7 +10796,7 @@ def _b64url_encode(data: bytes) -> str:
     return _b64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
 
 def _b64url_decode(s: str) -> bytes:
-    s = s.replace(' ', '+').replace('-', '+').replace('_', '/')
+    s = str(s).replace('-', '+').replace('_', '/')
     padding = 4 - len(s) % 4
     if padding != 4:
         s += '=' * padding
@@ -10805,12 +10825,7 @@ _init_webauthn_db()
 
 @app.route('/api/webauthn/register/begin', methods=['POST'])
 def webauthn_register_begin():
-    """登入後呼叫：產生 WebAuthn 註冊挑戰"""
-    # 判斷來源：session admin 或 session staff
-    user_key = None
-    user_name = None
-    user_display = None
-
+    user_key = user_name = user_display = None
     if session.get('logged_in'):
         user_key     = f"admin_{session['admin_id']}"
         user_name    = session.get('admin_username', '')
@@ -10822,103 +10837,88 @@ def webauthn_register_begin():
         user_display = user_name
     else:
         return jsonify({'error': '請先登入'}), 401
-
-    challenge = secrets.token_bytes(32)
-    session['webauthn_reg_challenge'] = _b64url_encode(challenge)
-    session['webauthn_reg_user_key']  = user_key
-
-    user_id_bytes = user_key.encode('utf-8')
-
-    options = {
-        'rp': {'id': _WEBAUTHN_RP_ID, 'name': _WEBAUTHN_RP_NAME},
-        'user': {
-            'id': _b64url_encode(user_id_bytes),
-            'name': user_name,
-            'displayName': user_display,
-        },
-        'challenge': _b64url_encode(challenge),
-        'pubKeyCredParams': [
-            {'type': 'public-key', 'alg': -7},    # ES256
-            {'type': 'public-key', 'alg': -257},   # RS256
-        ],
-        'timeout': 60000,
-        'authenticatorSelection': {
-            'authenticatorAttachment': 'platform',   # 僅使用裝置內建（Face ID / 指紋）
-            'userVerification': 'required',
-            'residentKey': 'preferred',
-        },
-        'attestation': 'none',
-    }
-    return jsonify(options)
+    try:
+        from webauthn import generate_registration_options, options_to_json as _wa_o2j
+        from webauthn.helpers.structs import (
+            AuthenticatorSelectionCriteria, UserVerificationRequirement,
+            ResidentKeyRequirement, AuthenticatorAttachment,
+            AttestationConveyancePreference, PublicKeyCredentialDescriptor,
+        )
+        from webauthn.helpers.cose import COSEAlgorithmIdentifier
+        import json as _waj
+        with get_db() as conn:
+            existing = conn.execute(
+                "SELECT credential_id FROM webauthn_credentials WHERE user_key=%s", (user_key,)
+            ).fetchall()
+        exclude_creds = [PublicKeyCredentialDescriptor(id=_b64url_decode(r['credential_id'])) for r in existing]
+        options = generate_registration_options(
+            rp_id=_WEBAUTHN_RP_ID,
+            rp_name=_WEBAUTHN_RP_NAME,
+            user_id=user_key.encode('utf-8'),
+            user_name=user_name,
+            user_display_name=user_display or user_name,
+            authenticator_selection=AuthenticatorSelectionCriteria(
+                authenticator_attachment=AuthenticatorAttachment.PLATFORM,
+                user_verification=UserVerificationRequirement.REQUIRED,
+                resident_key=ResidentKeyRequirement.PREFERRED,
+            ),
+            attestation=AttestationConveyancePreference.NONE,
+            supported_pub_key_algs=[
+                COSEAlgorithmIdentifier.ECDSA_SHA_256,
+                COSEAlgorithmIdentifier.RSASSA_PKCS1_v1_5_SHA_256,
+            ],
+            exclude_credentials=exclude_creds,
+        )
+        session['webauthn_reg_challenge'] = _b64url_encode(options.challenge)
+        session['webauthn_reg_user_key']  = user_key
+        return jsonify(_waj.loads(_wa_o2j(options)))
+    except Exception as e:
+        return jsonify({'error': f'初始化失敗：{e}'}), 500
 
 # ── Registration Complete ──────────────────────────────────────────────────────
 
 @app.route('/api/webauthn/register/complete', methods=['POST'])
 def webauthn_register_complete():
-    import json as _json2, hashlib as _hs2
     challenge_b64 = session.get('webauthn_reg_challenge')
     user_key      = session.get('webauthn_reg_user_key')
     if not challenge_b64 or not user_key:
         return jsonify({'error': '找不到挑戰，請重新開始'}), 400
-
     b = request.get_json(force=True) or {}
     try:
+        from webauthn import verify_registration_response
+        from webauthn.helpers.structs import RegistrationCredential, AuthenticatorAttestationResponse
+        credential = RegistrationCredential(
+            id=b['id'],
+            raw_id=_b64url_decode(b['rawId']),
+            response=AuthenticatorAttestationResponse(
+                client_data_json=_b64url_decode(b['response']['clientDataJSON']),
+                attestation_object=_b64url_decode(b['response']['attestationObject']),
+            ),
+            type=b.get('type', 'public-key'),
+        )
+        verification = verify_registration_response(
+            credential=credential,
+            expected_challenge=_b64url_decode(challenge_b64),
+            expected_rp_id=_WEBAUTHN_RP_ID,
+            expected_origin=_WEBAUTHN_ORIGIN,
+            require_user_verification=True,
+        )
         credential_id = b['id']
-        resp          = b['response']
-        client_data   = _b64url_decode(resp['clientDataJSON'])
-        attestation   = _b64url_decode(resp['attestationObject'])
-        client_json   = _json2.loads(client_data)
-
-        # Verify clientData
-        assert client_json['type'] == 'webauthn.create', 'wrong type'
-        recv_challenge = client_json['challenge']
-        # normalize both sides
-        assert recv_challenge.rstrip('=') == challenge_b64.rstrip('='), 'challenge mismatch'
-        assert client_json['origin'] == _WEBAUTHN_ORIGIN, f"origin mismatch: {client_json['origin']}"
-
-        # Parse CBOR attestation object to get public key
-        try:
-            import cbor2
-            att_obj = cbor2.loads(attestation)
-        except ImportError:
-            # Minimal CBOR parser for attestation (none format)
-            att_obj = _minimal_cbor_decode(attestation)
-
-        auth_data = att_obj[b'authData'] if b'authData' in att_obj else att_obj.get('authData', b'')
-
-        # authData layout: rpIdHash(32) + flags(1) + signCount(4) + [AAGUID(16) + credLen(2) + credId + coseKey]
-        rp_id_hash = auth_data[:32]
-        expected_hash = _hs2.sha256(_WEBAUTHN_RP_ID.encode()).digest()
-        assert rp_id_hash == expected_hash, 'rpIdHash mismatch'
-
-        flags = auth_data[32]
-        assert flags & 0x01, 'User Presence not set'
-        assert flags & 0x04, 'User Verification not set'
-
-        # Extract credential data
-        cred_data = auth_data[37:]  # skip rpIdHash + flags + signCount
-        aaguid    = cred_data[:16]
-        cred_id_len = _struct.unpack('>H', cred_data[16:18])[0]
-        cred_id_bytes = cred_data[18:18 + cred_id_len]
-        cose_key_bytes = cred_data[18 + cred_id_len:]
-
-        # Verify credential_id matches
-        assert _b64url_encode(cred_id_bytes).rstrip('=') == credential_id.rstrip('='), 'credentialId mismatch'
-
-        device_name = b.get('device_name', '我的裝置')
+        public_key    = verification.credential_public_key
+        sign_count    = verification.sign_count
+        device_name   = b.get('device_name', '我的裝置')
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO webauthn_credentials
                   (user_key, credential_id, public_key, sign_count, device_name)
-                VALUES (%s, %s, %s, 0, %s)
+                VALUES (%s,%s,%s,%s,%s)
                 ON CONFLICT (credential_id) DO UPDATE
-                  SET sign_count=0, device_name=%s
-            """, (user_key, credential_id, cose_key_bytes, device_name, device_name))
-
+                  SET sign_count=%s, device_name=%s, user_key=%s
+            """, (user_key, credential_id, public_key, sign_count, device_name,
+                  sign_count, device_name, user_key))
         session.pop('webauthn_reg_challenge', None)
         session.pop('webauthn_reg_user_key', None)
         return jsonify({'ok': True})
-
     except Exception as ex:
         return jsonify({'error': f'綁定失敗：{ex}'}), 400
 
@@ -10928,100 +10928,87 @@ def webauthn_register_complete():
 def webauthn_auth_begin():
     b        = request.get_json(force=True) or {}
     username = (b.get('username') or '').strip()
-
-    allow_credentials = []
-
-    if username:
-        # Find user_key from username (try admin first, then staff)
-        with get_db() as conn:
-            admin = conn.execute(
-                "SELECT id FROM admin_accounts WHERE username=%s AND active=TRUE", (username,)
-            ).fetchone()
-            if admin:
-                user_key = f"admin_{admin['id']}"
-            else:
-                staff = conn.execute(
-                    "SELECT id FROM punch_staff WHERE username=%s AND active=TRUE", (username,)
-                ).fetchone()
-                user_key = f"staff_{staff['id']}" if staff else None
-
-        if user_key:
+    try:
+        from webauthn import generate_authentication_options, options_to_json as _wa_o2j
+        from webauthn.helpers.structs import UserVerificationRequirement, PublicKeyCredentialDescriptor
+        import json as _waj
+        allow_credentials = []
+        if username:
             with get_db() as conn:
-                creds = conn.execute(
-                    "SELECT credential_id FROM webauthn_credentials WHERE user_key=%s", (user_key,)
-                ).fetchall()
-            allow_credentials = [{'type': 'public-key', 'id': r['credential_id']} for r in creds]
-
-    if not allow_credentials and not username:
-        # Discoverable credential (resident key) — no allowCredentials needed
-        pass
-
-    challenge = secrets.token_bytes(32)
-    session['webauthn_auth_challenge'] = _b64url_encode(challenge)
-
-    options = {
-        'challenge': _b64url_encode(challenge),
-        'timeout': 60000,
-        'rpId': _WEBAUTHN_RP_ID,
-        'allowCredentials': allow_credentials,
-        'userVerification': 'required',
-    }
-    return jsonify(options)
+                admin = conn.execute(
+                    "SELECT id FROM admin_accounts WHERE username=%s AND active=TRUE", (username,)
+                ).fetchone()
+                if admin:
+                    user_key = f"admin_{admin['id']}"
+                else:
+                    staff = conn.execute(
+                        "SELECT id FROM punch_staff WHERE username=%s AND active=TRUE", (username,)
+                    ).fetchone()
+                    user_key = f"staff_{staff['id']}" if staff else None
+                if user_key:
+                    creds = conn.execute(
+                        "SELECT credential_id FROM webauthn_credentials WHERE user_key=%s", (user_key,)
+                    ).fetchall()
+                    allow_credentials = [
+                        PublicKeyCredentialDescriptor(id=_b64url_decode(r['credential_id']))
+                        for r in creds
+                    ]
+        options = generate_authentication_options(
+            rp_id=_WEBAUTHN_RP_ID,
+            allow_credentials=allow_credentials,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        )
+        session['webauthn_auth_challenge'] = _b64url_encode(options.challenge)
+        return jsonify(_waj.loads(_wa_o2j(options)))
+    except Exception as e:
+        return jsonify({'error': f'初始化失敗：{e}'}), 500
 
 # ── Authentication Complete ────────────────────────────────────────────────────
 
 @app.route('/api/webauthn/auth/complete', methods=['POST'])
 def webauthn_auth_complete():
-    import json as _json3, hashlib as _hs3
     challenge_b64 = session.get('webauthn_auth_challenge')
     if not challenge_b64:
         return jsonify({'error': '找不到挑戰，請重新開始'}), 400
-
     b = request.get_json(force=True) or {}
     try:
+        from webauthn import verify_authentication_response
+        from webauthn.helpers.structs import AuthenticationCredential, AuthenticatorAssertionResponse
+        import json as _json3
         credential_id = b['id']
-        resp          = b['response']
-        client_data   = _b64url_decode(resp['clientDataJSON'])
-        auth_data     = _b64url_decode(resp['authenticatorData'])
-        signature     = _b64url_decode(resp['signature'])
-        client_json   = _json3.loads(client_data)
-
-        assert client_json['type'] == 'webauthn.get', 'wrong type'
-        recv_challenge = client_json['challenge']
-        assert recv_challenge.rstrip('=') == challenge_b64.rstrip('='), 'challenge mismatch'
-        assert client_json['origin'] == _WEBAUTHN_ORIGIN, f"origin mismatch: {client_json['origin']}"
-
-        # Verify rpIdHash
-        rp_id_hash = auth_data[:32]
-        assert rp_id_hash == _hs3.sha256(_WEBAUTHN_RP_ID.encode()).digest(), 'rpIdHash mismatch'
-        flags = auth_data[32]
-        assert flags & 0x01, 'User Presence not set'
-        assert flags & 0x04, 'User Verification not set'
-
-        # Lookup credential
         with get_db() as conn:
             cred = conn.execute(
                 "SELECT * FROM webauthn_credentials WHERE credential_id=%s", (credential_id,)
             ).fetchone()
         if not cred:
             return jsonify({'error': '找不到已綁定的裝置，請先綁定'}), 401
-
-        # Verify signature using stored COSE public key
-        client_data_hash = _hs3.sha256(client_data).digest()
-        signed_data = auth_data + client_data_hash
-        _verify_cose_signature(cred['public_key'], signed_data, signature)
-
-        # Update sign count
-        new_sign_count = _struct.unpack('>I', auth_data[33:37])[0]
+        user_handle_raw = b['response'].get('userHandle')
+        credential = AuthenticationCredential(
+            id=credential_id,
+            raw_id=_b64url_decode(b['rawId']),
+            response=AuthenticatorAssertionResponse(
+                client_data_json=_b64url_decode(b['response']['clientDataJSON']),
+                authenticator_data=_b64url_decode(b['response']['authenticatorData']),
+                signature=_b64url_decode(b['response']['signature']),
+                user_handle=_b64url_decode(user_handle_raw) if user_handle_raw else None,
+            ),
+            type=b.get('type', 'public-key'),
+        )
+        verification = verify_authentication_response(
+            credential=credential,
+            expected_challenge=_b64url_decode(challenge_b64),
+            expected_rp_id=_WEBAUTHN_RP_ID,
+            expected_origin=_WEBAUTHN_ORIGIN,
+            credential_public_key=bytes(cred['public_key']),
+            credential_current_sign_count=int(cred['sign_count']),
+            require_user_verification=True,
+        )
         with get_db() as conn:
             conn.execute(
                 "UPDATE webauthn_credentials SET sign_count=%s WHERE id=%s",
-                (new_sign_count, cred['id'])
+                (verification.new_sign_count, cred['id'])
             )
-
         session.pop('webauthn_auth_challenge', None)
-
-        # Create session based on user_key
         user_key = cred['user_key']
         if user_key.startswith('admin_'):
             admin_id = int(user_key[6:])
@@ -11042,7 +11029,6 @@ def webauthn_auth_complete():
             session['admin_permissions']  = perms
             session['admin_is_super']     = bool(admin['is_super'])
             return jsonify({'ok': True, 'redirect': '/admin', 'role': 'admin'})
-
         elif user_key.startswith('staff_'):
             staff_id = int(user_key[6:])
             with get_db() as conn:
@@ -11054,9 +11040,7 @@ def webauthn_auth_complete():
             session['punch_staff_id']   = staff['id']
             session['punch_staff_name'] = staff['name']
             return jsonify({'ok': True, 'role': 'staff', 'user': dict(staff)})
-
         return jsonify({'error': '未知帳號類型'}), 400
-
     except Exception as ex:
         return jsonify({'error': f'驗證失敗：{ex}'}), 400
 
@@ -11091,82 +11075,3 @@ def webauthn_delete_credential(cid):
             "DELETE FROM webauthn_credentials WHERE id=%s AND user_key=%s", (cid, user_key)
         )
     return jsonify({'ok': True})
-
-# ── Crypto helpers ─────────────────────────────────────────────────────────────
-
-def _verify_cose_signature(cose_key_bytes: bytes, message: bytes, signature: bytes):
-    """驗證 COSE 格式公鑰的簽名（支援 ES256 / RS256）"""
-    try:
-        import cbor2
-        cose = cbor2.loads(cose_key_bytes)
-    except ImportError:
-        cose = _minimal_cbor_decode(cose_key_bytes)
-
-    from cryptography.hazmat.primitives.asymmetric import ec, padding
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
-
-    kty = cose.get(1) or cose.get(b'\x01')
-    alg = cose.get(3) or cose.get(b'\x03')
-
-    if alg == -7 or kty == 2:  # ES256 / EC2
-        x = cose.get(-2) or cose.get(b'\x21') or b''
-        y = cose.get(-3) or cose.get(b'\x22') or b''
-        pub_numbers = ec.EllipticCurvePublicNumbers(
-            x=int.from_bytes(x, 'big'),
-            y=int.from_bytes(y, 'big'),
-            curve=ec.SECP256R1()
-        )
-        pub_key = pub_numbers.public_key(default_backend())
-        pub_key.verify(signature, message, ec.ECDSA(hashes.SHA256()))
-
-    elif alg == -257 or kty == 3:  # RS256 / RSA
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        n = cose.get(-1) or cose.get(b'\x20') or b''
-        e_bytes = cose.get(-2) or cose.get(b'\x21') or b''
-        pub_numbers = rsa.RSAPublicNumbers(
-            e=int.from_bytes(e_bytes, 'big'),
-            n=int.from_bytes(n, 'big')
-        )
-        pub_key = pub_numbers.public_key(default_backend())
-        pub_key.verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
-    else:
-        raise ValueError(f'Unsupported alg: {alg}')
-
-def _minimal_cbor_decode(data: bytes) -> dict:
-    """極簡 CBOR map decoder（僅處理 attestation none 格式所需）"""
-    import io
-    buf = io.BytesIO(data)
-    return _cbor_read(buf)
-
-def _cbor_read(buf):
-    import io
-    b0 = ord(buf.read(1))
-    major = b0 >> 5
-    info  = b0 & 0x1f
-    if info <= 23:
-        val = info
-    elif info == 24:
-        val = ord(buf.read(1))
-    elif info == 25:
-        val = _struct.unpack('>H', buf.read(2))[0]
-    elif info == 26:
-        val = _struct.unpack('>I', buf.read(4))[0]
-    elif info == 27:
-        val = _struct.unpack('>Q', buf.read(8))[0]
-    else:
-        val = 0
-    if major == 0:   return val
-    if major == 1:   return -1 - val
-    if major == 2:   return buf.read(val)      # bytes
-    if major == 3:   return buf.read(val).decode('utf-8', errors='replace')  # str
-    if major == 4:   return [_cbor_read(buf) for _ in range(val)]  # array
-    if major == 5:   return {_cbor_read(buf): _cbor_read(buf) for _ in range(val)}  # map
-    if major == 6:   _cbor_read(buf); return None  # tag
-    if major == 7:
-        if info == 20: return False
-        if info == 21: return True
-        if info == 22: return None
-    return None
-

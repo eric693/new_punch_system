@@ -1154,13 +1154,16 @@ def api_punch_record_manual():
 @app.route('/api/punch/records/<int:rid>', methods=['PUT'])
 @login_required
 def api_punch_record_update(rid):
-    b = request.get_json(force=True)
+    b          = request.get_json(force=True)
+    punch_type = b.get('punch_type')
+    if punch_type not in ('in', 'out', 'break_out', 'break_in'):
+        return jsonify({'error': '無效的打卡類型'}), 400
     with get_db() as conn:
         row = conn.execute("""
             UPDATE punch_records
             SET punch_type=%s, punched_at=%s, note=%s, is_manual=TRUE, manual_by=%s
             WHERE id=%s RETURNING *
-        """, (b.get('punch_type'), b.get('punched_at'),
+        """, (punch_type, b.get('punched_at'),
               b.get('note', ''), b.get('manual_by', ''), rid)).fetchone()
     return jsonify(punch_record_row(row)) if row else ('', 404)
 
@@ -2037,7 +2040,7 @@ def _do_line_punch(staff, user_id, lat, lng, forced_type, PUNCH_LABEL):
     else:
         with get_db() as conn:
             last = conn.execute("""
-                SELECT punch_type FROM punch_records
+                SELECT punch_type, punched_at FROM punch_records
                 WHERE staff_id=%s
                   AND (punched_at AT TIME ZONE 'Asia/Taipei')::date
                     = (NOW() AT TIME ZONE 'Asia/Taipei')::date
@@ -2046,6 +2049,23 @@ def _do_line_punch(staff, user_id, lat, lng, forced_type, PUNCH_LABEL):
         if not last:                               punch_type = 'in'
         elif last['punch_type'] == 'in':           punch_type = 'out'
         elif last['punch_type'] == 'break_out':    punch_type = 'break_in'
+        elif last['punch_type'] == 'out':
+            # 下班後若在 30 分鐘內再打卡，視為誤觸，拒絕並提示
+            from datetime import datetime as _dtnow, timezone as _tznow, timedelta as _tdnow
+            _TW_now = _tznow(_tdnow(hours=8))
+            _last_at = last.get('punched_at')
+            if _last_at is not None:
+                if _last_at.tzinfo is None:
+                    _last_at = _last_at.replace(tzinfo=_tznow.utc)
+                _mins_since = (_dtnow.now(_TW_now) - _last_at.astimezone(_TW_now)).total_seconds() / 60
+                if _mins_since < 30:
+                    _send_line_punch(user_id,
+                        f'⚠️ 您已於 {int(_mins_since)} 分鐘前下班打卡，\n'
+                        '請確認是否要重新上班打卡？\n\n'
+                        '若要繼續，請再次點選「上班」。')
+                    _pending_line_punches[user_id] = 'in'
+                    return
+            punch_type = 'in'
         else:                                      punch_type = 'in'
 
     label = PUNCH_LABEL.get(punch_type, punch_type)
@@ -2774,18 +2794,18 @@ def api_shift_assignment_create():
             for sid in staff_ids:
                 months = list({d[:7] for d in dates})
                 for month in months:
-                    row = conn.execute("""
+                    rows_sr = conn.execute("""
                         SELECT dates FROM schedule_requests
-                        WHERE staff_id=%s AND month=%s AND status='approved'
-                    """, (sid, month)).fetchone()
-                    if row:
-                        approved_dates = row['dates'] or []
-                        if isinstance(approved_dates, str):
-                            try: approved_dates = _json.loads(approved_dates)
-                            except: approved_dates = []
+                        WHERE staff_id=%s AND month=%s AND status IN ('approved','pending')
+                    """, (sid, month)).fetchall()
+                    for row in rows_sr:
+                        row_dates = row['dates'] or []
+                        if isinstance(row_dates, str):
+                            try: row_dates = _json.loads(row_dates)
+                            except: row_dates = []
                         if sid not in leave_lookup:
                             leave_lookup[sid] = set()
-                        leave_lookup[sid].update(approved_dates)
+                        leave_lookup[sid].update(row_dates)
 
         staff_names = {}
         for r in conn.execute(
@@ -2932,12 +2952,12 @@ def api_shift_import():
             "SELECT id, name FROM shift_types WHERE active=TRUE"
         ).fetchall()}
 
-        # 預先讀取所有涉及員工的核准排休（僅在非強制時）
+        # 預先讀取所有涉及員工的核准/待審排休（僅在非強制時）
         leave_lookup = {}   # { staff_id: set(date_str) }
         if not force:
             leave_rows = conn.execute("""
                 SELECT staff_id, dates FROM schedule_requests
-                WHERE status='approved'
+                WHERE status IN ('approved','pending')
             """).fetchall()
             for lr in leave_rows:
                 sid = lr['staff_id']
@@ -3763,8 +3783,13 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
     cur  = s
     while cur <= e:
         if cur.weekday() != 6:  # exclude Sunday (勞基法最低標準)
-            if cur == s and start_half: days += 0.5
-            elif cur == e and end_half: days += 0.5
+            if cur == s and cur == e:
+                # 同一天：兩個半天旗標都為 True 代表整天（上午＋下午）
+                if start_half and end_half: days += 1.0
+                elif start_half or end_half: days += 0.5
+                else: days += 1.0
+            elif cur == s and start_half: days += 0.5
+            elif cur == e and end_half:   days += 0.5
             else: days += 1.0
         cur += _tdd(days=1)
     return days
@@ -4322,14 +4347,57 @@ def salary_record_row(row):
     return d
 
 def _eval_formula(formula, base_salary, insured_salary, service_years):
-    """安全計算薪資公式"""
+    """安全計算薪資公式（僅允許數值四則運算，不使用 eval）"""
+    import ast as _ast
     if not formula: return 0.0
+
+    _ALLOWED_NODES = (
+        _ast.Expression, _ast.BinOp, _ast.UnaryOp, _ast.Constant,
+        _ast.Add, _ast.Sub, _ast.Mult, _ast.Div, _ast.FloorDiv,
+        _ast.Mod, _ast.Pow, _ast.USub, _ast.UAdd, _ast.Name,
+    )
+    _vars = {
+        'base_salary':    float(base_salary or 0),
+        'insured_salary': float(insured_salary or 0),
+        'service_years':  float(service_years or 0),
+    }
+
+    def _safe_eval(node):
+        if isinstance(node, _ast.Expression):
+            return _safe_eval(node.body)
+        if isinstance(node, _ast.Constant):
+            if not isinstance(node.value, (int, float)):
+                raise ValueError('非數值常數')
+            return float(node.value)
+        if isinstance(node, _ast.Name):
+            if node.id not in _vars:
+                raise ValueError(f'未知變數：{node.id}')
+            return _vars[node.id]
+        if isinstance(node, _ast.BinOp):
+            l, r = _safe_eval(node.left), _safe_eval(node.right)
+            op = node.op
+            if isinstance(op, _ast.Add):      return l + r
+            if isinstance(op, _ast.Sub):      return l - r
+            if isinstance(op, _ast.Mult):     return l * r
+            if isinstance(op, _ast.Div):      return l / r if r else 0.0
+            if isinstance(op, _ast.FloorDiv): return float(int(l // r)) if r else 0.0
+            if isinstance(op, _ast.Mod):      return l % r if r else 0.0
+            if isinstance(op, _ast.Pow):
+                if abs(r) > 32: raise ValueError('指數過大')
+                return l ** r
+        if isinstance(node, _ast.UnaryOp):
+            v = _safe_eval(node.operand)
+            if isinstance(node.op, _ast.USub): return -v
+            if isinstance(node.op, _ast.UAdd): return +v
+        raise ValueError(f'不允許的運算：{type(node).__name__}')
+
     try:
-        result = eval(formula, {"__builtins__": {}}, {
-            'base_salary':    float(base_salary or 0),
-            'insured_salary': float(insured_salary or 0),
-            'service_years':  float(service_years or 0),
-        })
+        tree = _ast.parse(formula.strip(), mode='eval')
+        # 白名單節點檢查
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ALLOWED_NODES):
+                raise ValueError(f'不允許的語法：{type(node).__name__}')
+        result = _safe_eval(tree)
         return round(float(result), 2)
     except Exception:
         return 0.0

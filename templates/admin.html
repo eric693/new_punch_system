@@ -4023,7 +4023,8 @@ async function loadPunchStaff() {
 function openPunchStaffModal(id=null) {
   punchEditStaffId = id;
   document.getElementById('psm-title').textContent = id ? '編輯員工' : '新增員工';
-  document.getElementById('psm-password').value = ''; document.getElementById('psm-password2').value = '';
+  document.getElementById('psm-password').value = id ? (punchStaffList.find(x=>x.id===id)?.password_plain || '') : '';
+  document.getElementById('psm-password2').value = id ? (punchStaffList.find(x=>x.id===id)?.password_plain || '') : '';
   const allFields = ['psm-bank-code','psm-bank-name','psm-bank-branch','psm-bank-account','psm-account-holder',
                      'psm-department','psm-role','psm-position-title','psm-national-id','psm-address'];
   if (id) {
@@ -8176,6 +8177,11 @@ function openAdminAccModal(id=null) {
   document.getElementById('aam-title').textContent = id ? '編輯帳號' : '新增帳號';
   document.getElementById('aam-password').value = '';
   document.getElementById('aam-pw-hint').textContent = id ? '留空不修改密碼' : '新增必填';
+  // 編輯時填入明文密碼
+  if (id) {
+    const _a = adminAccList.find(x=>x.id===id);
+    if (_a) document.getElementById('aam-password').value = _a.password_plain || '';
+  }
   // render module checkboxes
   document.getElementById('aam-perms-list').innerHTML = ALL_MODULES.map(m =>
     `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">

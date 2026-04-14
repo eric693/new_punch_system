@@ -2021,8 +2021,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div><label class="form-label">登入帳號 *</label><input class="form-input" id="psm-username" placeholder="英文或數字" autocapitalize="none"></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">密碼 *</label><input class="form-input" id="psm-password" placeholder="至少 4 個字元" type="password"><div style="font-size:11px;color:var(--muted);margin-top:4px" id="psm-pw-hint">新增員工請輸入密碼</div></div>
-        <div><label class="form-label">確認密碼</label><input class="form-input" id="psm-password2" placeholder="再輸入一次" type="password"></div>
+        <div><label class="form-label">密碼 *</label><input class="form-input" id="psm-password" placeholder="至少 4 個字元" type="text" autocomplete="off"><div style="font-size:11px;color:var(--muted);margin-top:4px" id="psm-pw-hint">新增員工請輸入密碼</div></div>
+        <div><label class="form-label">確認密碼</label><input class="form-input" id="psm-password2" placeholder="再輸入一次" type="text" autocomplete="off"></div>
       </div>
       <div style="border-top:1.5px solid var(--border);margin:14px 0 10px;padding-top:12px">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">匯款帳號</div>
@@ -2823,7 +2823,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div><label class="form-label">顯示名稱</label><input class="form-input" id="aam-display" placeholder="選填"></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">密碼</label><input class="form-input" type="password" id="aam-password" placeholder="新增必填，編輯留空不改"><div style="font-size:11px;color:var(--muted);margin-top:3px" id="aam-pw-hint"></div></div>
+        <div><label class="form-label">密碼</label><input class="form-input" type="text" id="aam-password" placeholder="新增必填，編輯留空不改" autocomplete="off"><div style="font-size:11px;color:var(--muted);margin-top:3px" id="aam-pw-hint"></div></div>
         <div><label class="form-label">狀態</label><select class="form-input" id="aam-active"><option value="1">啟用</option><option value="0">停用</option></select></div>
       </div>
       <div style="margin-bottom:14px">

@@ -246,7 +246,8 @@ def init_db():
         print("[OK] Database tables created")
     except Exception as e:
         print(f"[ERROR] init_db failed: {e}")
-        raise
+        traceback.print_exc()
+        return
 
     # Schema migrations (each in its own connection to avoid transaction abort)
     migrations = [

@@ -5538,7 +5538,7 @@ import io
 @app.route('/api/export/attendance', methods=['GET'])
 @login_required
 def api_export_attendance():
-    """匯出月度出勤明細 CSV"""
+    """匯出月度出勤明細 Excel"""
     month    = request.args.get('month', '')
     staff_id = request.args.get('staff_id', '')
     if not month:
@@ -5572,40 +5572,58 @@ def api_export_attendance():
 
     PUNCH_LABEL = {'in':'上班打卡','out':'下班打卡','break_out':'休息開始','break_in':'休息結束'}
 
-    output = io.StringIO()
-    output.write('\ufeff')  # UTF-8 BOM for Excel
-    writer = csv.writer(output)
-    writer.writerow(['員工代碼','姓名','部門','職稱','日期','打卡類型','時間','補打卡','操作人','GPS距離(m)','地點','備註'])
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
 
-    for r in rows:
-        writer.writerow([
-            r['employee_code'] or '',
-            r['staff_name'],
-            r['department']    or '',
-            r['role']          or '',
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"出勤明細_{month}"
+
+    headers = ['員工代碼','姓名','部門','職稱','日期','打卡類型','時間','補打卡','操作人','GPS距離(m)','地點','備註']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        vals = [
+            r['employee_code'] or '', r['staff_name'],
+            r['department'] or '', r['role'] or '',
             str(r['work_date']),
             PUNCH_LABEL.get(r['punch_type'], r['punch_type']),
             r['punch_time'],
             '是' if r['is_manual'] else '',
-            r['manual_by']     or '',
-            r['gps_distance']  if r['gps_distance'] is not None else '',
-            r['location_name'] or '',
-            r['note']          or '',
-        ])
+            r['manual_by'] or '',
+            r['gps_distance'] if r['gps_distance'] is not None else '',
+            r['location_name'] or '', r['note'] or '',
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
 
-    csv_content = output.getvalue()
+    for col, w in enumerate([10,12,10,10,12,10,8,6,10,12,16,20], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
     from flask import Response
-    return Response(
-        csv_content.encode('utf-8-sig'),
-        mimetype='text/csv; charset=utf-8',
-        headers={'Content-Disposition': f'attachment; filename=attendance_{month}.csv'}
-    )
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=attendance_{month}.xlsx'})
 
 
 @app.route('/api/export/attendance-summary', methods=['GET'])
 @login_required
 def api_export_attendance_summary():
-    """匯出月度出勤摘要 CSV（每人每天工時）"""
+    """匯出月度出勤摘要 Excel（每人每天工時）"""
     month = request.args.get('month', '')
     if not month:
         from datetime import date as _df
@@ -5633,12 +5651,27 @@ def api_export_attendance_summary():
             ORDER BY ps.name, (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date
         """, (month,)).fetchall()
 
-    output = io.StringIO()
-    output.write('\ufeff')
-    writer = csv.writer(output)
-    writer.writerow(['員工代碼','姓名','部門','職稱','日期','上班','下班','工時(h)','打卡次數','含補打'])
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
 
-    for r in rows:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"出勤摘要_{month}"
+
+    headers = ['員工代碼','姓名','部門','職稱','日期','上班','下班','工時(h)','打卡次數','含補打']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
         dur_h = ''
         if r['ci_ts'] and r['co_ts']:
             from datetime import datetime as _dtx
@@ -5648,22 +5681,28 @@ def api_export_attendance_summary():
                 dur_h = round((co - ci).total_seconds() / 3600, 2)
             except Exception:
                 pass
-        writer.writerow([
-            r['employee_code'] or '',
-            r['name'], r['department'] or '', r['role'] or '',
+        vals = [
+            r['employee_code'] or '', r['name'],
+            r['department'] or '', r['role'] or '',
             str(r['work_date']),
             r['clock_in'] or '', r['clock_out'] or '',
-            dur_h,
-            r['punch_count'],
+            dur_h, r['punch_count'],
             '是' if r['has_manual'] else '',
-        ])
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
 
+    for col, w in enumerate([10,12,10,10,12,8,8,8,8,8], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
     from flask import Response
-    return Response(
-        output.getvalue().encode('utf-8-sig'),
-        mimetype='text/csv; charset=utf-8',
-        headers={'Content-Disposition': f'attachment; filename=attendance_summary_{month}.csv'}
-    )
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=attendance_summary_{month}.xlsx'})
 
 
 @app.route('/api/attendance/anomaly-report', methods=['GET'])
@@ -5848,7 +5887,7 @@ def api_anomaly_report_excel():
 @app.route('/api/export/salary', methods=['GET'])
 @login_required
 def api_export_salary():
-    """匯出月度薪資明細 CSV"""
+    """匯出月度薪資明細 Excel"""
     month = request.args.get('month', '')
     if not month:
         from datetime import date as _dg
@@ -5864,19 +5903,31 @@ def api_export_salary():
             ORDER BY ps.name
         """, (month,)).fetchall()
 
-    output = io.StringIO()
-    output.write('\ufeff')
-    writer = csv.writer(output)
-    writer.writerow([
-        '員工代碼','姓名','部門','職稱','薪資制度',
-        '工作日','出勤天數','請假天數','無薪假天數',
-        '津貼合計','扣除合計','加班費','實領金額','狀態','備註'
-    ])
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
 
-    for r in rows:
-        items = r['items'] if isinstance(r['items'], list) else _json.loads(r['items'] or '[]')
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"薪資_{month}"
+
+    headers = ['員工代碼','姓名','部門','職稱','薪資制度',
+               '工作日','出勤天數','請假天數','無薪假天數',
+               '津貼合計','扣除合計','加班費','實領金額','狀態','備註']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
         sal_type = r['salary_type'] or 'monthly'
-        writer.writerow([
+        vals = [
             r['employee_code'] or '', r['staff_name'],
             r['department'] or '', r['role'] or '',
             '時薪制' if sal_type == 'hourly' else '月薪制',
@@ -5886,20 +5937,27 @@ def api_export_salary():
             float(r['ot_pay'] or 0), float(r['net_pay'] or 0),
             '已確認' if r['status'] == 'confirmed' else '草稿',
             r['note'] or '',
-        ])
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
 
+    for col, w in enumerate([10,12,10,10,8,8,8,8,8,10,10,10,12,8,20], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
     from flask import Response
-    return Response(
-        output.getvalue().encode('utf-8-sig'),
-        mimetype='text/csv; charset=utf-8',
-        headers={'Content-Disposition': f'attachment; filename=salary_{month}.csv'}
-    )
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=salary_{month}.xlsx'})
 
 
 @app.route('/api/export/leave', methods=['GET'])
 @login_required
 def api_export_leave():
-    """匯出請假記錄 CSV"""
+    """匯出請假記錄 Excel"""
     month    = request.args.get('month', '')
     year     = request.args.get('year',  '')
     staff_id = request.args.get('staff_id', '')
@@ -5920,28 +5978,430 @@ def api_export_leave():
             ORDER BY lr.start_date, ps.name
         """, params).fetchall()
 
-    output = io.StringIO()
-    output.write('\ufeff')
-    writer = csv.writer(output)
-    writer.writerow(['員工代碼','姓名','部門','假別','薪資倍率','開始日期','結束日期','天數','原因','代理人','狀態'])
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"請假_{month or year or 'all'}"
+
+    headers = ['員工代碼','姓名','部門','假別','薪資倍率','開始日期','結束日期','天數','原因','代理人','狀態']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
 
     PAY_LABEL = {1.0:'全薪', 0.5:'半薪', 0.0:'無薪'}
-    for r in rows:
-        writer.writerow([
+    STATUS_LABEL = {'approved':'已核准','rejected':'已退回','pending':'待審核'}
+    for i, r in enumerate(rows, 2):
+        vals = [
             r['employee_code'] or '', r['staff_name'], r['department'] or '',
             r['leave_type_name'], PAY_LABEL.get(float(r['pay_rate']), f"{r['pay_rate']}倍"),
             str(r['start_date']), str(r['end_date']),
             float(r['total_days']),
             r['reason'] or '', r['substitute_name'] or '',
-            {'approved':'已核准','rejected':'已退回','pending':'待審核'}.get(r['status'], r['status']),
-        ])
+            STATUS_LABEL.get(r['status'], r['status']),
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
 
+    for col, w in enumerate([10,12,10,10,8,12,12,6,24,10,8], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    tag = month or year or 'all'
     from flask import Response
-    return Response(
-        output.getvalue().encode('utf-8-sig'),
-        mimetype='text/csv; charset=utf-8',
-        headers={'Content-Disposition': f'attachment; filename=leave_{month or year or "all"}.csv'}
-    )
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=leave_{tag}.xlsx'})
+
+
+@app.route('/api/export/monthly-stats', methods=['GET'])
+@login_required
+def api_export_monthly_stats():
+    """匯出出勤月統計 Excel"""
+    month = request.args.get('month', '')
+    if not month:
+        from datetime import date as _dm
+        month = _dm.today().strftime('%Y-%m')
+
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT
+                ps.name, ps.department,
+                COUNT(DISTINCT (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date) as days_worked,
+                ROUND(SUM(
+                    CASE WHEN pr.punch_type IN ('in','out') THEN 0 ELSE 0 END
+                )::numeric, 2) as placeholder
+            FROM punch_records pr
+            JOIN punch_staff ps ON ps.id = pr.staff_id
+            WHERE TO_CHAR(pr.punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM') = %s
+            GROUP BY ps.id, ps.name, ps.department
+            ORDER BY ps.name
+        """, (month,)).fetchall()
+
+        # 取每人每日上下班時間以計算工時
+        detail = conn.execute("""
+            SELECT ps.name, ps.department,
+                   (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date as work_date,
+                   MIN(CASE WHEN pr.punch_type='in'  THEN pr.punched_at AT TIME ZONE 'Asia/Taipei' END) as ci,
+                   MAX(CASE WHEN pr.punch_type='out' THEN pr.punched_at AT TIME ZONE 'Asia/Taipei' END) as co
+            FROM punch_records pr
+            JOIN punch_staff ps ON ps.id = pr.staff_id
+            WHERE TO_CHAR(pr.punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM') = %s
+            GROUP BY ps.name, ps.department, (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date
+        """, (month,)).fetchall()
+
+    from datetime import datetime as _dtx
+    stats = {}
+    for r in detail:
+        key = (r['name'], r['department'] or '')
+        if key not in stats:
+            stats[key] = {'days': 0, 'total_min': 0}
+        stats[key]['days'] += 1
+        if r['ci'] and r['co']:
+            try:
+                ci = r['ci'] if hasattr(r['ci'], 'timestamp') else _dtx.fromisoformat(str(r['ci']))
+                co = r['co'] if hasattr(r['co'], 'timestamp') else _dtx.fromisoformat(str(r['co']))
+                stats[key]['total_min'] += int((co - ci).total_seconds() / 60)
+            except Exception:
+                pass
+
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"出勤月統計_{month}"
+
+    headers = ['姓名','部門','出勤天數','總工時(h)','平均時數/天']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, (key, s) in enumerate(sorted(stats.items()), 2):
+        name, dept = key
+        days = s['days']
+        total_h = round(s['total_min'] / 60, 2)
+        avg_h   = round(total_h / days, 2) if days else 0
+        for col, v in enumerate([name, dept, days, total_h, avg_h], 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([14,12,10,10,12], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=monthly_stats_{month}.xlsx'})
+
+
+@app.route('/api/export/overtime', methods=['GET'])
+@login_required
+def api_export_overtime():
+    """匯出加班申請 Excel"""
+    month  = request.args.get('month', '')
+    status = request.args.get('status', '')
+    conds, params = ['TRUE'], []
+    if month:  conds.append("to_char(r.request_date,'YYYY-MM')=%s"); params.append(month)
+    if status: conds.append("r.status=%s"); params.append(status)
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT r.*, ps.name as staff_name, ps.employee_code, ps.department, ps.role as staff_role
+            FROM overtime_requests r
+            JOIN punch_staff ps ON ps.id = r.staff_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY r.request_date DESC, r.created_at DESC
+        """, params).fetchall()
+
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"加班申請_{month or 'all'}"
+
+    headers = ['員工代碼','姓名','部門','職稱','申請日期','開始時間','結束時間','加班時數','加班費','日別','原因','狀態','審核人','備註']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+    DAY_LABEL = {'weekday':'平日','holiday':'假日','rest_day':'休息日','sunday':'星期日'}
+    STATUS_LABEL = {'approved':'已核准','rejected':'已退回','pending':'待審核'}
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        vals = [
+            r['employee_code'] or '', r['staff_name'],
+            r['department'] or '', r['staff_role'] or '',
+            str(r['request_date']),
+            str(r['start_time'])[:5] if r['start_time'] else '',
+            str(r['end_time'])[:5]   if r['end_time']   else '',
+            float(r['ot_hours'] or 0), float(r['ot_pay'] or 0),
+            DAY_LABEL.get(r['day_type'] or '', r['day_type'] or ''),
+            r['reason'] or '',
+            STATUS_LABEL.get(r['status'], r['status']),
+            r['reviewed_by'] or '', r['review_note'] or '',
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([10,12,10,10,12,8,8,8,10,8,20,8,10,20], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=overtime_{month or "all"}.xlsx'})
+
+
+@app.route('/api/export/training', methods=['GET'])
+@login_required
+def api_export_training():
+    """匯出教育訓練記錄 Excel"""
+    staff_id = request.args.get('staff_id', '')
+    category = request.args.get('category', '')
+    sql = """
+        SELECT tr.*, ps.name AS staff_name, ps.department
+        FROM training_records tr
+        JOIN punch_staff ps ON tr.staff_id = ps.id
+        WHERE 1=1
+    """
+    params = []
+    if staff_id: sql += " AND tr.staff_id=%s"; params.append(int(staff_id))
+    if category: sql += " AND tr.category=%s"; params.append(category)
+    sql += " ORDER BY ps.name, tr.expiry_date ASC NULLS LAST"
+
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    from datetime import date as _td
+    today = _td.today()
+
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "教育訓練記錄"
+
+    headers = ['姓名','部門','課程名稱','類別','完成日期','到期日期','證書號碼','狀態','剩餘天數']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    exp_fill = PatternFill('solid', fgColor='FFF0F0')
+    soon_fill= PatternFill('solid', fgColor='FFFBEA')
+    center   = Alignment(horizontal='center', vertical='center')
+    CAT_LABEL = {'food_safety':'食品安全','fire_safety':'消防安全','first_aid':'急救訓練',
+                 'hygiene':'衛生管理','service':'服務禮儀','equipment':'設備操作',
+                 'general':'一般訓練','other':'其他'}
+    STATUS_LABEL = {'expired':'已過期','expiring_soon':'即將到期','valid':'有效','no_expiry':'無到期日'}
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        expiry_str = str(r['expiry_date']) if r['expiry_date'] else ''
+        days_left = ''
+        status = 'no_expiry'
+        row_fill = alt_fill if i % 2 == 0 else None
+        if expiry_str:
+            from datetime import datetime as _dtx2
+            ed = _dtx2.strptime(expiry_str, '%Y-%m-%d').date()
+            dl = (ed - today).days
+            days_left = dl
+            if dl < 0:   status = 'expired';       row_fill = exp_fill
+            elif dl <= 60: status = 'expiring_soon'; row_fill = soon_fill
+            else:          status = 'valid'
+
+        vals = [
+            r['staff_name'], r['department'] or '',
+            r['course_name'], CAT_LABEL.get(r['category'] or '', r['category'] or ''),
+            str(r['completed_date']) if r['completed_date'] else '',
+            expiry_str, r['certificate_no'] or '',
+            STATUS_LABEL.get(status, status), days_left,
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if row_fill:
+                c.fill = row_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([12,10,24,10,12,12,14,10,8], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': 'attachment; filename=training_records.xlsx'})
+
+
+@app.route('/api/export/expense-claims', methods=['GET'])
+@login_required
+def api_export_expense_claims():
+    """匯出費用報帳 Excel"""
+    status = request.args.get('status', '')
+    conds, params = ['TRUE'], []
+    if status: conds.append("ec.status=%s"); params.append(status)
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT ec.*, ps.name as staff_name, ps.employee_code, ps.department
+            FROM expense_claims ec
+            JOIN punch_staff ps ON ps.id = ec.staff_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY ec.expense_date DESC, ec.created_at DESC
+        """, params).fetchall()
+
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"費用審核_{status or 'all'}"
+
+    headers = ['員工代碼','姓名','部門','費用日期','類型','金額','說明','狀態','審核人','審核備註','申請時間']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+    STATUS_LABEL = {'approved':'已核准','rejected':'已拒絕','pending':'待審核'}
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        created = str(r['created_at'])[:16] if r['created_at'] else ''
+        vals = [
+            r['employee_code'] or '', r['staff_name'], r['department'] or '',
+            str(r['expense_date']) if r['expense_date'] else '',
+            r['category'] or '', float(r['amount'] or 0), r['title'] or '',
+            STATUS_LABEL.get(r['status'], r['status']),
+            r['reviewed_by'] or '', r['review_note'] or '', created,
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([10,12,10,12,12,10,24,8,10,20,16], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=expense_claims_{status or "all"}.xlsx'})
+
+
+@app.route('/api/export/performance', methods=['GET'])
+@login_required
+def api_export_performance():
+    """匯出績效考核 Excel"""
+    staff_id = request.args.get('staff_id', '')
+    period   = request.args.get('period', '')
+    conds, params = ['TRUE'], []
+    if staff_id: conds.append("pr.staff_id=%s"); params.append(int(staff_id))
+    if period:   conds.append("pr.period_label ILIKE %s"); params.append(f'%{period}%')
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT pr.*, ps.name AS staff_name, ps.role AS staff_role,
+                   ps.department, pt.name AS tpl_name
+            FROM performance_reviews pr
+            JOIN punch_staff ps ON ps.id = pr.staff_id
+            LEFT JOIN performance_templates pt ON pt.id = pr.template_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY pr.reviewed_at DESC
+        """, params).fetchall()
+
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "績效考核"
+
+    headers = ['姓名','部門','職稱','考核期間','考核範本','分數','等級','備註','考核人','考核日期','薪資調整']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        reviewed_at = str(r['reviewed_at'])[:10] if r['reviewed_at'] else ''
+        adj = r['salary_adjusted']
+        adj_str = f"+{adj:,.0f}" if adj and adj > 0 else (f"{adj:,.0f}" if adj and adj < 0 else '—')
+        vals = [
+            r['staff_name'], r['department'] or '', r['staff_role'] or '',
+            r['period_label'] or '', r['tpl_name'] or '',
+            float(r['total_score'] or 0), r['grade'] or '',
+            r['comments'] or '', r['reviewer'] or '', reviewed_at, adj_str,
+        ]
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            if i % 2 == 0:
+                c.fill = alt_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([12,10,10,12,14,8,6,24,10,12,10], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': 'attachment; filename=performance_reviews.xlsx'})
 
 
 # ── Patch existing review functions with LINE notifications ──────
@@ -7925,7 +8385,9 @@ def api_finance_ocr():
 @app.route('/api/finance/export', methods=['GET'])
 @require_module('finance')
 def api_finance_export():
-    import csv, io as _io
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
     month = request.args.get('month', '')
     conds, params = ['TRUE'], []
     if month:
@@ -7939,17 +8401,48 @@ def api_finance_export():
             WHERE {' AND '.join(conds)}
             ORDER BY fr.record_date, fr.id
         """, params).fetchall()
-    out = _io.StringIO()
-    w = csv.writer(out)
-    w.writerow(['日期','類型','類別','標題','金額','稅額','廠商','單據號碼','備註'])
-    for r in rows:
-        w.writerow([str(r['record_date']), '收入' if r['type']=='income' else '支出',
-                    r['category_name'] or '', r['title'], r['amount'], r['tax_amount'] or 0,
-                    r['vendor'] or '', r['invoice_no'] or '', r['note'] or ''])
-    fname = f"finance_{month or 'all'}.csv"
-    return (('\ufeff' + out.getvalue()).encode('utf-8'),
-            200, {'Content-Type': 'text/csv; charset=utf-8',
-                  'Content-Disposition': f'attachment; filename={fname}'})
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"財務_{month or 'all'}"
+
+    headers = ['日期','類型','類別','標題','金額','稅額','廠商','單據號碼','備註']
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    inc_fill = PatternFill('solid', fgColor='F0FFF4')
+    exp_fill = PatternFill('solid', fgColor='FFF5F5')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        is_income = r['type'] == 'income'
+        vals = [
+            str(r['record_date']), '收入' if is_income else '支出',
+            r['category_name'] or '', r['title'],
+            float(r['amount'] or 0), float(r['tax_amount'] or 0),
+            r['vendor'] or '', r['invoice_no'] or '', r['note'] or '',
+        ]
+        row_fill = inc_fill if is_income else exp_fill
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            c.fill = row_fill
+            c.alignment = Alignment(vertical='center')
+
+    for col, w in enumerate([12,8,12,24,12,8,16,14,24], 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    fname = f"finance_{month or 'all'}.xlsx"
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename={fname}'})
 
 # ── Finance Settings & Financial Statements ────────────────────
 

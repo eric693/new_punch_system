@@ -11753,3 +11753,339 @@ def webauthn_delete_credential(cid):
             "DELETE FROM webauthn_credentials WHERE id=%s AND user_key=%s", (cid, user_key)
         )
     return jsonify({'ok': True})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 財報模組 — 報價單 (Quotation Module)
+# ═══════════════════════════════════════════════════════════════════
+
+def init_quotation_db():
+    migrations = [
+        """CREATE TABLE IF NOT EXISTS quotation_settings (
+            id               SERIAL PRIMARY KEY,
+            company_name     TEXT DEFAULT 'AD.Studio 影像事務所',
+            company_address  TEXT DEFAULT '新北市三重區雙源街57巷7號1樓',
+            company_phone    TEXT DEFAULT '(02)8985-1790',
+            company_email    TEXT DEFAULT '',
+            bank_name        TEXT DEFAULT '',
+            bank_branch      TEXT DEFAULT '',
+            account_name     TEXT DEFAULT '',
+            account_no       TEXT DEFAULT '',
+            tax_id           TEXT DEFAULT '',
+            payment_notes    TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS quotation_products (
+            id            SERIAL PRIMARY KEY,
+            name          TEXT NOT NULL,
+            unit          TEXT DEFAULT '次',
+            default_price NUMERIC(12,2) DEFAULT 0,
+            sort_order    INTEGER DEFAULT 0,
+            active        BOOLEAN DEFAULT TRUE
+        )""",
+        """CREATE TABLE IF NOT EXISTS quotations (
+            id              SERIAL PRIMARY KEY,
+            quote_no        TEXT UNIQUE NOT NULL,
+            quote_date      DATE NOT NULL DEFAULT CURRENT_DATE,
+            client_name     TEXT NOT NULL DEFAULT '',
+            client_phone    TEXT DEFAULT '',
+            client_address  TEXT DEFAULT '',
+            client_line_id  TEXT DEFAULT '',
+            sales_rep       TEXT DEFAULT '',
+            image_no        TEXT DEFAULT '',
+            image_date      DATE,
+            payment_method  TEXT DEFAULT '轉帳',
+            status          TEXT DEFAULT 'draft',
+            subtotal        NUMERIC(12,2) DEFAULT 0,
+            notes           TEXT DEFAULT '',
+            created_by      TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS quotation_items (
+            id             SERIAL PRIMARY KEY,
+            quotation_id   INTEGER REFERENCES quotations(id) ON DELETE CASCADE,
+            sort_order     INTEGER DEFAULT 0,
+            product_name   TEXT NOT NULL DEFAULT '',
+            unit           TEXT DEFAULT '次',
+            quantity       NUMERIC(10,2) DEFAULT 1,
+            unit_price     NUMERIC(12,2) DEFAULT 0,
+            handmade       NUMERIC(12,2) DEFAULT 0,
+            people_count   INTEGER DEFAULT 0,
+            amount         NUMERIC(12,2) DEFAULT 0,
+            payment_status TEXT DEFAULT '',
+            note           TEXT DEFAULT ''
+        )""",
+    ]
+    for sql in migrations:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[init_quotation_db] {str(e)[:120]}")
+    # 確保 settings 至少有一筆
+    try:
+        with get_db() as conn:
+            if not conn.execute("SELECT id FROM quotation_settings LIMIT 1").fetchone():
+                conn.execute("INSERT INTO quotation_settings DEFAULT VALUES")
+    except Exception as e:
+        print(f"[init_quotation_db seed] {e}")
+
+try:
+    init_quotation_db()
+except Exception as _eq:
+    print(f"[quotation_init] {_eq}")
+
+
+def _next_quote_no():
+    """產生流水號，格式 QT-YYYYMM-NNN"""
+    from datetime import date as _d
+    prefix = 'QT-' + _d.today().strftime('%Y%m') + '-'
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT quote_no FROM quotations WHERE quote_no LIKE %s ORDER BY quote_no DESC LIMIT 1",
+            (prefix + '%',)
+        ).fetchone()
+    if row:
+        try:
+            seq = int(row['quote_no'].split('-')[-1]) + 1
+        except Exception:
+            seq = 1
+    else:
+        seq = 1
+    return f"{prefix}{seq:03d}"
+
+
+# ── Settings ─────────────────────────────────────────────────────
+@app.route('/api/quotation/settings', methods=['GET'])
+@login_required
+def api_quotation_settings_get():
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
+    return jsonify(dict(row) if row else {})
+
+@app.route('/api/quotation/settings', methods=['PUT'])
+@login_required
+def api_quotation_settings_put():
+    b = request.get_json(force=True) or {}
+    fields = ['company_name','company_address','company_phone','company_email',
+              'bank_name','bank_branch','account_name','account_no','tax_id','payment_notes']
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM quotation_settings LIMIT 1").fetchone()
+        if row:
+            sets = ', '.join(f"{f}=%s" for f in fields)
+            vals = [b.get(f,'') for f in fields] + [row['id']]
+            conn.execute(f"UPDATE quotation_settings SET {sets} WHERE id=%s", vals)
+        else:
+            cols = ', '.join(fields)
+            phs  = ', '.join(['%s']*len(fields))
+            conn.execute(f"INSERT INTO quotation_settings ({cols}) VALUES ({phs})",
+                         [b.get(f,'') for f in fields])
+    return jsonify({'ok': True})
+
+
+# ── Preset Products ───────────────────────────────────────────────
+@app.route('/api/quotation/products', methods=['GET'])
+@login_required
+def api_qproducts_list():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM quotation_products ORDER BY sort_order, id"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/quotation/products', methods=['POST'])
+@login_required
+def api_qproducts_create():
+    b = request.get_json(force=True) or {}
+    with get_db() as conn:
+        row = conn.execute(
+            "INSERT INTO quotation_products (name, unit, default_price, sort_order, active) VALUES (%s,%s,%s,%s,%s) RETURNING *",
+            (b.get('name','').strip(), b.get('unit','次'),
+             float(b.get('default_price',0)), int(b.get('sort_order',0)), True)
+        ).fetchone()
+    return jsonify(dict(row)), 201
+
+@app.route('/api/quotation/products/<int:pid>', methods=['PUT'])
+@login_required
+def api_qproducts_update(pid):
+    b = request.get_json(force=True) or {}
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE quotation_products SET name=%s, unit=%s, default_price=%s, sort_order=%s, active=%s WHERE id=%s",
+            (b.get('name','').strip(), b.get('unit','次'),
+             float(b.get('default_price',0)), int(b.get('sort_order',0)),
+             bool(b.get('active', True)), pid)
+        )
+    return jsonify({'ok': True})
+
+@app.route('/api/quotation/products/<int:pid>', methods=['DELETE'])
+@login_required
+def api_qproducts_delete(pid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM quotation_products WHERE id=%s", (pid,))
+    return jsonify({'ok': True})
+
+
+# ── Quotations ───────────────────────────────────────────────────
+@app.route('/api/quotations', methods=['GET'])
+@login_required
+def api_quotations_list():
+    status = request.args.get('status', '')
+    q      = request.args.get('q', '')
+    conds, params = ['TRUE'], []
+    if status: conds.append("q.status=%s"); params.append(status)
+    if q:      conds.append("(q.client_name ILIKE %s OR q.quote_no ILIKE %s)"); params += [f'%{q}%', f'%{q}%']
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT q.*, COUNT(qi.id) as item_count
+            FROM quotations q
+            LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+            WHERE {' AND '.join(conds)}
+            GROUP BY q.id
+            ORDER BY q.created_at DESC
+        """, params).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        for k in ('quote_date','image_date','created_at','updated_at'):
+            if d.get(k): d[k] = str(d[k])
+        result.append(d)
+    return jsonify(result)
+
+@app.route('/api/quotations', methods=['POST'])
+@login_required
+def api_quotations_create():
+    b = request.get_json(force=True) or {}
+    quote_no = _next_quote_no()
+    from datetime import date as _dd
+    quote_date = b.get('quote_date') or str(_dd.today())
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO quotations
+              (quote_no, quote_date, client_name, client_phone, client_address,
+               client_line_id, sales_rep, image_no, image_date, payment_method,
+               status, notes, created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (quote_no, quote_date,
+              b.get('client_name','').strip(),
+              b.get('client_phone','').strip(),
+              b.get('client_address','').strip(),
+              b.get('client_line_id','').strip(),
+              b.get('sales_rep','').strip(),
+              b.get('image_no','').strip(),
+              b.get('image_date') or None,
+              b.get('payment_method','轉帳'),
+              b.get('status','draft'),
+              b.get('notes','').strip(),
+              session.get('admin_display_name','')
+              )).fetchone()
+        qid = row['id']
+        # 寫入品項
+        for i, item in enumerate(b.get('items', [])):
+            qty   = float(item.get('quantity', 1))
+            price = float(item.get('unit_price', 0))
+            amt   = round(qty * price, 2)
+            conn.execute("""
+                INSERT INTO quotation_items
+                  (quotation_id, sort_order, product_name, unit, quantity,
+                   unit_price, handmade, people_count, amount, payment_status, note)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (qid, i,
+                  item.get('product_name','').strip(),
+                  item.get('unit','次'),
+                  qty, price,
+                  float(item.get('handmade', 0)),
+                  int(item.get('people_count', 0)),
+                  amt,
+                  item.get('payment_status',''),
+                  item.get('note','').strip()))
+        # 更新小計
+        conn.execute(
+            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
+            (qid, qid)
+        )
+    return jsonify({'id': qid, 'quote_no': quote_no}), 201
+
+@app.route('/api/quotations/<int:qid>', methods=['GET'])
+@login_required
+def api_quotation_get(qid):
+    with get_db() as conn:
+        q = conn.execute("SELECT * FROM quotations WHERE id=%s", (qid,)).fetchone()
+        if not q: return ('', 404)
+        items = conn.execute(
+            "SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY sort_order, id",
+            (qid,)
+        ).fetchall()
+    d = dict(q)
+    for k in ('quote_date','image_date','created_at','updated_at'):
+        if d.get(k): d[k] = str(d[k])
+    d['items'] = [dict(i) for i in items]
+    return jsonify(d)
+
+@app.route('/api/quotations/<int:qid>', methods=['PUT'])
+@login_required
+def api_quotation_update(qid):
+    b = request.get_json(force=True) or {}
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE quotations SET
+              quote_date=%s, client_name=%s, client_phone=%s, client_address=%s,
+              client_line_id=%s, sales_rep=%s, image_no=%s, image_date=%s,
+              payment_method=%s, status=%s, notes=%s, updated_at=NOW()
+            WHERE id=%s
+        """, (b.get('quote_date'), b.get('client_name','').strip(),
+              b.get('client_phone','').strip(), b.get('client_address','').strip(),
+              b.get('client_line_id','').strip(), b.get('sales_rep','').strip(),
+              b.get('image_no','').strip(), b.get('image_date') or None,
+              b.get('payment_method','轉帳'), b.get('status','draft'),
+              b.get('notes','').strip(), qid))
+        # 重建品項
+        conn.execute("DELETE FROM quotation_items WHERE quotation_id=%s", (qid,))
+        for i, item in enumerate(b.get('items', [])):
+            qty   = float(item.get('quantity', 1))
+            price = float(item.get('unit_price', 0))
+            amt   = round(qty * price, 2)
+            conn.execute("""
+                INSERT INTO quotation_items
+                  (quotation_id, sort_order, product_name, unit, quantity,
+                   unit_price, handmade, people_count, amount, payment_status, note)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (qid, i,
+                  item.get('product_name','').strip(),
+                  item.get('unit','次'),
+                  qty, price,
+                  float(item.get('handmade', 0)),
+                  int(item.get('people_count', 0)),
+                  amt,
+                  item.get('payment_status',''),
+                  item.get('note','').strip()))
+        conn.execute(
+            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
+            (qid, qid)
+        )
+    return jsonify({'ok': True})
+
+@app.route('/api/quotations/<int:qid>', methods=['DELETE'])
+@login_required
+def api_quotation_delete(qid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM quotations WHERE id=%s", (qid,))
+    return jsonify({'ok': True})
+
+
+# ── Print View ────────────────────────────────────────────────────
+@app.route('/quotation/<int:qid>/print')
+@login_required
+def quotation_print(qid):
+    with get_db() as conn:
+        q    = conn.execute("SELECT * FROM quotations WHERE id=%s", (qid,)).fetchone()
+        if not q: return '找不到此報價單', 404
+        items = conn.execute(
+            "SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY sort_order, id",
+            (qid,)
+        ).fetchall()
+        settings = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
+    from flask import render_template
+    return render_template('quotation_print.html',
+                           q=dict(q), items=[dict(i) for i in items],
+                           s=dict(settings) if settings else {})

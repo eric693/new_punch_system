@@ -208,6 +208,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-perf" onclick="showPage('perf',event)">績效考核</a>
     <a href="#" class="nav-item"        id="nav-stores"   onclick="showPage('stores',event)">門市管理</a>
     <a href="#" class="nav-item"        id="nav-training" onclick="showPage('training',event)">教育訓練</a>
+    <a href="#" class="nav-item"        id="nav-quotation" onclick="showPage('quotation',event)">財報模組</a>
     <a href="#" class="nav-item"        id="nav-adminmgr" onclick="showPage('adminmgr',event)" style="display:none">帳號管理</a>
   </nav>
   <div class="sidebar-bottom">
@@ -1853,6 +1854,214 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div><!-- end perf-panel-config -->
 
   </div><!-- end page-perf -->
+
+
+  <!-- ── 財報模組 ── -->
+  <div class="page" id="page-quotation" style="display:none">
+
+    <div class="inv-tab-bar">
+      <button class="inv-tab active" id="qtab-list"     onclick="switchQTab('list')">報價列表</button>
+      <button class="inv-tab"        id="qtab-create"   onclick="switchQTab('create')">新增報價單</button>
+      <button class="inv-tab"        id="qtab-products" onclick="switchQTab('products')">常用品項</button>
+      <button class="inv-tab"        id="qtab-settings" onclick="switchQTab('settings')">公司設定</button>
+    </div>
+
+    <!-- ── 報價列表 ── -->
+    <div id="qpanel-list">
+      <div class="filter-bar" style="margin-bottom:16px;gap:10px;flex-wrap:wrap">
+        <input class="filter-input" type="text" id="q-search" placeholder="搜尋客戶或編號..." style="min-width:180px" oninput="loadQuotations()">
+        <select class="filter-input" id="q-status-filter" style="min-width:100px" onchange="loadQuotations()">
+          <option value="">全部狀態</option>
+          <option value="draft">草稿</option>
+          <option value="sent">已發送</option>
+          <option value="accepted">已接受</option>
+          <option value="rejected">已拒絕</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="switchQTab('create')">新增報價單</button>
+        <button class="btn btn-outline btn-sm" onclick="loadQuotations()">重新整理</button>
+        <span style="flex:1"></span>
+        <span id="q-list-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>訂單編號</th><th>報價日期</th><th>客戶</th><th>業務人員</th>
+              <th style="text-align:right">金額</th><th style="text-align:center">品項數</th>
+              <th>狀態</th><th>操作</th>
+            </tr></thead>
+            <tbody id="q-list-tbody">
+              <tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 新增/編輯報價單 ── -->
+    <div id="qpanel-create" style="display:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <span id="q-form-title" style="font-size:15px;font-weight:700;color:var(--navy)">新增報價單</span>
+        <span id="q-form-no" style="font-size:12px;color:var(--muted);background:var(--bg);padding:3px 10px;border-radius:12px"></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-outline btn-sm" onclick="switchQTab('list')">← 返回列表</button>
+      </div>
+
+      <!-- 客戶資訊 & 訂單資訊 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card" style="padding:18px 20px">
+          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">客戶資訊</div>
+          <div style="display:grid;gap:10px">
+            <div><label class="form-label">客戶姓名 *</label><input class="form-input" id="qf-client-name" placeholder="請輸入客戶姓名" style="width:100%"></div>
+            <div><label class="form-label">聯絡電話</label><input class="form-input" id="qf-client-phone" placeholder="0912-345-678" style="width:100%"></div>
+            <div><label class="form-label">Line ID</label><input class="form-input" id="qf-client-line" placeholder="LINE ID" style="width:100%"></div>
+            <div><label class="form-label">客戶地址</label><input class="form-input" id="qf-client-addr" placeholder="地址" style="width:100%"></div>
+            <div><label class="form-label">業務人員</label><input class="form-input" id="qf-sales-rep" placeholder="業務姓名" style="width:100%"></div>
+          </div>
+        </div>
+        <div class="card" style="padding:18px 20px">
+          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">訂單資訊</div>
+          <div style="display:grid;gap:10px">
+            <div><label class="form-label">報價日期 *</label><input class="form-input" type="date" id="qf-quote-date" style="width:100%"></div>
+            <div><label class="form-label">影像編號</label><input class="form-input" id="qf-image-no" placeholder="例：WD-2024-001" style="width:100%"></div>
+            <div><label class="form-label">影像日期</label><input class="form-input" type="date" id="qf-image-date" style="width:100%"></div>
+            <div><label class="form-label">付款方式</label>
+              <select class="form-input" id="qf-payment-method" style="width:100%">
+                <option value="轉帳">轉帳</option>
+                <option value="現金">現金</option>
+                <option value="信用卡">信用卡</option>
+                <option value="支票">支票</option>
+              </select>
+            </div>
+            <div><label class="form-label">狀態</label>
+              <select class="form-input" id="qf-status" style="width:100%">
+                <option value="draft">草稿</option>
+                <option value="sent">已發送</option>
+                <option value="accepted">已接受</option>
+                <option value="rejected">已拒絕</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 品項明細 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+          <span class="card-title">品項明細</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="qf-product-picker" class="filter-input" style="min-width:160px" onchange="addProductFromPicker()">
+              <option value="">＋ 從常用品項新增</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="addQuoteItem()">＋ 新增空白行</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" style="font-size:12px">
+            <thead><tr>
+              <th style="width:24%">產品名稱</th>
+              <th style="width:7%">數量</th>
+              <th style="width:7%">單位</th>
+              <th style="width:9%">費率(元)</th>
+              <th style="width:9%">費用</th>
+              <th style="width:8%">手工費</th>
+              <th style="width:5%">人數</th>
+              <th style="width:9%">應收款項</th>
+              <th style="width:9%">收款狀況</th>
+              <th style="width:9%">備註</th>
+              <th style="width:4%"></th>
+            </tr></thead>
+            <tbody id="qf-items-tbody"></tbody>
+          </table>
+        </div>
+        <div style="padding:10px 16px;display:flex;justify-content:flex-end;align-items:center;gap:16px;border-top:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--muted)">合計金額</span>
+          <span id="qf-subtotal" style="font-size:18px;font-weight:700;color:var(--navy);font-family:'DM Mono',monospace">NT$ 0</span>
+        </div>
+      </div>
+
+      <!-- 備註 -->
+      <div class="card" style="margin-bottom:16px;padding:18px 20px">
+        <div class="card-title" style="padding:0;margin-bottom:10px;font-size:13px">備註</div>
+        <textarea id="qf-notes" class="form-input" rows="3" placeholder="付款說明、注意事項..." style="width:100%;resize:vertical"></textarea>
+      </div>
+
+      <!-- 操作按鈕 -->
+      <input type="hidden" id="qf-editing-id" value="">
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="resetQuoteForm();switchQTab('list')">取消</button>
+        <button class="btn btn-outline btn-sm" id="qf-print-btn" style="display:none" onclick="printQuotation()">列印 / PDF</button>
+        <button class="btn btn-primary" onclick="saveQuotation()">儲存報價單</button>
+      </div>
+    </div>
+
+    <!-- ── 常用品項管理 ── -->
+    <div id="qpanel-products" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px">
+        <button class="btn btn-primary btn-sm" onclick="openProductModal()">新增常用品項</button>
+        <button class="btn btn-outline btn-sm" onclick="loadQProducts()">重新整理</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>品項名稱</th><th>單位</th><th style="text-align:right">預設單價</th><th>排序</th><th>操作</th>
+            </tr></thead>
+            <tbody id="qproducts-tbody">
+              <tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 公司設定 ── -->
+    <div id="qpanel-settings" style="display:none">
+      <div class="card" style="max-width:640px;padding:24px">
+        <div class="card-title" style="padding:0;margin-bottom:18px">公司資訊設定</div>
+        <div style="display:grid;gap:12px">
+          <div><label class="form-label">公司名稱</label><input class="form-input" id="qs-company-name" style="width:100%"></div>
+          <div><label class="form-label">公司地址</label><input class="form-input" id="qs-company-address" style="width:100%"></div>
+          <div><label class="form-label">聯絡電話</label><input class="form-input" id="qs-company-phone" style="width:100%"></div>
+          <div><label class="form-label">電子郵件</label><input class="form-input" id="qs-company-email" style="width:100%"></div>
+        </div>
+        <div class="card-title" style="padding:0;margin:18px 0 14px;font-size:13px">匯款資訊</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label class="form-label">銀行名稱</label><input class="form-input" id="qs-bank-name" style="width:100%"></div>
+          <div><label class="form-label">分行</label><input class="form-input" id="qs-bank-branch" style="width:100%"></div>
+          <div><label class="form-label">戶名</label><input class="form-input" id="qs-account-name" style="width:100%"></div>
+          <div><label class="form-label">帳號</label><input class="form-input" id="qs-account-no" style="width:100%"></div>
+          <div><label class="form-label">統一編號</label><input class="form-input" id="qs-tax-id" style="width:100%"></div>
+        </div>
+        <div style="margin-top:12px"><label class="form-label">付款說明（列印於報價單）</label>
+          <textarea class="form-input" id="qs-payment-notes" rows="4" style="width:100%;resize:vertical" placeholder="例：請於報價單日期起30日內完成付款..."></textarea>
+        </div>
+        <div style="margin-top:16px;text-align:right">
+          <button class="btn btn-primary" onclick="saveQSettings()">儲存設定</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end page-quotation -->
+
+  <!-- 常用品項 Modal -->
+  <div class="modal-overlay" id="qproduct-modal" style="display:none" onclick="if(event.target===this)closeProductModal()">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header"><span class="modal-title" id="qproduct-modal-title">新增常用品項</span>
+        <button class="modal-close" onclick="closeProductModal()">✕</button></div>
+      <div style="padding:20px 24px;display:grid;gap:12px">
+        <div><label class="form-label">品項名稱 *</label><input class="form-input" id="qpm-name" style="width:100%"></div>
+        <div><label class="form-label">單位</label><input class="form-input" id="qpm-unit" value="次" style="width:100%"></div>
+        <div><label class="form-label">預設單價</label><input class="form-input" type="number" id="qpm-price" value="0" style="width:100%"></div>
+        <div><label class="form-label">排序</label><input class="form-input" type="number" id="qpm-sort" value="0" style="width:100%"></div>
+        <input type="hidden" id="qpm-id" value="">
+      </div>
+      <div style="padding:0 24px 20px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="closeProductModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveProduct()">儲存</button>
+      </div>
+    </div>
+  </div>
 
 
 </main>
@@ -3691,7 +3900,7 @@ function closeSidebar() {
 function showPage(page, e) {
   if (e) e.preventDefault();
   // 權限檢查（儀表板和帳號管理不受模組限制）
-  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training' };
+  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation' };
   if (moduleGuard[page] && !hasModule(moduleGuard[page])) {
     showToast('您沒有此功能的存取權限', 'error'); return;
   }
@@ -3700,10 +3909,10 @@ function showPage(page, e) {
   const navEl = document.getElementById('nav-' + page);
   if (navEl) navEl.classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','perf','stores','training'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','perf','stores','training','quotation'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
-  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤' };
+  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
   document.getElementById('page-title').textContent = titles[page] || page;
   if (page === 'dash')            initDash();
   if (page === 'punch')           initPunch();
@@ -3718,6 +3927,7 @@ function showPage(page, e) {
   if (page === 'perf')            initPerf();
   if (page === 'stores')          loadStores();
   if (page === 'training')        initTraining();
+  if (page === 'quotation')       initQuotation();
 }
 
 // ── Toast ─────────────────────────────────────────────────────

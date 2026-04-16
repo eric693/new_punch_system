@@ -12185,6 +12185,151 @@ def quotation_print(qid):
                            s=dict(settings) if settings else {})
 
 
+# ── Revenue Detail (from quotation items) ────────────────────────
+@app.route('/api/revenue/detail', methods=['GET'])
+@login_required
+def api_revenue_detail():
+    """從報價單品項拉取逐筆收入明細（已接受 / 已發送的訂單）"""
+    year    = request.args.get('year',  '')
+    month   = request.args.get('month', '')  # YYYY-MM
+    company = request.args.get('company', '')
+    status_filter = request.args.get('status', '')   # 可傳 accepted,sent 等
+
+    conds, params = ['TRUE'], []
+    if year and not month:
+        conds.append("to_char(q.quote_date,'YYYY')=%s"); params.append(year)
+    if month:
+        conds.append("to_char(q.quote_date,'YYYY-MM')=%s"); params.append(month)
+    if company:
+        conds.append("q.company_unit=%s"); params.append(company)
+    if status_filter:
+        statuses = status_filter.split(',')
+        ph = ','.join(['%s']*len(statuses))
+        conds.append(f"q.status IN ({ph})"); params.extend(statuses)
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                q.quote_no, q.quote_date, q.client_name, q.client_phone,
+                q.image_no, q.image_date, q.payment_method,
+                q.status, q.sales_rep, q.company_unit,
+                qi.sort_order, qi.product_name, qi.unit, qi.quantity,
+                qi.unit_price, qi.handmade, qi.people_count,
+                qi.amount, qi.payment_status, qi.note
+            FROM quotation_items qi
+            JOIN quotations q ON q.id = qi.quotation_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY q.quote_date DESC, q.id, qi.sort_order
+        """, params).fetchall()
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        for k in ('quote_date', 'image_date'):
+            if d.get(k): d[k] = str(d[k])
+        for k in ('unit_price','handmade','amount','quantity'):
+            if d.get(k) is not None: d[k] = float(d[k])
+        result.append(d)
+    return jsonify(result)
+
+
+# ── Revenue Detail Excel Export ───────────────────────────────────
+@app.route('/api/revenue/export', methods=['GET'])
+@login_required
+def api_revenue_export():
+    """營業收入明細 Excel 匯出"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    year    = request.args.get('year',    '')
+    month   = request.args.get('month',   '')
+    company = request.args.get('company', '')
+
+    conds, params = ['TRUE'], []
+    if year and not month:
+        conds.append("to_char(q.quote_date,'YYYY')=%s"); params.append(year)
+    if month:
+        conds.append("to_char(q.quote_date,'YYYY-MM')=%s"); params.append(month)
+    if company:
+        conds.append("q.company_unit=%s"); params.append(company)
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                q.quote_no, q.quote_date, q.client_name,
+                q.image_no, q.image_date, q.payment_method,
+                q.status, q.sales_rep,
+                qi.product_name, qi.unit, qi.quantity,
+                qi.unit_price, qi.handmade, qi.people_count,
+                qi.amount, qi.payment_status, qi.note
+            FROM quotation_items qi
+            JOIN quotations q ON q.id = qi.quotation_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY q.quote_date DESC, q.id, qi.sort_order
+        """, params).fetchall()
+
+    status_map = {'draft':'草稿','sent':'已發送','accepted':'已接受','rejected':'已拒絕'}
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '營業收入明細'
+
+    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill = PatternFill('solid', fgColor='F4F6FA')
+    center   = Alignment(horizontal='center', vertical='center')
+
+    headers = ['訂單編號','報價日期','客戶','影像編號','影像日期',
+               '訂單付款方式','狀態','業務人員',
+               '品項目','單位','數量','費率(元)','手工費','手操人數',
+               '應收款項','收款狀況','備註']
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws.freeze_panes = 'A2'
+    ws.row_dimensions[1].height = 24
+
+    for i, r in enumerate(rows, 2):
+        vals = [
+            r['quote_no'], str(r['quote_date'] or ''),
+            r['client_name'] or '', r['image_no'] or '',
+            str(r['image_date'] or ''), r['payment_method'] or '',
+            status_map.get(r['status'], r['status'] or ''), r['sales_rep'] or '',
+            r['product_name'] or '', r['unit'] or '',
+            float(r['quantity'] or 0), float(r['unit_price'] or 0),
+            float(r['handmade'] or 0), int(r['people_count'] or 0),
+            float(r['amount'] or 0),
+            r['payment_status'] or '', r['note'] or '',
+        ]
+        fill = alt_fill if i % 2 == 0 else PatternFill()
+        for col, v in enumerate(vals, 1):
+            c = ws.cell(i, col, v)
+            c.fill = fill
+            c.alignment = Alignment(vertical='center')
+            if col in (12, 13, 15):
+                c.number_format = '#,##0'
+
+    # 欄寬
+    widths = [16,12,14,14,12,12,8,10,22,6,6,10,10,8,12,12,24]
+    for col, w in enumerate(widths, 1):
+        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+
+    # 小計列
+    last = len(rows) + 2
+    total = sum(float(r['amount'] or 0) for r in rows)
+    ws.cell(last, 1, f'共 {len(rows)} 筆').font = Font(bold=True)
+    ws.cell(last, 15, total).font = Font(bold=True, color='2E9E6B')
+    ws.cell(last, 15).number_format = '#,##0'
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    tag = month or year or 'all'
+    co_tag = f'_{company}' if company else ''
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename=revenue{co_tag}_{tag}.xlsx'})
+
+
 # ── Quotation Excel Export ────────────────────────────────────────
 @app.route('/api/quotation/export', methods=['GET'])
 @login_required

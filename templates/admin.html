@@ -1325,10 +1325,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
 
-      <!-- 月度明細表格 -->
-      <div class="card">
+      <!-- 月度摘要表格 -->
+      <div class="card" style="margin-bottom:20px">
         <div class="card-header">
-          <span class="card-title">各月收入明細</span>
+          <span class="card-title">各月收入摘要</span>
           <span id="rev-table-summary" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <div class="table-wrap">
@@ -1345,6 +1345,48 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <tbody id="rev-tbody"></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- 收入明細（報價單品項層級） -->
+      <div class="card">
+        <div class="card-header" style="flex-wrap:wrap;gap:10px">
+          <span class="card-title">收入明細（報價單品項）</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="filter-label">月份篩選</span>
+            <input class="filter-input" type="month" id="rev-detail-month" style="min-width:140px" onchange="loadRevenueDetail()">
+            <select class="filter-input" id="rev-detail-status" style="min-width:110px" onchange="loadRevenueDetail()">
+              <option value="">全部狀態</option>
+              <option value="accepted">已接受</option>
+              <option value="sent">已發送</option>
+              <option value="draft">草稿</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="loadRevenueDetail()">重新整理</button>
+            <button class="btn btn-outline btn-sm" onclick="exportRevenueDetail()">匯出 Excel</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table style="font-size:12px">
+            <thead><tr>
+              <th>訂單編號</th>
+              <th>報價日期</th>
+              <th>客戶</th>
+              <th>品項目</th>
+              <th>影像日期</th>
+              <th>訂單付款方式</th>
+              <th style="text-align:right">費率(元)</th>
+              <th style="text-align:right">手工費</th>
+              <th style="text-align:center">手操人數</th>
+              <th style="text-align:right">應收款項</th>
+              <th>收款狀況</th>
+              <th>備註</th>
+              <th>狀態</th>
+            </tr></thead>
+            <tbody id="rev-detail-tbody">
+              <tr><td colspan="13" class="empty-state"><div class="empty-state-text">請選擇月份或點擊上方月份「明細」按鈕</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="rev-detail-footer" style="padding:10px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);display:none"></div>
       </div>
     </div>
 
@@ -10218,7 +10260,7 @@ async function loadRevenue() {
       </td>
       <td>
         <button class="btn btn-outline btn-sm"
-          onclick="switchFinTab('records');document.getElementById('fin-rec-month').value='${mo}';loadFinRecords()">明細</button>
+          onclick="document.getElementById('rev-detail-month').value='${mo}';loadRevenueDetail();document.getElementById('rev-detail-tbody').scrollIntoView({behavior:'smooth'})">明細</button>
       </td>
     </tr>`;
   }).join('');
@@ -10636,6 +10678,78 @@ async function saveQSettings() {
   const {ok} = await api('/api/quotation/settings', {method:'PUT', body: JSON.stringify(body)});
   if (ok) showToast('設定已儲存', 'success');
   else showToast('儲存失敗', 'error');
+}
+
+// ── 收入明細 ────────────────────────────────────────────────────
+async function loadRevenueDetail() {
+  const year    = document.getElementById('rev-year')?.value    || new Date().getFullYear();
+  const month   = document.getElementById('rev-detail-month')?.value || '';
+  const status  = document.getElementById('rev-detail-status')?.value || '';
+  const company = window._finCompany || 'ad';
+
+  const params = new URLSearchParams({ company, year });
+  if (month)  params.set('month', month);
+  if (status) params.set('status', status);
+
+  const tbody  = document.getElementById('rev-detail-tbody');
+  const footer = document.getElementById('rev-detail-footer');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:16px;color:#999">載入中…</td></tr>';
+
+  const { ok, data } = await api(`/api/revenue/detail?${params.toString()}`, {}, true);
+  if (!ok) {
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#c00">載入失敗</td></tr>';
+    return;
+  }
+
+  const rows = Array.isArray(data) ? data : (data?.rows || []);
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:16px;color:#999">無資料</td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  const statusBadge = s => {
+    const map = { '已確認':'#27ae60','待確認':'#e67e22','草稿':'#95a5a6','已取消':'#e74c3c' };
+    const c = map[s] || '#999';
+    return `<span style="background:${c};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px">${s||''}</span>`;
+  };
+
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${escHtml(r.quote_no||'')}</td>
+    <td>${r.quote_date||''}</td>
+    <td>${escHtml(r.client_name||'')}</td>
+    <td>${escHtml(r.product_name||'')}</td>
+    <td>${r.image_date||''}</td>
+    <td>${escHtml(r.payment_method||'')}</td>
+    <td class="right">${r.unit_price ? Number(r.unit_price).toLocaleString() : ''}</td>
+    <td class="right">${r.handmade   ? Number(r.handmade).toLocaleString()   : ''}</td>
+    <td style="text-align:center">${r.people_count||''}</td>
+    <td class="right" style="font-weight:600">${r.amount ? Number(r.amount).toLocaleString() : ''}</td>
+    <td style="text-align:center">${escHtml(r.payment_status||'')}</td>
+    <td>${escHtml(r.note||'')}</td>
+    <td style="text-align:center">${statusBadge(r.status)}</td>
+  </tr>`).join('');
+
+  const totalAmt = rows.reduce((s,r) => s + (Number(r.amount)||0), 0);
+  if (footer) {
+    footer.style.display = '';
+    footer.innerHTML = `共 <strong>${rows.length}</strong> 筆　合計應收款項：<strong style="color:#c0392b">NT$ ${totalAmt.toLocaleString()}</strong>`;
+  }
+}
+
+function exportRevenueDetail() {
+  const year    = document.getElementById('rev-year')?.value    || new Date().getFullYear();
+  const month   = document.getElementById('rev-detail-month')?.value || '';
+  const status  = document.getElementById('rev-detail-status')?.value || '';
+  const company = window._finCompany || 'ad';
+
+  const params = new URLSearchParams({ company, year });
+  if (month)  params.set('month', month);
+  if (status) params.set('status', status);
+
+  window.open(`/api/revenue/export?${params.toString()}`, '_blank');
 }
 </script>
 </html>

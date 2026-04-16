@@ -323,6 +323,12 @@ def init_db():
         )""",
         "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS password_plain TEXT DEFAULT ''",
         "ALTER TABLE punch_staff    ADD COLUMN IF NOT EXISTS password_plain TEXT DEFAULT ''",
+        # 財務 + 報價 二公司支援
+        "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE finance_categories ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotation_settings ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotation_products ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
     ]
     for sql in migrations:
         try:
@@ -8124,8 +8130,14 @@ def _finance_rec_row(r):
 @app.route('/api/finance/categories', methods=['GET'])
 @require_module('finance')
 def api_finance_categories_list():
+    company = request.args.get('company', '')
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM finance_categories ORDER BY sort_order, id").fetchall()
+        if company:
+            rows = conn.execute(
+                "SELECT * FROM finance_categories WHERE company_unit=%s ORDER BY sort_order, id", (company,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM finance_categories ORDER BY sort_order, id").fetchall()
     return jsonify([_finance_cat_row(r) for r in rows])
 
 @app.route('/api/finance/categories', methods=['POST'])
@@ -8169,9 +8181,10 @@ def api_finance_category_delete(cid):
 @app.route('/api/finance/records', methods=['GET'])
 @require_module('finance')
 def api_finance_records_list():
-    month  = request.args.get('month', '')
-    ftype  = request.args.get('type', '')
-    cat_id = request.args.get('category_id', '')
+    month   = request.args.get('month', '')
+    ftype   = request.args.get('type', '')
+    cat_id  = request.args.get('category_id', '')
+    company = request.args.get('company', '')
     conds, params = ['TRUE'], []
     if month:
         conds.append("to_char(fr.record_date,'YYYY-MM')=%s"); params.append(month)
@@ -8179,6 +8192,8 @@ def api_finance_records_list():
         conds.append("fr.type=%s"); params.append(ftype)
     if cat_id:
         conds.append("fr.category_id=%s"); params.append(int(cat_id))
+    if company:
+        conds.append("fr.company_unit=%s"); params.append(company)
     with get_db() as conn:
         rows = conn.execute(f"""
             SELECT fr.*, fc.name as category_name, fc.color as category_color,
@@ -8232,13 +8247,14 @@ def api_finance_record_create():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO finance_records
-              (record_date, category_id, type, title, amount, tax_amount, vendor, invoice_no, note, document_id, created_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+              (record_date, category_id, type, title, amount, tax_amount, vendor, invoice_no, note, document_id, created_by, company_unit)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (b['record_date'], b.get('category_id') or None, b.get('type','expense'),
               b['title'].strip(), float(b.get('amount',0)), float(b.get('tax_amount',0)),
               b.get('vendor','').strip(), b.get('invoice_no','').strip(),
               b.get('note','').strip(), b.get('document_id') or None,
-              session.get('admin_display_name',''))).fetchone()
+              session.get('admin_display_name',''),
+              b.get('company_unit','ad'))).fetchone()
     return jsonify(_finance_rec_row(row)), 201
 
 @app.route('/api/finance/records/<int:rid>', methods=['PUT'])
@@ -8269,36 +8285,53 @@ def api_finance_record_delete(rid):
 @app.route('/api/finance/summary/<year>/<month>', methods=['GET'])
 @require_module('finance')
 def api_finance_summary(year, month):
-    period = f"{year}-{month.zfill(2)}"
+    period  = f"{year}-{month.zfill(2)}"
+    company = request.args.get('company', '')
+    c_cond  = "AND company_unit=%s" if company else ""
+    c_param = [company] if company else []
+
     with get_db() as conn:
-        totals = conn.execute("""
+        totals = conn.execute(f"""
             SELECT type, COALESCE(SUM(amount),0) as total
             FROM finance_records
-            WHERE to_char(record_date,'YYYY-MM')=%s
+            WHERE to_char(record_date,'YYYY-MM')=%s {c_cond}
             GROUP BY type
-        """, (period,)).fetchall()
+        """, [period] + c_param).fetchall()
         income  = next((float(r['total']) for r in totals if r['type']=='income'), 0.0)
         expense = next((float(r['total']) for r in totals if r['type']=='expense'), 0.0)
 
-        by_cat = conn.execute("""
+        by_cat = conn.execute(f"""
             SELECT fc.name, fc.color, fr.type, COALESCE(SUM(fr.amount),0) as total
             FROM finance_records fr
             LEFT JOIN finance_categories fc ON fc.id=fr.category_id
-            WHERE to_char(fr.record_date,'YYYY-MM')=%s
+            WHERE to_char(fr.record_date,'YYYY-MM')=%s {c_cond}
             GROUP BY fc.name, fc.color, fr.type
             ORDER BY total DESC
-        """, (period,)).fetchall()
+        """, [period] + c_param).fetchall()
 
         # Last 6 months trend
-        trend = conn.execute("""
+        trend = conn.execute(f"""
             SELECT to_char(record_date,'YYYY-MM') as mon,
                    type, COALESCE(SUM(amount),0) as total
             FROM finance_records
             WHERE record_date >= (DATE_TRUNC('month', %s::date) - INTERVAL '5 months')
               AND record_date <  (DATE_TRUNC('month', %s::date) + INTERVAL '1 month')
+              {c_cond}
             GROUP BY to_char(record_date,'YYYY-MM'), type
             ORDER BY mon
-        """, (f"{period}-01", f"{period}-01")).fetchall()
+        """, [f"{period}-01", f"{period}-01"] + c_param).fetchall()
+
+        # 營業收入月報（年度各月彙總，只計 income）
+        revenue_monthly = conn.execute(f"""
+            SELECT to_char(record_date,'YYYY-MM') as mon,
+                   COALESCE(SUM(amount),0) as total
+            FROM finance_records
+            WHERE type='income'
+              AND to_char(record_date,'YYYY')=%s
+              {c_cond}
+            GROUP BY to_char(record_date,'YYYY-MM')
+            ORDER BY mon
+        """, [year] + c_param).fetchall()
 
     return jsonify({
         'income':  income,
@@ -8312,6 +8345,10 @@ def api_finance_summary(year, month):
         'trend': [
             {'month': r['mon'], 'type': r['type'], 'total': float(r['total'])}
             for r in trend
+        ],
+        'revenue_monthly': [
+            {'month': r['mon'], 'total': float(r['total'])}
+            for r in revenue_monthly
         ],
     })
 
@@ -11822,11 +11859,21 @@ def init_quotation_db():
                 conn.execute(sql)
         except Exception as e:
             print(f"[init_quotation_db] {str(e)[:120]}")
-    # 確保 settings 至少有一筆
+    # 確保兩個公司各有一筆 settings
     try:
         with get_db() as conn:
-            if not conn.execute("SELECT id FROM quotation_settings LIMIT 1").fetchone():
-                conn.execute("INSERT INTO quotation_settings DEFAULT VALUES")
+            for cu, cname, caddr, cphone in [
+                ('ad', 'AD影像事務所', '新北市三重區雙源街57巷7號1樓', '(02)8985-1790'),
+                ('jm', '進光設計', '', ''),
+            ]:
+                row = conn.execute(
+                    "SELECT id FROM quotation_settings WHERE company_unit=%s LIMIT 1", (cu,)
+                ).fetchone()
+                if not row:
+                    conn.execute(
+                        "INSERT INTO quotation_settings (company_unit,company_name,company_address,company_phone) VALUES (%s,%s,%s,%s)",
+                        (cu, cname, caddr, cphone)
+                    )
     except Exception as e:
         print(f"[init_quotation_db seed] {e}")
 
@@ -11836,10 +11883,11 @@ except Exception as _eq:
     print(f"[quotation_init] {_eq}")
 
 
-def _next_quote_no():
-    """產生流水號，格式 QT-YYYYMM-NNN"""
+def _next_quote_no(company_unit='ad'):
+    """產生流水號，格式 QT-YYYYMM-NNN（依公司分開計序）"""
     from datetime import date as _d
-    prefix = 'QT-' + _d.today().strftime('%Y%m') + '-'
+    cu_prefix = 'JM' if company_unit == 'jm' else 'AD'
+    prefix = f'QT-{cu_prefix}-' + _d.today().strftime('%Y%m') + '-'
     with get_db() as conn:
         row = conn.execute(
             "SELECT quote_no FROM quotations WHERE quote_no LIKE %s ORDER BY quote_no DESC LIMIT 1",
@@ -11855,31 +11903,44 @@ def _next_quote_no():
     return f"{prefix}{seq:03d}"
 
 
+# ── Next quote number preview ────────────────────────────────────
+@app.route('/api/quotation/next-no', methods=['GET'])
+@login_required
+def api_quotation_next_no():
+    company = request.args.get('company', 'ad')
+    return jsonify({'quote_no': _next_quote_no(company)})
+
 # ── Settings ─────────────────────────────────────────────────────
 @app.route('/api/quotation/settings', methods=['GET'])
 @login_required
 def api_quotation_settings_get():
+    company = request.args.get('company', 'ad')
     with get_db() as conn:
-        row = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
+        row = conn.execute(
+            "SELECT * FROM quotation_settings WHERE company_unit=%s LIMIT 1", (company,)
+        ).fetchone()
     return jsonify(dict(row) if row else {})
 
 @app.route('/api/quotation/settings', methods=['PUT'])
 @login_required
 def api_quotation_settings_put():
     b = request.get_json(force=True) or {}
+    company = b.get('company_unit', 'ad')
     fields = ['company_name','company_address','company_phone','company_email',
               'bank_name','bank_branch','account_name','account_no','tax_id','payment_notes']
     with get_db() as conn:
-        row = conn.execute("SELECT id FROM quotation_settings LIMIT 1").fetchone()
+        row = conn.execute(
+            "SELECT id FROM quotation_settings WHERE company_unit=%s LIMIT 1", (company,)
+        ).fetchone()
         if row:
             sets = ', '.join(f"{f}=%s" for f in fields)
             vals = [b.get(f,'') for f in fields] + [row['id']]
             conn.execute(f"UPDATE quotation_settings SET {sets} WHERE id=%s", vals)
         else:
-            cols = ', '.join(fields)
-            phs  = ', '.join(['%s']*len(fields))
+            cols = ', '.join(['company_unit'] + fields)
+            phs  = ', '.join(['%s']*(len(fields)+1))
             conn.execute(f"INSERT INTO quotation_settings ({cols}) VALUES ({phs})",
-                         [b.get(f,'') for f in fields])
+                         [company] + [b.get(f,'') for f in fields])
     return jsonify({'ok': True})
 
 
@@ -11887,21 +11948,28 @@ def api_quotation_settings_put():
 @app.route('/api/quotation/products', methods=['GET'])
 @login_required
 def api_qproducts_list():
+    company = request.args.get('company', '')
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM quotation_products ORDER BY sort_order, id"
-        ).fetchall()
+        if company:
+            rows = conn.execute(
+                "SELECT * FROM quotation_products WHERE company_unit=%s ORDER BY sort_order, id", (company,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM quotation_products ORDER BY sort_order, id"
+            ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route('/api/quotation/products', methods=['POST'])
 @login_required
 def api_qproducts_create():
     b = request.get_json(force=True) or {}
+    company = b.get('company_unit', 'ad')
     with get_db() as conn:
         row = conn.execute(
-            "INSERT INTO quotation_products (name, unit, default_price, sort_order, active) VALUES (%s,%s,%s,%s,%s) RETURNING *",
+            "INSERT INTO quotation_products (name, unit, default_price, sort_order, active, company_unit) VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
             (b.get('name','').strip(), b.get('unit','次'),
-             float(b.get('default_price',0)), int(b.get('sort_order',0)), True)
+             float(b.get('default_price',0)), int(b.get('sort_order',0)), True, company)
         ).fetchone()
     return jsonify(dict(row)), 201
 
@@ -11930,11 +11998,13 @@ def api_qproducts_delete(pid):
 @app.route('/api/quotations', methods=['GET'])
 @login_required
 def api_quotations_list():
-    status = request.args.get('status', '')
-    q      = request.args.get('q', '')
+    status  = request.args.get('status', '')
+    q       = request.args.get('q', '')
+    company = request.args.get('company', '')
     conds, params = ['TRUE'], []
-    if status: conds.append("q.status=%s"); params.append(status)
-    if q:      conds.append("(q.client_name ILIKE %s OR q.quote_no ILIKE %s)"); params += [f'%{q}%', f'%{q}%']
+    if status:  conds.append("q.status=%s"); params.append(status)
+    if q:       conds.append("(q.client_name ILIKE %s OR q.quote_no ILIKE %s)"); params += [f'%{q}%', f'%{q}%']
+    if company: conds.append("q.company_unit=%s"); params.append(company)
     with get_db() as conn:
         rows = conn.execute(f"""
             SELECT q.*, COUNT(qi.id) as item_count
@@ -11956,7 +12026,8 @@ def api_quotations_list():
 @login_required
 def api_quotations_create():
     b = request.get_json(force=True) or {}
-    quote_no = _next_quote_no()
+    company  = b.get('company_unit', 'ad')
+    quote_no = _next_quote_no(company)
     from datetime import date as _dd
     quote_date = b.get('quote_date') or str(_dd.today())
     with get_db() as conn:
@@ -11964,8 +12035,8 @@ def api_quotations_create():
             INSERT INTO quotations
               (quote_no, quote_date, client_name, client_phone, client_address,
                client_line_id, sales_rep, image_no, image_date, payment_method,
-               status, notes, created_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+               status, notes, created_by, company_unit)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (quote_no, quote_date,
               b.get('client_name','').strip(),
               b.get('client_phone','').strip(),
@@ -11977,7 +12048,8 @@ def api_quotations_create():
               b.get('payment_method','轉帳'),
               b.get('status','draft'),
               b.get('notes','').strip(),
-              session.get('admin_display_name','')
+              session.get('admin_display_name',''),
+              company
               )).fetchone()
         qid = row['id']
         # 寫入品項
@@ -12078,13 +12150,19 @@ def api_quotation_delete(qid):
 @login_required
 def quotation_print(qid):
     with get_db() as conn:
-        q    = conn.execute("SELECT * FROM quotations WHERE id=%s", (qid,)).fetchone()
+        q = conn.execute("SELECT * FROM quotations WHERE id=%s", (qid,)).fetchone()
         if not q: return '找不到此報價單', 404
         items = conn.execute(
             "SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY sort_order, id",
             (qid,)
         ).fetchall()
-        settings = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
+        # 依報價單所屬公司讀取對應設定
+        company_unit = dict(q).get('company_unit', 'ad')
+        settings = conn.execute(
+            "SELECT * FROM quotation_settings WHERE company_unit=%s LIMIT 1", (company_unit,)
+        ).fetchone()
+        if not settings:
+            settings = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
     from flask import render_template
     return render_template('quotation_print.html',
                            q=dict(q), items=[dict(i) for i in items],

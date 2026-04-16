@@ -1191,11 +1191,19 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 財務管理 ── -->
   <div class="page" id="page-finance" style="display:none">
+    <!-- 公司切換 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:4px">財務單位</span>
+      <button id="fin-co-ad" class="filter-mode-btn active" onclick="setFinCompany('ad')">AD影像事務所</button>
+      <button id="fin-co-jm" class="filter-mode-btn"        onclick="setFinCompany('jm')">進光設計</button>
+      <span id="fin-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:8px">AD影像事務所</span>
+    </div>
     <div class="inv-tab-bar">
-      <button class="inv-tab active" id="fintab-dash"    onclick="switchFinTab('dash')">損益儀表板</button>
-      <button class="inv-tab"        id="fintab-records" onclick="switchFinTab('records')">收支記錄</button>
-      <button class="inv-tab"        id="fintab-cats"    onclick="switchFinTab('cats')">類別設定</button>
-      <button class="inv-tab"        id="fintab-ocr"     onclick="switchFinTab('ocr')">OCR辨識</button>
+      <button class="inv-tab active" id="fintab-dash"     onclick="switchFinTab('dash')">損益儀表板</button>
+      <button class="inv-tab"        id="fintab-revenue"  onclick="switchFinTab('revenue')">營業收入</button>
+      <button class="inv-tab"        id="fintab-records"  onclick="switchFinTab('records')">收支記錄</button>
+      <button class="inv-tab"        id="fintab-cats"     onclick="switchFinTab('cats')">類別設定</button>
+      <button class="inv-tab"        id="fintab-ocr"      onclick="switchFinTab('ocr')">OCR辨識</button>
       <button class="inv-tab"        id="fintab-docs"      onclick="switchFinTab('docs')">文件庫</button>
       <button class="inv-tab"        id="fintab-recurring" onclick="switchFinTab('recurring')">定期分錄</button>
       <button class="inv-tab"        id="fintab-bank"      onclick="switchFinTab('bank')">銀行對帳</button>
@@ -1250,6 +1258,51 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div class="card">
           <div class="card-header"><span class="card-title">支出明細</span></div>
           <div id="fin-expense-cats" style="padding:12px 16px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 營業收入 -->
+    <div id="fin-panel-revenue" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">年度</span>
+        <select class="filter-input" id="rev-year" onchange="loadRevenue()" style="min-width:100px"></select>
+        <span style="flex:1"></span>
+        <button class="btn btn-outline btn-sm" onclick="loadRevenue()">重新整理</button>
+        <button class="btn btn-primary btn-sm" onclick="openFinRecModal();setTimeout(()=>{const t=document.getElementById('frm-type');if(t){t.value='income';renderFinCatOptions();}},80)">新增收入記錄</button>
+      </div>
+      <!-- 年度統計卡片 -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="rev-kpi-row">
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">年度總收入</div>
+          <div id="rev-kpi-total" style="font-size:24px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace">—</div>
+        </div>
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">月均收入</div>
+          <div id="rev-kpi-avg" style="font-size:24px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace">—</div>
+        </div>
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">最高月份</div>
+          <div id="rev-kpi-best" style="font-size:18px;font-weight:700;color:var(--navy);font-family:'DM Mono',monospace">—</div>
+        </div>
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">已有收入月數</div>
+          <div id="rev-kpi-months" style="font-size:24px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace">—</div>
+        </div>
+      </div>
+      <!-- 月度趨勢圖 -->
+      <div class="card" style="padding:20px;margin-bottom:20px">
+        <div class="card-title" style="padding:0;margin-bottom:16px;font-size:13px">年度月收入趨勢</div>
+        <canvas id="rev-chart" height="90"></canvas>
+      </div>
+      <!-- 月度明細表格 -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">各月收入明細</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>月份</th><th style="text-align:right">收入金額</th><th style="text-align:right">佔年比</th><th>操作</th></tr></thead>
+            <tbody id="rev-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1858,6 +1911,13 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 財報模組 ── -->
   <div class="page" id="page-quotation" style="display:none">
+    <!-- 公司切換 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:4px">公司單位</span>
+      <button id="q-co-ad" class="filter-mode-btn active" onclick="setQCompany('ad')">AD影像事務所</button>
+      <button id="q-co-jm" class="filter-mode-btn"        onclick="setQCompany('jm')">進光設計</button>
+      <span id="q-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:8px">AD影像事務所</span>
+    </div>
 
     <div class="inv-tab-bar">
       <button class="inv-tab active" id="qtab-list"     onclick="switchQTab('list')">報價列表</button>
@@ -2046,7 +2106,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- 常用品項 Modal -->
   <div class="modal-overlay" id="qproduct-modal" style="display:none" onclick="if(event.target===this)closeProductModal()">
-    <div class="modal-box" style="max-width:420px">
+    <div class="modal" style="max-width:420px">
       <div class="modal-header"><span class="modal-title" id="qproduct-modal-title">新增常用品項</span>
         <button class="modal-close" onclick="closeProductModal()">✕</button></div>
       <div style="padding:20px 24px;display:grid;gap:12px">
@@ -2058,7 +2118,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
       <div style="padding:0 24px 20px;display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-ghost" onclick="closeProductModal()">取消</button>
-        <button class="btn btn-primary" onclick="saveProduct()">儲存</button>
+        <button class="btn btn-primary" onclick="saveQProduct()">儲存</button>
       </div>
     </div>
   </div>
@@ -6956,15 +7016,16 @@ function closeFinRecModal() { document.getElementById('fin-rec-modal').style.dis
 async function saveFinRec() {
   const id = document.getElementById('frm-id').value;
   const body = {
-    record_date: document.getElementById('frm-date').value,
-    type:        document.getElementById('frm-type').value,
-    category_id: document.getElementById('frm-cat').value || null,
-    title:       document.getElementById('frm-title-input').value.trim(),
-    amount:      parseFloat(document.getElementById('frm-amount').value)||0,
-    tax_amount:  parseFloat(document.getElementById('frm-tax').value)||0,
-    vendor:      document.getElementById('frm-vendor').value.trim(),
-    invoice_no:  document.getElementById('frm-invoice').value.trim(),
-    note:        document.getElementById('frm-note').value.trim(),
+    record_date:  document.getElementById('frm-date').value,
+    type:         document.getElementById('frm-type').value,
+    category_id:  document.getElementById('frm-cat').value || null,
+    title:        document.getElementById('frm-title-input').value.trim(),
+    amount:       parseFloat(document.getElementById('frm-amount').value)||0,
+    tax_amount:   parseFloat(document.getElementById('frm-tax').value)||0,
+    vendor:       document.getElementById('frm-vendor').value.trim(),
+    invoice_no:   document.getElementById('frm-invoice').value.trim(),
+    note:         document.getElementById('frm-note').value.trim(),
+    company_unit: window._finCompany || 'ad',
   };
   if (!body.record_date) { showToast('請選擇日期','error'); return; }
   if (!body.title)       { showToast('請填寫標題','error'); return; }
@@ -7038,6 +7099,7 @@ async function saveFinCat() {
     sort_order:        parseInt(document.getElementById('fcm-sort').value)||0,
     active:            document.getElementById('fcm-active').value==='1',
     statement_section: document.getElementById('fcm-section').value,
+    company_unit:      window._finCompany || 'ad',
   };
   if (!body.name) { showToast('請填寫名稱','error'); return; }
   const url = id ? `/api/finance/categories/${id}` : '/api/finance/categories';
@@ -9759,6 +9821,663 @@ async function deleteAdminBioCred(credId){
 
 function escStr(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════
+// 財務管理 — 公司切換 & 營業收入
+// ══════════════════════════════════════════════════════════════
+window._finCompany = 'ad';
+
+function setFinCompany(cu) {
+  window._finCompany = cu;
+  const label = cu === 'jm' ? '進光設計' : 'AD影像事務所';
+  document.getElementById('fin-co-label').textContent = label;
+  document.getElementById('fin-co-ad').classList.toggle('active', cu==='ad');
+  document.getElementById('fin-co-jm').classList.toggle('active', cu==='jm');
+  // 重新載入當前 tab
+  const activeTab = document.querySelector('.inv-tab-bar .inv-tab.active');
+  if (activeTab) {
+    const tab = activeTab.id.replace('fintab-','');
+    initFinance();
+  }
+}
+
+// 覆寫 initFinance 以支援公司參數
+const _origInitFinance = initFinance;
+initFinance = async function() {
+  const now = new Date();
+  const m = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('fin-dash-month').value  = m;
+  document.getElementById('fin-rec-month').value   = m;
+  document.getElementById('fin-stmt-month').value  = m;
+  await loadFinCats();
+  await loadFinSummary();
+  switchFinTab('dash');
+};
+
+// 覆寫 switchFinTab 以加入 revenue
+const _origSwitchFinTab = switchFinTab;
+switchFinTab = function(tab) {
+  ['dash','revenue','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings'].forEach(t => {
+    const btn   = document.getElementById('fintab-'+t);
+    const panel = document.getElementById('fin-panel-'+t);
+    if (btn)   btn.classList.toggle('active', t===tab);
+    if (panel) panel.style.display = t===tab?'':'none';
+  });
+  if (tab==='dash')      loadFinSummary();
+  if (tab==='revenue')   loadRevenue();
+  if (tab==='records')   loadFinRecords();
+  if (tab==='cats')      loadFinCats();
+  if (tab==='docs')      loadFinDocuments();
+  if (tab==='recurring') loadRecurring();
+  if (tab==='bank')      loadBankStatements();
+  if (tab==='tax')       _initTaxDefaults();
+  if (tab==='ap')        loadApList();
+  if (tab==='budget')    loadBudgetVsActual();
+  if (tab==='payroll')   loadPayrollSyncStatus();
+  if (tab==='stmts')     loadStatements();
+  if (tab==='settings')  loadFinSettings();
+};
+
+// 覆寫 loadFinSummary 以帶公司參數
+const _origLoadFinSummary = loadFinSummary;
+loadFinSummary = async function() {
+  const m = document.getElementById('fin-dash-month').value;
+  if (!m) return;
+  const [year, mon] = m.split('-');
+  const company = window._finCompany || '';
+  const qs = company ? `?company=${company}` : '';
+  const {ok, data} = await api(`/api/finance/summary/${year}/${mon}${qs}`, {}, true);
+  if (!ok) return;
+  const fmt = v => '$' + Math.abs(v).toLocaleString('zh-TW', {minimumFractionDigits:0, maximumFractionDigits:0});
+  document.getElementById('fin-kpi-income').textContent  = fmt(data.income);
+  document.getElementById('fin-kpi-expense').textContent = fmt(data.expense);
+  const netEl = document.getElementById('fin-kpi-net');
+  netEl.textContent = (data.net>=0?'+':'-') + fmt(data.net);
+  netEl.style.color = data.net>=0 ? 'var(--green)' : 'var(--red)';
+  // rebuild charts
+  if (window.finTrendChart)  { window.finTrendChart.destroy();  window.finTrendChart = null; }
+  if (window.finCatChart)    { window.finCatChart.destroy();    window.finCatChart = null;   }
+  const months = [...new Set(data.trend.map(t=>t.month))].sort();
+  const incomeData  = months.map(mo => data.trend.find(t=>t.month===mo&&t.type==='income')?.total||0);
+  const expenseData = months.map(mo => data.trend.find(t=>t.month===mo&&t.type==='expense')?.total||0);
+  const tc = document.getElementById('fin-trend-chart');
+  if (tc) {
+    window.finTrendChart = new Chart(tc.getContext('2d'), {
+      type:'bar',
+      data:{ labels: months, datasets:[
+        {label:'收入',data:incomeData, backgroundColor:'rgba(46,158,107,0.7)'},
+        {label:'支出',data:expenseData,backgroundColor:'rgba(214,66,66,0.7)'}
+      ]},
+      options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+    });
+  }
+  const expCats = data.by_category.filter(c=>c.type==='expense');
+  const cc = document.getElementById('fin-cat-chart');
+  if (cc && expCats.length) {
+    window.finCatChart = new Chart(cc.getContext('2d'), {
+      type:'doughnut',
+      data:{ labels:expCats.map(c=>c.name), datasets:[{data:expCats.map(c=>c.total), backgroundColor:expCats.map(c=>c.color)}] },
+      options:{responsive:true,plugins:{legend:{position:'bottom'}}}
+    });
+  }
+  // income & expense breakdowns
+  const incCats = data.by_category.filter(c=>c.type==='income');
+  const fmtItem = (c) => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${escHtml(c.name)}</span><strong>$${c.total.toLocaleString()}</strong></div>`;
+  const incEl = document.getElementById('fin-income-cats');
+  const expEl = document.getElementById('fin-expense-cats');
+  if (incEl) incEl.innerHTML = incCats.length ? incCats.map(fmtItem).join('') : '<div style="padding:12px;color:var(--muted);font-size:13px">無收入資料</div>';
+  if (expEl) expEl.innerHTML = expCats.length ? expCats.map(fmtItem).join('') : '<div style="padding:12px;color:var(--muted);font-size:13px">無支出資料</div>';
+};
+
+// 覆寫 loadFinRecords 以帶公司參數
+const _origLoadFinRecords = loadFinRecords;
+loadFinRecords = async function() {
+  const month   = document.getElementById('fin-rec-month')?.value || '';
+  const ftype   = document.getElementById('fin-rec-type')?.value  || '';
+  const company = window._finCompany || '';
+  const params  = new URLSearchParams();
+  if (month)   params.set('month', month);
+  if (ftype)   params.set('type', ftype);
+  if (company) params.set('company', company);
+  const tbody = document.getElementById('fin-rec-tbody');
+  tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  const {ok, data} = await api('/api/finance/records?' + params, {}, true);
+  if (!ok) { tbody.innerHTML = '<tr><td colspan="9" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
+  window._finRecords = data;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">此條件無記錄</div></td></tr>'; return; }
+  const statusLabel = {income:'<span class="badge badge-ok">收入</span>', expense:'<span class="badge" style="background:rgba(214,66,66,0.12);color:var(--red)">支出</span>'};
+  tbody.innerHTML = data.map(r => `<tr>
+    <td style="font-family:'DM Mono',monospace;font-size:12px">${r.record_date||''}</td>
+    <td>${statusLabel[r.type]||r.type}</td>
+    <td style="font-size:12px;color:var(--muted)">${escHtml(r.category_name||'未分類')}</td>
+    <td style="font-weight:600">${escHtml(r.title||'')}</td>
+    <td style="font-size:12px">${escHtml(r.vendor||'')}</td>
+    <td style="font-size:12px;color:var(--muted)">${escHtml(r.invoice_no||'')}</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">$${Number(r.amount||0).toLocaleString()}</td>
+    <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.note||'')}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="openFinRecModal(null,${r.id})">編輯</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteFinRec(${r.id})">刪除</button>
+    </td>
+  </tr>`).join('');
+  const total = data.reduce((s,r)=>s+(r.type==='income'?1:-1)*Number(r.amount||0),0);
+  const footer = document.getElementById('fin-rec-footer');
+  if (footer) { footer.style.display=''; footer.innerHTML=`共 ${data.length} 筆　合計：<strong style="color:${total>=0?'var(--green)':'var(--red)'}">$${Math.abs(total).toLocaleString()}</strong>`; }
+};
+
+// 覆寫 loadFinCats 以帶公司參數
+const _origLoadFinCats = typeof loadFinCats === 'function' ? loadFinCats : null;
+loadFinCats = async function() {
+  const company = window._finCompany || '';
+  const qs = company ? `?company=${company}` : '';
+  const {ok, data} = await api('/api/finance/categories' + qs, {}, true);
+  if (!ok) return;
+  finCatList = data;
+  const incTbody = document.getElementById('fin-cat-income-tbody');
+  const expTbody = document.getElementById('fin-cat-expense-tbody');
+  const inc = data.filter(c=>c.type==='income');
+  const exp = data.filter(c=>c.type==='expense');
+  const row = c => `<tr>
+    <td>${escHtml(c.name)}</td>
+    <td><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${c.color||'#aaa'}"></span></td>
+    <td>${c.sort_order||0}</td>
+    <td>${c.active?'<span class="badge badge-ok">啟用</span>':'<span class="badge badge-warn">停用</span>'}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="openFinCatModal(${c.id})">編輯</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteFinCat(${c.id})">刪除</button>
+    </td>
+  </tr>`;
+  if (incTbody) incTbody.innerHTML = inc.length ? inc.map(row).join('') : '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無收入類別</div></td></tr>';
+  if (expTbody) expTbody.innerHTML = exp.length ? exp.map(row).join('') : '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無支出類別</div></td></tr>';
+};
+
+// 營業收入
+let _revChart = null;
+async function loadRevenue() {
+  const yearSel = document.getElementById('rev-year');
+  if (!yearSel.options.length) {
+    const now = new Date().getFullYear();
+    for (let y = now; y >= now - 5; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y + '年';
+      yearSel.appendChild(o);
+    }
+  }
+  const year    = yearSel.value || new Date().getFullYear();
+  const company = window._finCompany || '';
+  const qs      = company ? `?company=${company}` : '';
+  // load all 12 months summary
+  const promises = [];
+  for (let m = 1; m <= 12; m++) {
+    promises.push(api(`/api/finance/summary/${year}/${String(m).padStart(2,'0')}${qs}`, {}, true));
+  }
+  const results = await Promise.all(promises);
+  const months  = [];
+  const incomes = [];
+  let total = 0, best = 0, bestMonth = '';
+  for (let m = 1; m <= 12; m++) {
+    const r = results[m-1];
+    const inc = r.ok ? (r.data.income || 0) : 0;
+    const label = `${year}-${String(m).padStart(2,'0')}`;
+    months.push(label);
+    incomes.push(inc);
+    total += inc;
+    if (inc > best) { best = inc; bestMonth = label; }
+  }
+  const activeMonths = incomes.filter(v=>v>0).length;
+  const fmt = v => '$' + Math.abs(v).toLocaleString('zh-TW', {minimumFractionDigits:0, maximumFractionDigits:0});
+  document.getElementById('rev-kpi-total').textContent  = fmt(total);
+  document.getElementById('rev-kpi-avg').textContent    = fmt(activeMonths ? Math.round(total/activeMonths) : 0);
+  document.getElementById('rev-kpi-best').textContent   = bestMonth ? bestMonth + '\n' + fmt(best) : '—';
+  document.getElementById('rev-kpi-months').textContent = activeMonths;
+
+  // Chart
+  if (_revChart) { _revChart.destroy(); _revChart = null; }
+  const ctx = document.getElementById('rev-chart');
+  if (ctx) {
+    _revChart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          label: '月收入',
+          data: incomes,
+          backgroundColor: incomes.map(v => v > 0 ? 'rgba(46,158,107,0.75)' : 'rgba(200,200,200,0.4)'),
+          borderColor:     incomes.map(v => v > 0 ? 'rgba(46,158,107,1)'    : 'rgba(180,180,180,0.6)'),
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { callback: v => '$' + v.toLocaleString() }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Table
+  const tbody = document.getElementById('rev-tbody');
+  const zhMonths = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  tbody.innerHTML = months.map((mo, i) => `
+    <tr style="opacity:${incomes[i]>0?1:0.45}">
+      <td style="font-weight:${incomes[i]>0?'600':'400'};color:${incomes[i]>0?'var(--navy)':'var(--muted)'}">
+        ${mo} ${zhMonths[i]}
+        ${mo === bestMonth ? '<span class="badge badge-ok" style="margin-left:6px;font-size:10px">最高</span>' : ''}
+      </td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${incomes[i]>0?'var(--green)':'var(--muted)'}">
+        ${incomes[i] > 0 ? fmt(incomes[i]) : '—'}
+      </td>
+      <td style="text-align:right;font-size:12px;color:var(--muted)">
+        ${total > 0 && incomes[i] > 0 ? (incomes[i]/total*100).toFixed(1)+'%' : '—'}
+      </td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="switchFinTab('records');document.getElementById('fin-rec-month').value='${mo}';loadFinRecords()">查看明細</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 財報模組 — 報價單 JS
+// ══════════════════════════════════════════════════════════════
+window._qCompany   = 'ad';
+let _qProductList  = [];
+let _qEditingId    = null;
+
+function setQCompany(cu) {
+  window._qCompany = cu;
+  const label = cu === 'jm' ? '進光設計' : 'AD影像事務所';
+  document.getElementById('q-co-label').textContent  = label;
+  document.getElementById('q-co-ad').classList.toggle('active', cu==='ad');
+  document.getElementById('q-co-jm').classList.toggle('active', cu==='jm');
+  switchQTab('list');
+}
+
+function switchQTab(tab) {
+  ['list','create','products','settings'].forEach(t => {
+    const el = document.getElementById('qpanel-'+t);
+    if (el) el.style.display = t===tab?'':'none';
+    const btn = document.getElementById('qtab-'+t);
+    if (btn) btn.classList.toggle('active', t===tab);
+  });
+  if (tab==='list')     loadQuotations();
+  if (tab==='products') loadQProducts();
+  if (tab==='settings') loadQSettings();
+  if (tab==='create')   initQCreateForm();
+}
+
+async function initQuotation() {
+  await loadQProducts();
+  switchQTab('list');
+}
+
+// ── 報價列表 ─────────────────────────────────────────────────
+async function loadQuotations() {
+  const q       = document.getElementById('q-search')?.value || '';
+  const status  = document.getElementById('q-status-filter')?.value || '';
+  const company = window._qCompany || '';
+  const params  = new URLSearchParams();
+  if (q)       params.set('q', q);
+  if (status)  params.set('status', status);
+  if (company) params.set('company', company);
+  const tbody = document.getElementById('q-list-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  const {ok, data} = await api('/api/quotations?' + params, {}, true);
+  if (!ok) { tbody.innerHTML = '<tr><td colspan="8" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
+  document.getElementById('q-list-count').textContent = `共 ${data.length} 筆`;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無報價單</div></td></tr>'; return; }
+  const statusBadge = {
+    draft:    '<span class="badge" style="background:rgba(200,169,110,0.15);color:#a07830">草稿</span>',
+    sent:     '<span class="badge" style="background:rgba(74,123,218,0.12);color:var(--accent)">已發送</span>',
+    accepted: '<span class="badge badge-ok">已接受</span>',
+    rejected: '<span class="badge badge-warn">已拒絕</span>',
+  };
+  tbody.innerHTML = data.map(q => `<tr>
+    <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600">${escHtml(q.quote_no||'')}</td>
+    <td style="font-size:12px">${q.quote_date||''}</td>
+    <td style="font-weight:600">${escHtml(q.client_name||'')}</td>
+    <td style="font-size:12px;color:var(--muted)">${escHtml(q.sales_rep||'—')}</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700">NT$ ${Number(q.subtotal||0).toLocaleString()}</td>
+    <td style="text-align:center">${q.item_count||0}</td>
+    <td>${statusBadge[q.status]||q.status}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="editQuotation(${q.id})">編輯</button>
+      <button class="btn btn-outline btn-sm" style="margin-left:4px" onclick="window.open('/quotation/${q.id}/print','_blank')">PDF</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuotation(${q.id})">刪除</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function deleteQuotation(id) {
+  if (!confirm('確定要刪除此報價單？')) return;
+  const {ok} = await api(`/api/quotations/${id}`, {method:'DELETE'});
+  if (ok) { showToast('已刪除', 'success'); loadQuotations(); }
+  else showToast('刪除失敗', 'error');
+}
+
+// ── 建立 / 編輯報價單 ────────────────────────────────────────
+async function initQCreateForm() {
+  // 自動帶入今日日期
+  const dateEl = document.getElementById('qf-quote-date');
+  if (dateEl && !_qEditingId) {
+    dateEl.value = new Date().toISOString().slice(0,10);
+  }
+  // 帶入下一個流水號
+  if (!_qEditingId) {
+    const {ok, data} = await api(`/api/quotation/next-no?company=${window._qCompany||'ad'}`, {}, true);
+    if (ok) {
+      document.getElementById('q-form-no').textContent = data.quote_no;
+    }
+  }
+  // 載入常用品項到下拉
+  await loadQProducts();
+  const sel = document.getElementById('qf-product-picker');
+  if (sel) {
+    sel.innerHTML = '<option value="">＋ 從常用品項新增</option>' +
+      _qProductList.filter(p=>p.active).map(p =>
+        `<option value="${p.id}" data-name="${escHtml(p.name)}" data-unit="${escHtml(p.unit||'次')}" data-price="${p.default_price||0}">${escHtml(p.name)}</option>`
+      ).join('');
+  }
+  // 若空白行為零，自動加一行
+  const tbody = document.getElementById('qf-items-tbody');
+  if (tbody && !tbody.children.length) addQuoteItem();
+}
+
+function addQuoteItem(name='', unit='次', price=0) {
+  const tbody = document.getElementById('qf-items-tbody');
+  const i = tbody.children.length;
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td><input class="form-input" style="width:100%;font-size:12px" value="${escHtml(name)}" oninput="updateQTotals()"></td>
+    <td><input class="form-input" type="number" style="width:60px;font-size:12px" value="1" min="0" step="0.01" oninput="updateQTotals()"></td>
+    <td><input class="form-input" style="width:50px;font-size:12px" value="${escHtml(unit)}"></td>
+    <td><input class="form-input" type="number" style="width:80px;font-size:12px" value="${price}" min="0" oninput="updateQTotals()"></td>
+    <td><span class="q-amt" style="font-family:'DM Mono',monospace;font-size:12px;padding:0 4px">0</span></td>
+    <td><input class="form-input" type="number" style="width:70px;font-size:12px" value="0" min="0" oninput="updateQTotals()"></td>
+    <td><input class="form-input" type="number" style="width:50px;font-size:12px" value="0" min="0"></td>
+    <td><span class="q-receivable" style="font-family:'DM Mono',monospace;font-size:12px;padding:0 4px;font-weight:600">0</span></td>
+    <td><input class="form-input" style="width:80px;font-size:12px" placeholder="收款狀況"></td>
+    <td><input class="form-input" style="width:80px;font-size:12px" placeholder="備註"></td>
+    <td><button class="btn btn-danger btn-sm" style="padding:3px 8px" onclick="this.closest('tr').remove();updateQTotals()">✕</button></td>
+  `;
+  tbody.appendChild(row);
+  updateQTotals();
+}
+
+function addProductFromPicker() {
+  const sel = document.getElementById('qf-product-picker');
+  if (!sel || !sel.value) return;
+  const opt = sel.options[sel.selectedIndex];
+  addQuoteItem(opt.dataset.name, opt.dataset.unit, parseFloat(opt.dataset.price)||0);
+  sel.value = '';
+}
+
+function updateQTotals() {
+  let subtotal = 0;
+  document.querySelectorAll('#qf-items-tbody tr').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const qty   = parseFloat(inputs[1]?.value) || 0;
+    const price = parseFloat(inputs[3]?.value) || 0;
+    const hand  = parseFloat(inputs[5]?.value) || 0;
+    const amt   = Math.round(qty * price * 100) / 100;
+    const recv  = amt + hand;
+    const amtEl = row.querySelector('.q-amt');
+    const recEl = row.querySelector('.q-receivable');
+    if (amtEl) amtEl.textContent = amt.toLocaleString();
+    if (recEl) recEl.textContent = recv.toLocaleString();
+    subtotal += recv;
+  });
+  const el = document.getElementById('qf-subtotal');
+  if (el) el.textContent = 'NT$ ' + Math.round(subtotal).toLocaleString();
+}
+
+function resetQuoteForm() {
+  _qEditingId = null;
+  document.getElementById('qf-editing-id').value = '';
+  document.getElementById('qf-client-name').value  = '';
+  document.getElementById('qf-client-phone').value = '';
+  document.getElementById('qf-client-line').value  = '';
+  document.getElementById('qf-client-addr').value  = '';
+  document.getElementById('qf-sales-rep').value    = '';
+  document.getElementById('qf-quote-date').value   = new Date().toISOString().slice(0,10);
+  document.getElementById('qf-image-no').value     = '';
+  document.getElementById('qf-image-date').value   = '';
+  document.getElementById('qf-payment-method').value = '轉帳';
+  document.getElementById('qf-status').value       = 'draft';
+  document.getElementById('qf-notes').value        = '';
+  document.getElementById('qf-items-tbody').innerHTML = '';
+  document.getElementById('qf-subtotal').textContent  = 'NT$ 0';
+  document.getElementById('q-form-title').textContent = '新增報價單';
+  document.getElementById('q-form-no').textContent    = '';
+  const printBtn = document.getElementById('qf-print-btn');
+  if (printBtn) printBtn.style.display = 'none';
+}
+
+async function editQuotation(id) {
+  const {ok, data} = await api(`/api/quotations/${id}`, {}, true);
+  if (!ok) { showToast('載入失敗', 'error'); return; }
+  _qEditingId = id;
+  const q = data.quotation;
+  document.getElementById('qf-editing-id').value    = id;
+  document.getElementById('qf-client-name').value   = q.client_name || '';
+  document.getElementById('qf-client-phone').value  = q.client_phone || '';
+  document.getElementById('qf-client-line').value   = q.client_line_id || '';
+  document.getElementById('qf-client-addr').value   = q.client_address || '';
+  document.getElementById('qf-sales-rep').value     = q.sales_rep || '';
+  document.getElementById('qf-quote-date').value    = q.quote_date || '';
+  document.getElementById('qf-image-no').value      = q.image_no || '';
+  document.getElementById('qf-image-date').value    = q.image_date || '';
+  document.getElementById('qf-payment-method').value = q.payment_method || '轉帳';
+  document.getElementById('qf-status').value        = q.status || 'draft';
+  document.getElementById('qf-notes').value         = q.notes || '';
+  document.getElementById('q-form-title').textContent = '編輯報價單';
+  document.getElementById('q-form-no').textContent    = q.quote_no || '';
+  const printBtn = document.getElementById('qf-print-btn');
+  if (printBtn) printBtn.style.display = '';
+  // 載入品項
+  const tbody = document.getElementById('qf-items-tbody');
+  tbody.innerHTML = '';
+  (data.items || []).forEach(item => {
+    addQuoteItem(item.product_name||'', item.unit||'次', item.unit_price||0);
+    const rows = tbody.querySelectorAll('tr');
+    const row  = rows[rows.length-1];
+    const inputs = row.querySelectorAll('input');
+    if (inputs[1]) inputs[1].value = item.quantity || 1;
+    if (inputs[5]) inputs[5].value = item.handmade  || 0;
+    if (inputs[6]) inputs[6].value = item.people_count || 0;
+    if (inputs[7]) inputs[7].value = item.payment_status || '';
+    if (inputs[8]) inputs[8].value = item.note || '';
+  });
+  updateQTotals();
+  await loadQProducts();
+  const sel = document.getElementById('qf-product-picker');
+  if (sel) {
+    sel.innerHTML = '<option value="">＋ 從常用品項新增</option>' +
+      _qProductList.filter(p=>p.active).map(p =>
+        `<option value="${p.id}" data-name="${escHtml(p.name)}" data-unit="${escHtml(p.unit||'次')}" data-price="${p.default_price||0}">${escHtml(p.name)}</option>`
+      ).join('');
+  }
+  switchQTab('create');
+}
+
+function _getQuoteItems() {
+  const items = [];
+  document.querySelectorAll('#qf-items-tbody tr').forEach((row, i) => {
+    const inputs = row.querySelectorAll('input');
+    const amtEl  = row.querySelector('.q-amt');
+    items.push({
+      sort_order:     i,
+      product_name:   inputs[0]?.value?.trim() || '',
+      quantity:       parseFloat(inputs[1]?.value) || 0,
+      unit:           inputs[2]?.value?.trim() || '次',
+      unit_price:     parseFloat(inputs[3]?.value) || 0,
+      amount:         parseFloat(amtEl?.textContent?.replace(/,/g,'')) || 0,
+      handmade:       parseFloat(inputs[5]?.value) || 0,
+      people_count:   parseInt(inputs[6]?.value) || 0,
+      payment_status: inputs[7]?.value?.trim() || '',
+      note:           inputs[8]?.value?.trim() || '',
+    });
+  });
+  return items;
+}
+
+async function saveQuotation() {
+  const clientName = document.getElementById('qf-client-name').value.trim();
+  if (!clientName) { showToast('請填寫客戶姓名', 'error'); return; }
+  const body = {
+    company_unit:    window._qCompany || 'ad',
+    client_name:     clientName,
+    client_phone:    document.getElementById('qf-client-phone').value.trim(),
+    client_line_id:  document.getElementById('qf-client-line').value.trim(),
+    client_address:  document.getElementById('qf-client-addr').value.trim(),
+    sales_rep:       document.getElementById('qf-sales-rep').value.trim(),
+    quote_date:      document.getElementById('qf-quote-date').value,
+    image_no:        document.getElementById('qf-image-no').value.trim(),
+    image_date:      document.getElementById('qf-image-date').value || null,
+    payment_method:  document.getElementById('qf-payment-method').value,
+    status:          document.getElementById('qf-status').value,
+    notes:           document.getElementById('qf-notes').value.trim(),
+    items:           _getQuoteItems(),
+  };
+  const id = _qEditingId;
+  const url    = id ? `/api/quotations/${id}` : '/api/quotations';
+  const method = id ? 'PUT' : 'POST';
+  const {ok, data} = await api(url, {method, body: JSON.stringify(body)});
+  if (!ok) { showToast('儲存失敗', 'error'); return; }
+  showToast(id ? '已更新' : '已建立', 'success');
+  if (!id) {
+    _qEditingId = data.id;
+    document.getElementById('qf-editing-id').value = data.id;
+    document.getElementById('q-form-no').textContent = data.quote_no || '';
+    document.getElementById('q-form-title').textContent = '編輯報價單';
+    const printBtn = document.getElementById('qf-print-btn');
+    if (printBtn) printBtn.style.display = '';
+  }
+}
+
+function printQuotation() {
+  const id = _qEditingId || document.getElementById('qf-editing-id').value;
+  if (!id) { showToast('請先儲存報價單', 'error'); return; }
+  window.open(`/quotation/${id}/print`, '_blank');
+}
+
+// ── 常用品項 ─────────────────────────────────────────────────
+async function loadQProducts() {
+  const company = window._qCompany || '';
+  const qs = company ? `?company=${company}` : '';
+  const {ok, data} = await api('/api/quotation/products' + qs, {}, true);
+  if (!ok) return;
+  _qProductList = data;
+  const tbody = document.getElementById('qproducts-tbody');
+  if (!tbody) return;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無常用品項</div></td></tr>'; return; }
+  tbody.innerHTML = data.map(p => `<tr>
+    <td style="font-weight:${p.active?'600':'400'};color:${p.active?'var(--navy)':'var(--muted)'}">
+      ${escHtml(p.name)} ${!p.active?'<span class="badge badge-warn" style="font-size:10px">停用</span>':''}
+    </td>
+    <td>${escHtml(p.unit||'次')}</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace">NT$ ${Number(p.default_price||0).toLocaleString()}</td>
+    <td>${p.sort_order||0}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="openProductModal(${p.id})">編輯</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQProduct(${p.id})">刪除</button>
+    </td>
+  </tr>`).join('');
+}
+
+function openProductModal(id=null) {
+  const modal = document.getElementById('qproduct-modal');
+  const titleEl = document.getElementById('qproduct-modal-title');
+  document.getElementById('qpm-id').value = id || '';
+  if (id) {
+    const p = _qProductList.find(x => x.id === id);
+    if (p) {
+      titleEl.textContent = '編輯常用品項';
+      document.getElementById('qpm-name').value  = p.name || '';
+      document.getElementById('qpm-unit').value  = p.unit || '次';
+      document.getElementById('qpm-price').value = p.default_price || 0;
+      document.getElementById('qpm-sort').value  = p.sort_order || 0;
+    }
+  } else {
+    titleEl.textContent = '新增常用品項';
+    document.getElementById('qpm-name').value  = '';
+    document.getElementById('qpm-unit').value  = '次';
+    document.getElementById('qpm-price').value = 0;
+    document.getElementById('qpm-sort').value  = 0;
+  }
+  modal.style.display = 'flex';
+}
+
+function closeProductModal() {
+  document.getElementById('qproduct-modal').style.display = 'none';
+}
+
+async function saveQProduct() {
+  const id = document.getElementById('qpm-id').value;
+  const body = {
+    name:          document.getElementById('qpm-name').value.trim(),
+    unit:          document.getElementById('qpm-unit').value.trim() || '次',
+    default_price: parseFloat(document.getElementById('qpm-price').value) || 0,
+    sort_order:    parseInt(document.getElementById('qpm-sort').value) || 0,
+    active:        true,
+    company_unit:  window._qCompany || 'ad',
+  };
+  if (!body.name) { showToast('請填寫品項名稱', 'error'); return; }
+  const url    = id ? `/api/quotation/products/${id}` : '/api/quotation/products';
+  const method = id ? 'PUT' : 'POST';
+  const {ok} = await api(url, {method, body: JSON.stringify(body)});
+  if (!ok) { showToast('儲存失敗', 'error'); return; }
+  showToast(id ? '已更新' : '已新增', 'success');
+  closeProductModal();
+  loadQProducts();
+}
+
+async function deleteQProduct(id) {
+  if (!confirm('確定刪除此品項？')) return;
+  const {ok} = await api(`/api/quotation/products/${id}`, {method:'DELETE'});
+  if (ok) { showToast('已刪除', 'success'); loadQProducts(); }
+  else showToast('刪除失敗', 'error');
+}
+
+// ── 公司設定 ─────────────────────────────────────────────────
+async function loadQSettings() {
+  const company = window._qCompany || 'ad';
+  const {ok, data} = await api(`/api/quotation/settings?company=${company}`, {}, true);
+  if (!ok) return;
+  document.getElementById('qs-company-name').value    = data.company_name    || '';
+  document.getElementById('qs-company-address').value = data.company_address || '';
+  document.getElementById('qs-company-phone').value   = data.company_phone   || '';
+  document.getElementById('qs-company-email').value   = data.company_email   || '';
+  document.getElementById('qs-bank-name').value       = data.bank_name       || '';
+  document.getElementById('qs-bank-branch').value     = data.bank_branch     || '';
+  document.getElementById('qs-account-name').value    = data.account_name    || '';
+  document.getElementById('qs-account-no').value      = data.account_no      || '';
+  document.getElementById('qs-tax-id').value          = data.tax_id          || '';
+  document.getElementById('qs-payment-notes').value   = data.payment_notes   || '';
+}
+
+async function saveQSettings() {
+  const body = {
+    company_unit:    window._qCompany || 'ad',
+    company_name:    document.getElementById('qs-company-name').value.trim(),
+    company_address: document.getElementById('qs-company-address').value.trim(),
+    company_phone:   document.getElementById('qs-company-phone').value.trim(),
+    company_email:   document.getElementById('qs-company-email').value.trim(),
+    bank_name:       document.getElementById('qs-bank-name').value.trim(),
+    bank_branch:     document.getElementById('qs-bank-branch').value.trim(),
+    account_name:    document.getElementById('qs-account-name').value.trim(),
+    account_no:      document.getElementById('qs-account-no').value.trim(),
+    tax_id:          document.getElementById('qs-tax-id').value.trim(),
+    payment_notes:   document.getElementById('qs-payment-notes').value.trim(),
+  };
+  const {ok} = await api('/api/quotation/settings', {method:'PUT', body: JSON.stringify(body)});
+  if (ok) showToast('設定已儲存', 'success');
+  else showToast('儲存失敗', 'error');
 }
 </script>
 </html>

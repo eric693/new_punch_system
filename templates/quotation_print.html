@@ -111,12 +111,13 @@
     margin-top: 16px;
   }
   .sign-box {
-    border-top: 1px solid #aaa;
-    padding-top: 6px;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    padding: 10px 12px 0;
     text-align: center;
     font-size: 11px;
     color: #555;
-    min-height: 60px;
+    min-height: 100px;
   }
 
   @media print {
@@ -271,12 +272,17 @@
 
     <!-- 左欄：產品說明 + 備註條款 -->
     <div>
-      {% if q.get('notes') %}
       <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
-        <div style="font-weight:700;font-size:11.5px;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px">產品內容說明</div>
-        <div style="white-space:pre-wrap;line-height:1.7">{{ q.get('notes','') }}</div>
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">婚禮記錄產品內容</div>
+        <div style="line-height:1.8">
+          <div>平面攝影：拍攝當日檔案全數調整色調給予</div>
+          <div>動態錄影：3-5分鐘精華短片（結婚登記）</div>
+          <div style="margin-top:4px">產品內容含一女妝髮、禮服乙式，完成後還會棚內拍攝類婚紗，另額外加購一女妝髮於結婚登記後使用。</div>
+        </div>
+        {% if q.get('notes') %}
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #eee;white-space:pre-wrap;line-height:1.7">{{ q.get('notes','') }}</div>
+        {% endif %}
       </div>
-      {% endif %}
 
       <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;font-size:11px;color:#333">
         <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">備　　註</div>

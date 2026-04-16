@@ -103,59 +103,6 @@
   .payment-item-label { color: #666; min-width: 60px; white-space: nowrap; }
   .payment-notes { margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee; color: #555; white-space: pre-wrap; }
 
-  /* ── 備註條款 ── */
-  .terms-box {
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    padding: 8px 10px;
-    margin-bottom: 10px;
-    font-size: 11px;
-    color: #333;
-  }
-  .terms-title {
-    font-weight: 700;
-    font-size: 11.5px;
-    margin-bottom: 5px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 3px;
-  }
-  .terms-content p {
-    margin-bottom: 3px;
-    line-height: 1.7;
-  }
-
-  /* ── 付款方式 ── */
-  .pay-method-box {
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    padding: 8px 10px;
-    margin-bottom: 10px;
-    font-size: 11px;
-    color: #333;
-  }
-  .pay-method-box .pay-row {
-    padding: 2px 0;
-    line-height: 1.7;
-  }
-
-  /* ── 被拍攝者聲明 ── */
-  .declaration-box {
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    padding: 8px 10px;
-    margin-bottom: 10px;
-    font-size: 11px;
-    color: #333;
-    line-height: 1.8;
-  }
-  .declaration-sign {
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid #eee;
-    font-size: 11px;
-    color: #555;
-  }
-
   /* ── 簽名區 ── */
   .sign-area {
     display: grid;
@@ -319,91 +266,68 @@
     合計金額：<span>NT$ {{ '{:,.0f}'.format(q.get('subtotal', 0) or 0) }}</span>
   </div>
 
-  <!-- 備註 -->
-  {% if q.get('notes') %}
-  <div class="notes-label">備註說明</div>
-  <div class="notes-box">{{ q.get('notes','') }}</div>
-  {% endif %}
+  <!-- 備註＋付款方式：左右兩欄 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:start">
 
-  <!-- 備註一：取消／延期條款 -->
-  <div class="terms-box">
-    <div class="terms-title">備　　註</div>
-    <div class="terms-content">
-      <p>如遇天災人禍等不可抗力因素取消預約，檢附證明後可全額退訂；如非以上因素取消預約，會扣除原合約總額20%費用（因本公司已提前安排專人檔期及準備成本），如拍攝延期，我們可配合您的時間調整。</p>
+    <!-- 左欄：產品說明 + 備註條款 -->
+    <div>
+      {% if q.get('notes') %}
+      <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px">產品內容說明</div>
+        <div style="white-space:pre-wrap;line-height:1.7">{{ q.get('notes','') }}</div>
+      </div>
+      {% endif %}
+
+      <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;font-size:11px;color:#333">
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">備　　註</div>
+        <p style="line-height:1.75;margin-bottom:5px">如遇天災人禍等不可抗力因素取消預約，檢附證明後可全額退訂；如非以上因素取消預約，會扣除原合約總額20%費用（因本公司已提前安排專人檔期及準備成本），如拍攝延期，我們可配合您的時間調整。</p>
+        <p style="line-height:1.75;margin-bottom:3px">本報價單3日內有效，超過報價有效日期請重新詢價。</p>
+        <p style="line-height:1.75">請確認本單內容無誤後，簽回後視為合約正式成立。</p>
+      </div>
     </div>
-  </div>
 
-  <!-- 備註二：有效期 + 確認聲明 -->
-  <div class="terms-box">
-    <div class="terms-content">
-      <p>本報價單3日內有效，超過報價有效日期請重新詢價。</p>
-      <p>請確認本單內容無誤後，簽回後視為合約正式成立。</p>
-    </div>
-  </div>
+    <!-- 右欄：付款方式 + 匯款資訊 -->
+    <div>
+      <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">付款方式</div>
+        <div style="line-height:1.9">
+          <div>（1）訂金款：報價單簽回時全額結清款項</div>
+          <div style="font-weight:700;color:#c0392b;padding-left:16px">NT$ {{ '{:,.0f}'.format(q.get('subtotal', 0) or 0) }} 元整</div>
+          <div>（2）結案款：當日服務完畢後結清，其於 0 元整</div>
+          <div>（3）款項請以現金、轉帳、匯款方式支付</div>
+        </div>
+      </div>
 
-  <!-- 付款方式 -->
-  <div class="pay-method-box">
-    <div class="terms-title">付款方式</div>
-    <div class="pay-row">（1）訂金款：報價單簽回時全額結清款項 NT$ {{ '{:,.0f}'.format(q.get('subtotal', 0) or 0) }} 元整</div>
-    <div class="pay-row">（2）結案款：當日服務完畢後結清，其於 0 元整</div>
-    <div class="pay-row">（3）款項請以現金、轉帳、匯款方式支付</div>
-  </div>
-
-  <!-- 匯款資訊（來自系統設定） -->
-  {% if s.get('account_no') or s.get('bank_name') or s.get('payment_notes') %}
-  <div class="payment-box">
-    <div class="payment-title">匯款資訊</div>
-    <div class="payment-grid">
-      {% if s.get('account_name') %}
-      <div class="payment-item">
-        <span class="payment-item-label">戶　　名</span>
-        <span>{{ s['account_name'] }}</span>
-      </div>
-      {% endif %}
-      {% if s.get('bank_name') %}
-      <div class="payment-item">
-        <span class="payment-item-label">銀行名稱</span>
-        <span>{{ s['bank_name'] }}</span>
-      </div>
-      {% endif %}
-      {% if s.get('account_no') %}
-      <div class="payment-item">
-        <span class="payment-item-label">帳　　號</span>
-        <span style="font-weight:600">{{ s['account_no'] }}</span>
-      </div>
-      {% endif %}
-      {% if s.get('bank_branch') %}
-      <div class="payment-item">
-        <span class="payment-item-label">分　　行</span>
-        <span>{{ s['bank_branch'] }}</span>
-      </div>
-      {% endif %}
-      {% if s.get('tax_id') %}
-      <div class="payment-item">
-        <span class="payment-item-label">統一編號</span>
-        <span>{{ s['tax_id'] }}</span>
+      {% if s.get('account_no') or s.get('bank_name') or s.get('payment_notes') %}
+      <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;font-size:11px;color:#333">
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">匯款資訊</div>
+        {% if s.get('bank_name') %}
+        <div style="line-height:1.8">{{ s['bank_name'] }}{% if s.get('bank_branch') %} {{ s['bank_branch'] }}{% endif %}</div>
+        {% endif %}
+        {% if s.get('account_name') %}
+        <div style="line-height:1.8">戶　名：{{ s['account_name'] }}</div>
+        {% endif %}
+        {% if s.get('tax_id') %}
+        <div style="line-height:1.8">統編：{{ s['tax_id'] }}</div>
+        {% endif %}
+        {% if s.get('account_no') %}
+        <div style="line-height:1.8;font-weight:700">帳　號：{{ s['account_no'] }}</div>
+        {% endif %}
+        {% if s.get('payment_notes') %}
+        <div style="margin-top:6px;padding-top:4px;border-top:1px solid #eee;color:#555;white-space:pre-wrap">{{ s['payment_notes'] }}</div>
+        {% endif %}
       </div>
       {% endif %}
     </div>
-    {% if s.get('payment_notes') %}
-    <div class="payment-notes">{{ s['payment_notes'] }}</div>
-    {% endif %}
+
   </div>
-  {% endif %}
 
   <!-- 被拍攝者聲明 -->
-  <div class="declaration-box">
-    <div class="terms-title">被拍攝者聲明</div>
-    <p>
-      本人＿＿＿＿＿＿（被拍攝者未成年者請由法定代理人＿＿＿＿＿＿）
-      <span style="margin-left:6px">同意 □　不同意 □</span>
-    </p>
-    <p style="margin-top:4px">
-      授權 AD 影像事務所，拍攝修飾後製使用公開展示本人之肖像、名字……等，由拍攝者使用於公眾社群平台（Meta、Instagram、Threads 等）作為宣傳、廣告、營利等用途使用。
-    </p>
-    <div class="declaration-sign">
-      簽名：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿
-    </div>
+  <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#333;line-height:1.8">
+    <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">被拍攝者聲明</div>
+    <p>本人＿＿＿＿＿＿（被拍攝者未成年者請由法定代理人＿＿＿＿＿＿）&emsp;同意 □&emsp;不同意 □</p>
+    <p style="margin-top:4px">授權 AD 影像事務所，拍攝修飾後製使用公開展示本人之肖像、名字……等，由拍攝者使用於公眾社群平台（Meta、Instagram、Threads 等）作為宣傳、廣告、營利等用途使用。</p>
+    <div style="margin-top:8px;padding-top:6px;border-top:1px solid #eee">簽名：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿</div>
   </div>
 
   <!-- 簽名區 -->

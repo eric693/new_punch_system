@@ -1269,38 +1269,79 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <select class="filter-input" id="rev-year" onchange="loadRevenue()" style="min-width:100px"></select>
         <span style="flex:1"></span>
         <button class="btn btn-outline btn-sm" onclick="loadRevenue()">重新整理</button>
+        <button class="btn btn-outline btn-sm" onclick="exportFinanceRevenue()">匯出 Excel</button>
         <button class="btn btn-primary btn-sm" onclick="openFinRecModal();setTimeout(()=>{const t=document.getElementById('frm-type');if(t){t.value='income';renderFinCatOptions();}},80)">新增收入記錄</button>
       </div>
-      <!-- 年度統計卡片 -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="rev-kpi-row">
-        <div class="card" style="padding:18px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">年度總收入</div>
-          <div id="rev-kpi-total" style="font-size:24px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace">—</div>
+
+      <!-- KPI 卡片 -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div class="card" style="padding:20px;border-left:4px solid var(--green)">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">年度總收入</div>
+          <div id="rev-kpi-total" style="font-size:26px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace">—</div>
+          <div id="rev-kpi-total-sub" style="font-size:11px;color:var(--muted);margin-top:4px">相比上年度</div>
         </div>
-        <div class="card" style="padding:18px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">月均收入</div>
-          <div id="rev-kpi-avg" style="font-size:24px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace">—</div>
+        <div class="card" style="padding:20px;border-left:4px solid var(--accent)">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">月均收入</div>
+          <div id="rev-kpi-avg" style="font-size:26px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace">—</div>
+          <div id="rev-kpi-avg-sub" style="font-size:11px;color:var(--muted);margin-top:4px">有收入月份平均</div>
         </div>
-        <div class="card" style="padding:18px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">最高月份</div>
-          <div id="rev-kpi-best" style="font-size:18px;font-weight:700;color:var(--navy);font-family:'DM Mono',monospace">—</div>
+        <div class="card" style="padding:20px;border-left:4px solid var(--gold)">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">最高收入月</div>
+          <div id="rev-kpi-best-month" style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:4px">—</div>
+          <div id="rev-kpi-best-val" style="font-size:14px;font-weight:600;color:var(--gold);font-family:'DM Mono',monospace">—</div>
         </div>
-        <div class="card" style="padding:18px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">已有收入月數</div>
-          <div id="rev-kpi-months" style="font-size:24px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace">—</div>
+        <div class="card" style="padding:20px;border-left:4px solid var(--navy)">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">累計進度</div>
+          <div id="rev-kpi-months" style="font-size:26px;font-weight:700;color:var(--navy);font-family:'DM Mono',monospace">—</div>
+          <div id="rev-kpi-months-sub" style="font-size:11px;color:var(--muted);margin-top:4px">個月有收入記錄</div>
         </div>
       </div>
-      <!-- 月度趨勢圖 -->
-      <div class="card" style="padding:20px;margin-bottom:20px">
-        <div class="card-title" style="padding:0;margin-bottom:16px;font-size:13px">年度月收入趨勢</div>
-        <canvas id="rev-chart" height="90"></canvas>
+
+      <!-- 圖表區（月趨勢 + 收支比 + 累積） -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px">
+        <div class="card" style="padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <span class="card-title" style="padding:0;font-size:13px">月收入趨勢（柱狀）</span>
+            <span id="rev-chart-total-label" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <canvas id="rev-chart" height="110"></canvas>
+        </div>
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">收支占比</div>
+          <canvas id="rev-pie-chart" height="160"></canvas>
+          <div id="rev-pie-legend" style="margin-top:10px;font-size:12px"></div>
+        </div>
       </div>
+
+      <!-- 累積折線圖 + 收支淨額趨勢 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">年度累積收入</div>
+          <canvas id="rev-cumulative-chart" height="120"></canvas>
+        </div>
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">每月收支淨額</div>
+          <canvas id="rev-net-chart" height="120"></canvas>
+        </div>
+      </div>
+
       <!-- 月度明細表格 -->
       <div class="card">
-        <div class="card-header"><span class="card-title">各月收入明細</span></div>
+        <div class="card-header">
+          <span class="card-title">各月收入明細</span>
+          <span id="rev-table-summary" style="font-size:12px;color:var(--muted)"></span>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>月份</th><th style="text-align:right">收入金額</th><th style="text-align:right">佔年比</th><th>操作</th></tr></thead>
+            <thead><tr>
+              <th>月份</th>
+              <th style="text-align:right">收入</th>
+              <th style="text-align:right">支出</th>
+              <th style="text-align:right">淨額</th>
+              <th style="text-align:right">佔年收入比</th>
+              <th style="text-align:center">進度條</th>
+              <th>操作</th>
+            </tr></thead>
             <tbody id="rev-tbody"></tbody>
           </table>
         </div>
@@ -1939,6 +1980,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </select>
         <button class="btn btn-primary btn-sm" onclick="switchQTab('create')">新增報價單</button>
         <button class="btn btn-outline btn-sm" onclick="loadQuotations()">重新整理</button>
+        <button class="btn btn-outline btn-sm" onclick="exportQuotations()">匯出 Excel</button>
         <span style="flex:1"></span>
         <span id="q-list-count" style="font-size:12px;color:var(--muted)"></span>
       </div>
@@ -6917,8 +6959,24 @@ async function loadFinSummary() {
 }
 
 function exportFinance() {
-  const m = document.getElementById('fin-dash-month').value;
-  window.open(`/api/finance/export${m?'?month='+m:''}`, '_blank');
+  const m       = document.getElementById('fin-dash-month').value;
+  const company = window._finCompany || '';
+  const params  = new URLSearchParams();
+  if (m)       params.set('month', m);
+  if (company) params.set('company', company);
+  const qs = params.toString();
+  window.open(`/api/finance/export${qs?'?'+qs:''}`, '_blank');
+}
+function exportFinanceRevenue() {
+  const year    = document.getElementById('rev-year')?.value || new Date().getFullYear();
+  const company = window._finCompany || '';
+  const params  = new URLSearchParams();
+  params.set('month', year);   // will be ignored but company filter works
+  if (company) params.set('company', company);
+  // export all months of that year
+  const p2 = new URLSearchParams();
+  if (company) p2.set('company', company);
+  window.open(`/api/finance/export?${p2.toString()}`, '_blank');
 }
 
 // ── 收支記錄 ──────────────────────────────────────────────────
@@ -9993,7 +10051,8 @@ loadFinCats = async function() {
 };
 
 // 營業收入
-let _revChart = null;
+let _revChart = null, _revPieChart = null, _revCumChart = null, _revNetChart = null;
+
 async function loadRevenue() {
   const yearSel = document.getElementById('rev-year');
   if (!yearSel.options.length) {
@@ -10004,81 +10063,171 @@ async function loadRevenue() {
       yearSel.appendChild(o);
     }
   }
-  const year    = yearSel.value || new Date().getFullYear();
+  const year    = parseInt(yearSel.value) || new Date().getFullYear();
   const company = window._finCompany || '';
   const qs      = company ? `?company=${company}` : '';
-  // load all 12 months summary
-  const promises = [];
-  for (let m = 1; m <= 12; m++) {
-    promises.push(api(`/api/finance/summary/${year}/${String(m).padStart(2,'0')}${qs}`, {}, true));
-  }
-  const results = await Promise.all(promises);
-  const months  = [];
-  const incomes = [];
-  let total = 0, best = 0, bestMonth = '';
-  for (let m = 1; m <= 12; m++) {
-    const r = results[m-1];
-    const inc = r.ok ? (r.data.income || 0) : 0;
-    const label = `${year}-${String(m).padStart(2,'0')}`;
-    months.push(label);
-    incomes.push(inc);
-    total += inc;
-    if (inc > best) { best = inc; bestMonth = label; }
-  }
-  const activeMonths = incomes.filter(v=>v>0).length;
-  const fmt = v => '$' + Math.abs(v).toLocaleString('zh-TW', {minimumFractionDigits:0, maximumFractionDigits:0});
-  document.getElementById('rev-kpi-total').textContent  = fmt(total);
-  document.getElementById('rev-kpi-avg').textContent    = fmt(activeMonths ? Math.round(total/activeMonths) : 0);
-  document.getElementById('rev-kpi-best').textContent   = bestMonth ? bestMonth + '\n' + fmt(best) : '—';
-  document.getElementById('rev-kpi-months').textContent = activeMonths;
 
-  // Chart
-  if (_revChart) { _revChart.destroy(); _revChart = null; }
-  const ctx = document.getElementById('rev-chart');
-  if (ctx) {
-    _revChart = new Chart(ctx.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: months,
-        datasets: [{
-          label: '月收入',
-          data: incomes,
-          backgroundColor: incomes.map(v => v > 0 ? 'rgba(46,158,107,0.75)' : 'rgba(200,200,200,0.4)'),
-          borderColor:     incomes.map(v => v > 0 ? 'rgba(46,158,107,1)'    : 'rgba(180,180,180,0.6)'),
-          borderWidth: 1,
-          borderRadius: 4,
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { ticks: { callback: v => '$' + v.toLocaleString() }, beginAtZero: true }
-        }
-      }
-    });
-  }
+  // 同時抓今年與去年 12 個月（同比）
+  const mkPromises = (y) => Array.from({length:12},(_,i)=>
+    api(`/api/finance/summary/${y}/${String(i+1).padStart(2,'0')}${qs}`,{},true)
+  );
+  const [thisYearResults, lastYearResults] = await Promise.all([
+    Promise.all(mkPromises(year)),
+    Promise.all(mkPromises(year-1)),
+  ]);
 
-  // Table
-  const tbody = document.getElementById('rev-tbody');
   const zhMonths = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-  tbody.innerHTML = months.map((mo, i) => `
-    <tr style="opacity:${incomes[i]>0?1:0.45}">
-      <td style="font-weight:${incomes[i]>0?'600':'400'};color:${incomes[i]>0?'var(--navy)':'var(--muted)'}">
+  const labels  = Array.from({length:12},(_,i)=>`${String(i+1).padStart(2,'0')}月`);
+  const incomes  = thisYearResults.map(r => r.ok ? (r.data.income  || 0) : 0);
+  const expenses = thisYearResults.map(r => r.ok ? (r.data.expense || 0) : 0);
+  const lastInc  = lastYearResults.map(r => r.ok ? (r.data.income  || 0) : 0);
+  const nets     = incomes.map((v,i) => v - expenses[i]);
+  const cumulative = incomes.reduce((acc,v,i) => { acc.push((acc[i-1]||0)+v); return acc; }, []);
+
+  const totalInc  = incomes.reduce((s,v)=>s+v,0);
+  const totalExp  = expenses.reduce((s,v)=>s+v,0);
+  const totalNet  = totalInc - totalExp;
+  const lastTotal = lastInc.reduce((s,v)=>s+v,0);
+  const activeM   = incomes.filter(v=>v>0).length;
+  const bestIdx   = incomes.indexOf(Math.max(...incomes));
+  const fmt = v => '$' + Math.abs(v).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:0});
+  const yoy = lastTotal > 0 ? ((totalInc-lastTotal)/lastTotal*100).toFixed(1) : null;
+
+  // ── KPI 卡片 ──────────────────────────────────────────
+  document.getElementById('rev-kpi-total').textContent     = fmt(totalInc);
+  document.getElementById('rev-kpi-total-sub').innerHTML   = yoy !== null
+    ? `<span style="color:${parseFloat(yoy)>=0?'var(--green)':'var(--red)'}">
+        ${parseFloat(yoy)>=0?'▲':'▼'} ${Math.abs(yoy)}%</span> 相比 ${year-1} 年`
+    : `上年度無資料`;
+  document.getElementById('rev-kpi-avg').textContent       = fmt(activeM ? Math.round(totalInc/activeM) : 0);
+  document.getElementById('rev-kpi-avg-sub').textContent   = `${activeM} 個月平均`;
+  document.getElementById('rev-kpi-best-month').textContent = activeM ? `${year}-${String(bestIdx+1).padStart(2,'0')} ${zhMonths[bestIdx]}` : '—';
+  document.getElementById('rev-kpi-best-val').textContent  = activeM ? fmt(incomes[bestIdx]) : '—';
+  document.getElementById('rev-kpi-months').textContent    = activeM;
+  document.getElementById('rev-chart-total-label').textContent = `年度收入合計：${fmt(totalInc)}`;
+
+  // ── 銷毀舊圖表 ──────────────────────────────────────
+  [['_revChart',null],['_revPieChart',null],['_revCumChart',null],['_revNetChart',null]]
+    .forEach(([k])=>{ if(window[k]){window[k].destroy();window[k]=null;} });
+
+  // ── 柱狀圖：月收入 + 去年同期 ──────────────────────
+  const c1 = document.getElementById('rev-chart');
+  if (c1) window._revChart = new Chart(c1.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:`${year}年收入`, data:incomes, backgroundColor:'rgba(46,158,107,0.8)', borderRadius:4 },
+        { label:`${year-1}年收入`, data:lastInc, backgroundColor:'rgba(74,123,218,0.35)', borderRadius:4, borderDash:[4,4] },
+      ]
+    },
+    options: {
+      responsive:true,
+      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()},beginAtZero:true,grid:{color:'rgba(0,0,0,0.05)'}}}
+    }
+  });
+
+  // ── 圓餅圖：收支占比 ────────────────────────────────
+  const c2 = document.getElementById('rev-pie-chart');
+  if (c2 && totalInc + totalExp > 0) {
+    window._revPieChart = new Chart(c2.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['營業收入','營業支出'],
+        datasets:[{ data:[totalInc, totalExp],
+          backgroundColor:['rgba(46,158,107,0.8)','rgba(214,66,66,0.7)'],
+          borderWidth:2, borderColor:'#fff' }]
+      },
+      options:{ responsive:true, plugins:{legend:{display:false}} }
+    });
+    document.getElementById('rev-pie-legend').innerHTML =
+      `<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(46,158,107,0.8);margin-right:4px"></span>收入 ${fmt(totalInc)}</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(214,66,66,0.7);margin-right:4px"></span>支出 ${fmt(totalExp)}</span>
+        <span style="font-weight:700;color:${totalNet>=0?'var(--green)':'var(--red)'}">淨額 ${totalNet>=0?'+':''}${fmt(totalNet)}</span>
+      </div>`;
+  }
+
+  // ── 累積折線圖 ───────────────────────────────────────
+  const c3 = document.getElementById('rev-cumulative-chart');
+  if (c3) window._revCumChart = new Chart(c3.getContext('2d'), {
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'累積收入', data:cumulative,
+        borderColor:'rgba(46,158,107,1)', backgroundColor:'rgba(46,158,107,0.1)',
+        fill:true, tension:0.3, pointRadius:3
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()},beginAtZero:true}}
+    }
+  });
+
+  // ── 淨額長條圖 ───────────────────────────────────────
+  const c4 = document.getElementById('rev-net-chart');
+  if (c4) window._revNetChart = new Chart(c4.getContext('2d'), {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'月淨額', data:nets,
+        backgroundColor: nets.map(v => v>=0?'rgba(46,158,107,0.75)':'rgba(214,66,66,0.65)'),
+        borderRadius:4
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()}}}
+    }
+  });
+
+  // ── 月度明細表格 ────────────────────────────────────
+  const tbody = document.getElementById('rev-tbody');
+  const maxInc = Math.max(...incomes, 1);
+  tbody.innerHTML = Array.from({length:12},(_,i) => {
+    const mo  = `${year}-${String(i+1).padStart(2,'0')}`;
+    const inc = incomes[i], exp = expenses[i], net = nets[i];
+    const pct = totalInc > 0 && inc > 0 ? (inc/totalInc*100).toFixed(1) : 0;
+    const barW = Math.round(inc / maxInc * 100);
+    const isBest = i === bestIdx && inc > 0;
+    return `<tr style="opacity:${inc>0?1:0.5}">
+      <td style="font-weight:${inc>0?'600':'400'}">
         ${mo} ${zhMonths[i]}
-        ${mo === bestMonth ? '<span class="badge badge-ok" style="margin-left:6px;font-size:10px">最高</span>' : ''}
+        ${isBest?'<span class="badge badge-ok" style="margin-left:5px;font-size:10px">最高</span>':''}
       </td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${incomes[i]>0?'var(--green)':'var(--muted)'}">
-        ${incomes[i] > 0 ? fmt(incomes[i]) : '—'}
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${inc>0?'var(--green)':'var(--muted)'}">
+        ${inc>0?fmt(inc):'—'}
       </td>
-      <td style="text-align:right;font-size:12px;color:var(--muted)">
-        ${total > 0 && incomes[i] > 0 ? (incomes[i]/total*100).toFixed(1)+'%' : '—'}
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:${exp>0?'var(--red)':'var(--muted)'}">
+        ${exp>0?fmt(exp):'—'}
+      </td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:${net>0?'var(--green)':net<0?'var(--red)':'var(--muted)'}">
+        ${inc>0||exp>0?(net>=0?'+':'')+fmt(net):'—'}
+      </td>
+      <td style="text-align:right;font-size:12px;color:var(--muted)">${pct>0?pct+'%':'—'}</td>
+      <td style="padding:0 12px">
+        <div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden">
+          <div style="height:8px;border-radius:4px;background:${isBest?'var(--gold)':'var(--green)'};width:${barW}%;transition:width 0.4s"></div>
+        </div>
       </td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="switchFinTab('records');document.getElementById('fin-rec-month').value='${mo}';loadFinRecords()">查看明細</button>
+        <button class="btn btn-outline btn-sm"
+          onclick="switchFinTab('records');document.getElementById('fin-rec-month').value='${mo}';loadFinRecords()">明細</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
+
+  // 表格底部小計
+  document.getElementById('rev-table-summary').innerHTML =
+    `年度收入 <strong style="color:var(--green)">${fmt(totalInc)}</strong>
+     支出 <strong style="color:var(--red)">${fmt(totalExp)}</strong>
+     淨額 <strong style="color:${totalNet>=0?'var(--green)':'var(--red)'}">${totalNet>=0?'+':''}${fmt(totalNet)}</strong>`;
 }
 
 
@@ -10151,6 +10300,15 @@ async function loadQuotations() {
       <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuotation(${q.id})">刪除</button>
     </td>
   </tr>`).join('');
+}
+
+function exportQuotations() {
+  const company = window._qCompany || '';
+  const status  = document.getElementById('q-status-filter')?.value || '';
+  const params  = new URLSearchParams();
+  if (company) params.set('company', company);
+  if (status)  params.set('status', status);
+  window.open(`/api/quotation/export?${params.toString()}`, '_blank');
 }
 
 async function deleteQuotation(id) {

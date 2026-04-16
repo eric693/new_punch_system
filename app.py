@@ -8425,14 +8425,18 @@ def api_finance_export():
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
     from io import BytesIO
-    month = request.args.get('month', '')
+    month   = request.args.get('month', '')
+    company = request.args.get('company', '')
     conds, params = ['TRUE'], []
     if month:
         conds.append("to_char(fr.record_date,'YYYY-MM')=%s"); params.append(month)
+    if company:
+        conds.append("fr.company_unit=%s"); params.append(company)
     with get_db() as conn:
         rows = conn.execute(f"""
             SELECT fr.record_date, fr.type, fr.title, fr.amount, fr.tax_amount,
-                   fr.vendor, fr.invoice_no, fr.note, fc.name as category_name
+                   fr.vendor, fr.invoice_no, fr.note, fc.name as category_name,
+                   fr.company_unit
             FROM finance_records fr
             LEFT JOIN finance_categories fc ON fc.id=fr.category_id
             WHERE {' AND '.join(conds)}
@@ -8443,7 +8447,8 @@ def api_finance_export():
     ws = wb.active
     ws.title = f"財務_{month or 'all'}"
 
-    headers = ['日期','類型','類別','標題','金額','稅額','廠商','單據號碼','備註']
+    co_label = {'ad':'AD影像事務所','jm':'進光設計'}
+    headers = ['日期','類型','類別','標題','金額','稅額','廠商','單據號碼','備註','公司單位']
     hdr_fill = PatternFill('solid', fgColor='0F1C3A')
     hdr_font = Font(bold=True, color='FFFFFF', size=10)
     alt_fill = PatternFill('solid', fgColor='F4F6FA')
@@ -8464,6 +8469,7 @@ def api_finance_export():
             r['category_name'] or '', r['title'],
             float(r['amount'] or 0), float(r['tax_amount'] or 0),
             r['vendor'] or '', r['invoice_no'] or '', r['note'] or '',
+            co_label.get(r.get('company_unit',''), r.get('company_unit','') or ''),
         ]
         row_fill = inc_fill if is_income else exp_fill
         for col, v in enumerate(vals, 1):
@@ -8471,11 +8477,21 @@ def api_finance_export():
             c.fill = row_fill
             c.alignment = Alignment(vertical='center')
 
-    for col, w in enumerate([12,8,12,24,12,8,16,14,24], 1):
+    for col, w in enumerate([12,8,12,24,12,8,16,14,24,14], 1):
         ws.column_dimensions[ws.cell(1,col).column_letter].width = w
 
+    # 小計行
+    total_income  = sum(float(r['amount'] or 0) for r in rows if r['type']=='income')
+    total_expense = sum(float(r['amount'] or 0) for r in rows if r['type']=='expense')
+    last = len(rows) + 2
+    ws.cell(last, 1, '合計').font = Font(bold=True)
+    ws.cell(last, 5, total_income - total_expense).font = Font(bold=True,
+        color='2E9E6B' if total_income >= total_expense else 'D64242')
+    ws.cell(last, 2, f'收入{total_income:,.0f} / 支出{total_expense:,.0f}')
+
     buf = BytesIO(); wb.save(buf); buf.seek(0)
-    fname = f"finance_{month or 'all'}.xlsx"
+    co_tag = f'_{company}' if company else ''
+    fname = f"finance{co_tag}_{month or 'all'}.xlsx"
     from flask import Response
     return Response(buf.read(),
                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -12167,3 +12183,127 @@ def quotation_print(qid):
     return render_template('quotation_print.html',
                            q=dict(q), items=[dict(i) for i in items],
                            s=dict(settings) if settings else {})
+
+
+# ── Quotation Excel Export ────────────────────────────────────────
+@app.route('/api/quotation/export', methods=['GET'])
+@login_required
+def api_quotation_export():
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    company = request.args.get('company', '')
+    status  = request.args.get('status', '')
+    conds, params = ['TRUE'], []
+    if company: conds.append("q.company_unit=%s"); params.append(company)
+    if status:  conds.append("q.status=%s");        params.append(status)
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT q.id, q.quote_no, q.quote_date, q.client_name, q.client_phone,
+                   q.client_address, q.sales_rep, q.image_no, q.image_date,
+                   q.payment_method, q.status, q.subtotal, q.notes,
+                   q.company_unit, COUNT(qi.id) as item_count
+            FROM quotations q
+            LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
+            WHERE {' AND '.join(conds)}
+            GROUP BY q.id
+            ORDER BY q.created_at DESC
+        """, params).fetchall()
+
+        # detail items sheet
+        items_rows = conn.execute(f"""
+            SELECT q.quote_no, q.client_name, qi.product_name, qi.unit, qi.quantity,
+                   qi.unit_price, qi.handmade, qi.people_count, qi.amount,
+                   qi.payment_status, qi.note
+            FROM quotation_items qi
+            JOIN quotations q ON q.id = qi.quotation_id
+            WHERE {' AND '.join(conds).replace('q.company_unit','q.company_unit').replace('q.status','q.status')}
+            ORDER BY q.created_at DESC, qi.sort_order
+        """, params).fetchall()
+
+    wb = openpyxl.Workbook()
+
+    # ── Sheet 1: 報價單列表 ────────────────────────────────
+    ws1 = wb.active
+    ws1.title = '報價單列表'
+    hdr_fill  = PatternFill('solid', fgColor='0F1C3A')
+    hdr_font  = Font(bold=True, color='FFFFFF', size=10)
+    alt_fill  = PatternFill('solid', fgColor='F4F6FA')
+    center    = Alignment(horizontal='center', vertical='center')
+    status_map = {'draft':'草稿','sent':'已發送','accepted':'已接受','rejected':'已拒絕'}
+    co_map     = {'ad':'AD影像事務所','jm':'進光設計'}
+
+    hdrs1 = ['訂單編號','報價日期','客戶','聯絡電話','業務人員','影像編號',
+             '付款方式','狀態','金額','品項數','公司單位']
+    for col, h in enumerate(hdrs1, 1):
+        c = ws1.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws1.freeze_panes = 'A2'
+    ws1.row_dimensions[1].height = 22
+
+    for i, r in enumerate(rows, 2):
+        vals = [
+            r['quote_no'], str(r['quote_date'] or ''),
+            r['client_name'] or '', r['client_phone'] or '',
+            r['sales_rep'] or '', r['image_no'] or '',
+            r['payment_method'] or '',
+            status_map.get(r['status'], r['status'] or ''),
+            float(r['subtotal'] or 0), int(r['item_count'] or 0),
+            co_map.get(r['company_unit'] or '', r['company_unit'] or ''),
+        ]
+        fill = alt_fill if i % 2 == 0 else PatternFill()
+        for col, v in enumerate(vals, 1):
+            c = ws1.cell(i, col, v)
+            c.fill = fill
+            c.alignment = Alignment(vertical='center')
+            if col == 9:  # 金額
+                c.number_format = '#,##0'
+                c.font = Font(bold=True)
+
+    for col, w in enumerate([18,12,16,14,12,16,10,10,14,8,14], 1):
+        ws1.column_dimensions[ws1.cell(1,col).column_letter].width = w
+
+    # 小計
+    last1 = len(rows) + 2
+    total_amt = sum(float(r['subtotal'] or 0) for r in rows)
+    ws1.cell(last1, 1, f'共 {len(rows)} 筆').font = Font(bold=True)
+    ws1.cell(last1, 9, total_amt).font = Font(bold=True, color='2E9E6B')
+    ws1.cell(last1, 9).number_format = '#,##0'
+
+    # ── Sheet 2: 品項明細 ────────────────────────────────
+    ws2 = wb.create_sheet('品項明細')
+    hdrs2 = ['訂單編號','客戶','產品名稱','單位','數量','費率(元)','手工費','人數','費用','收款狀況','備註']
+    for col, h in enumerate(hdrs2, 1):
+        c = ws2.cell(1, col, h)
+        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
+    ws2.freeze_panes = 'A2'
+    ws2.row_dimensions[1].height = 22
+
+    for i, r in enumerate(items_rows, 2):
+        vals2 = [
+            r['quote_no'], r['client_name'] or '',
+            r['product_name'] or '', r['unit'] or '',
+            float(r['quantity'] or 0), float(r['unit_price'] or 0),
+            float(r['handmade'] or 0), int(r['people_count'] or 0),
+            float(r['amount'] or 0),
+            r['payment_status'] or '', r['note'] or '',
+        ]
+        fill = alt_fill if i % 2 == 0 else PatternFill()
+        for col, v in enumerate(vals2, 1):
+            c = ws2.cell(i, col, v)
+            c.fill = fill
+            c.alignment = Alignment(vertical='center')
+            if col in (5,6,7,9): c.number_format = '#,##0.##'
+
+    for col, w in enumerate([18,16,24,8,8,12,10,8,12,12,20], 1):
+        ws2.column_dimensions[ws2.cell(1,col).column_letter].width = w
+
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    co_tag = f'_{company}' if company else ''
+    fname  = f"quotations{co_tag}.xlsx"
+    from flask import Response
+    return Response(buf.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename={fname}'})

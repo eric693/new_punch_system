@@ -103,12 +103,65 @@
   .payment-item-label { color: #666; min-width: 60px; white-space: nowrap; }
   .payment-notes { margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee; color: #555; white-space: pre-wrap; }
 
+  /* ── 備註條款 ── */
+  .terms-box {
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: #333;
+  }
+  .terms-title {
+    font-weight: 700;
+    font-size: 11.5px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 3px;
+  }
+  .terms-content p {
+    margin-bottom: 3px;
+    line-height: 1.7;
+  }
+
+  /* ── 付款方式 ── */
+  .pay-method-box {
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: #333;
+  }
+  .pay-method-box .pay-row {
+    padding: 2px 0;
+    line-height: 1.7;
+  }
+
+  /* ── 被拍攝者聲明 ── */
+  .declaration-box {
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: #333;
+    line-height: 1.8;
+  }
+  .declaration-sign {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #eee;
+    font-size: 11px;
+    color: #555;
+  }
+
   /* ── 簽名區 ── */
   .sign-area {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    margin-top: 20px;
+    margin-top: 16px;
   }
   .sign-box {
     border-top: 1px solid #aaa;
@@ -272,7 +325,31 @@
   <div class="notes-box">{{ q.get('notes','') }}</div>
   {% endif %}
 
-  <!-- 付款資訊 -->
+  <!-- 備註一：取消／延期條款 -->
+  <div class="terms-box">
+    <div class="terms-title">備　　註</div>
+    <div class="terms-content">
+      <p>如遇天災人禍等不可抗力因素取消預約，檢附證明後可全額退訂；如非以上因素取消預約，會扣除原合約總額20%費用（因本公司已提前安排專人檔期及準備成本），如拍攝延期，我們可配合您的時間調整。</p>
+    </div>
+  </div>
+
+  <!-- 備註二：有效期 + 確認聲明 -->
+  <div class="terms-box">
+    <div class="terms-content">
+      <p>本報價單3日內有效，超過報價有效日期請重新詢價。</p>
+      <p>請確認本單內容無誤後，簽回後視為合約正式成立。</p>
+    </div>
+  </div>
+
+  <!-- 付款方式 -->
+  <div class="pay-method-box">
+    <div class="terms-title">付款方式</div>
+    <div class="pay-row">（1）訂金款：報價單簽回時全額結清款項 NT$ {{ '{:,.0f}'.format(q.get('subtotal', 0) or 0) }} 元整</div>
+    <div class="pay-row">（2）結案款：當日服務完畢後結清，其於 0 元整</div>
+    <div class="pay-row">（3）款項請以現金、轉帳、匯款方式支付</div>
+  </div>
+
+  <!-- 匯款資訊（來自系統設定） -->
   {% if s.get('account_no') or s.get('bank_name') or s.get('payment_notes') %}
   <div class="payment-box">
     <div class="payment-title">匯款資訊</div>
@@ -314,13 +391,28 @@
   </div>
   {% endif %}
 
+  <!-- 被拍攝者聲明 -->
+  <div class="declaration-box">
+    <div class="terms-title">被拍攝者聲明</div>
+    <p>
+      本人＿＿＿＿＿＿（被拍攝者未成年者請由法定代理人＿＿＿＿＿＿）
+      <span style="margin-left:6px">同意 □　不同意 □</span>
+    </p>
+    <p style="margin-top:4px">
+      授權 AD 影像事務所，拍攝修飾後製使用公開展示本人之肖像、名字……等，由拍攝者使用於公眾社群平台（Meta、Instagram、Threads 等）作為宣傳、廣告、營利等用途使用。
+    </p>
+    <div class="declaration-sign">
+      簽名：＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿
+    </div>
+  </div>
+
   <!-- 簽名區 -->
   <div class="sign-area">
     <div class="sign-box">
-      {{ s.get('company_name','') }} 蓋章及簽名
+      {{ s.get('company_name','') }} 簽名（用印欄）
     </div>
     <div class="sign-box">
-      客戶確認簽章及書面上述內容確認
+      客戶確認回簽並同意上述內容
     </div>
   </div>
 

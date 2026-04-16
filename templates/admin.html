@@ -2005,6 +2005,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div class="inv-tab-bar">
       <button class="inv-tab active" id="qtab-list"     onclick="switchQTab('list')">報價列表</button>
       <button class="inv-tab"        id="qtab-create"   onclick="switchQTab('create')">新增報價單</button>
+      <button class="inv-tab"        id="qtab-clients"  onclick="switchQTab('clients')">客戶管理</button>
       <button class="inv-tab"        id="qtab-products" onclick="switchQTab('products')">常用品項</button>
       <button class="inv-tab"        id="qtab-settings" onclick="switchQTab('settings')">公司設定</button>
     </div>
@@ -2056,7 +2057,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div class="card" style="padding:18px 20px">
           <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">客戶資訊</div>
           <div style="display:grid;gap:10px">
-            <div><label class="form-label">客戶姓名 *</label><input class="form-input" id="qf-client-name" placeholder="請輸入客戶姓名" style="width:100%"></div>
+            <div>
+              <label class="form-label">客戶姓名 *</label>
+              <div style="display:flex;gap:6px">
+                <input class="form-input" id="qf-client-name" placeholder="請輸入客戶姓名" style="flex:1" oninput="searchClientSuggest(this.value)">
+                <button class="btn btn-outline btn-sm" type="button" onclick="openClientPicker()" title="從客戶資料庫選取">📋</button>
+              </div>
+              <div id="qf-client-suggest" style="display:none;position:absolute;z-index:999;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.12);max-height:200px;overflow-y:auto;min-width:220px"></div>
+            </div>
             <div><label class="form-label">聯絡電話</label><input class="form-input" id="qf-client-phone" placeholder="0912-345-678" style="width:100%"></div>
             <div><label class="form-label">Line ID</label><input class="form-input" id="qf-client-line" placeholder="LINE ID" style="width:100%"></div>
             <div><label class="form-label">客戶地址</label><input class="form-input" id="qf-client-addr" placeholder="地址" style="width:100%"></div>
@@ -2084,6 +2092,20 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
                 <option value="accepted">已接受</option>
                 <option value="rejected">已拒絕</option>
               </select>
+            </div>
+            <div><label class="form-label">訂金比例</label>
+              <select class="form-input" id="qf-deposit-rate" style="width:100%">
+                <option value="100">100%（全額）</option>
+                <option value="50">50%</option>
+                <option value="30">30%</option>
+                <option value="70">70%</option>
+                <option value="20">20%</option>
+                <option value="80">80%</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding-top:4px">
+              <input type="checkbox" id="qf-show-wedding" checked style="width:16px;height:16px;cursor:pointer">
+              <label for="qf-show-wedding" class="form-label" style="margin:0;cursor:pointer">顯示婚禮記錄產品內容</label>
             </div>
           </div>
         </div>
@@ -2136,6 +2158,27 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <button class="btn btn-ghost" onclick="resetQuoteForm();switchQTab('list')">取消</button>
         <button class="btn btn-outline btn-sm" id="qf-print-btn" style="display:none" onclick="printQuotation()">列印 / PDF</button>
         <button class="btn btn-primary" onclick="saveQuotation()">儲存報價單</button>
+      </div>
+    </div>
+
+    <!-- ── 客戶管理 ── -->
+    <div id="qpanel-clients" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:10px">
+        <input class="filter-input" type="text" id="cl-search" placeholder="搜尋客戶姓名或電話..." style="min-width:200px" oninput="loadClients()">
+        <button class="btn btn-primary btn-sm" onclick="openClientModal()">新增客戶</button>
+        <button class="btn btn-outline btn-sm" onclick="loadClients()">重新整理</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>姓名</th><th>電話</th><th>Line ID</th><th>地址</th><th>備註</th><th>操作</th>
+            </tr></thead>
+            <tbody id="cl-tbody">
+              <tr><td colspan="6" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -10107,22 +10150,18 @@ async function loadRevenue() {
   }
   const year    = parseInt(yearSel.value) || new Date().getFullYear();
   const company = window._finCompany || '';
-  const qs      = company ? `?company=${company}` : '';
+  const params  = new URLSearchParams({ year });
+  if (company) params.set('company', company);
 
-  // 同時抓今年與去年 12 個月（同比）
-  const mkPromises = (y) => Array.from({length:12},(_,i)=>
-    api(`/api/finance/summary/${y}/${String(i+1).padStart(2,'0')}${qs}`,{},true)
-  );
-  const [thisYearResults, lastYearResults] = await Promise.all([
-    Promise.all(mkPromises(year)),
-    Promise.all(mkPromises(year-1)),
-  ]);
+  // 單一 API 請求取代原本 24 個請求
+  const { ok, data } = await api(`/api/finance/revenue-annual?${params}`, {}, true);
+  if (!ok) { showToast('載入失敗', 'error'); return; }
 
   const zhMonths = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-  const labels  = Array.from({length:12},(_,i)=>`${String(i+1).padStart(2,'0')}月`);
-  const incomes  = thisYearResults.map(r => r.ok ? (r.data.income  || 0) : 0);
-  const expenses = thisYearResults.map(r => r.ok ? (r.data.expense || 0) : 0);
-  const lastInc  = lastYearResults.map(r => r.ok ? (r.data.income  || 0) : 0);
+  const labels   = data.months.map((_,i) => `${String(i+1).padStart(2,'0')}月`);
+  const incomes  = data.months.map(m => m.income);
+  const expenses = data.months.map(m => m.expense);
+  const lastInc  = data.months.map(m => m.last_income);
   const nets     = incomes.map((v,i) => v - expenses[i]);
   const cumulative = incomes.reduce((acc,v,i) => { acc.push((acc[i-1]||0)+v); return acc; }, []);
 
@@ -10307,6 +10346,21 @@ async function initQuotation() {
   switchQTab('list');
 }
 
+// switchQTab 覆寫：加入 clients tab
+const _origSwitchQTab = typeof switchQTab === 'function' ? switchQTab : null;
+switchQTab = function(tab) {
+  ['list','create','clients','products','settings'].forEach(t => {
+    const btn   = document.getElementById('qtab-'+t);
+    const panel = document.getElementById('qpanel-'+t);
+    if (btn)   btn.classList.toggle('active', t===tab);
+    if (panel) panel.style.display = t===tab ? '' : 'none';
+  });
+  if (tab==='clients')  loadClients();
+  if (tab==='products') loadQProducts();
+  if (tab==='settings') loadQSettings();
+  if (tab==='list')     loadQuotations();
+};
+
 // ── 報價列表 ─────────────────────────────────────────────────
 async function loadQuotations() {
   const q       = document.getElementById('q-search')?.value || '';
@@ -10339,6 +10393,7 @@ async function loadQuotations() {
     <td style="white-space:nowrap">
       <button class="btn btn-outline btn-sm" onclick="editQuotation(${q.id})">編輯</button>
       <button class="btn btn-outline btn-sm" style="margin-left:4px" onclick="window.open('/quotation/${q.id}/print','_blank')">PDF</button>
+      <button class="btn btn-outline btn-sm" style="margin-left:4px" onclick="duplicateQuotation(${q.id})">複製</button>
       <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteQuotation(${q.id})">刪除</button>
     </td>
   </tr>`).join('');
@@ -10450,6 +10505,10 @@ function resetQuoteForm() {
   document.getElementById('qf-payment-method').value = '轉帳';
   document.getElementById('qf-status').value       = 'draft';
   document.getElementById('qf-notes').value        = '';
+  const dr = document.getElementById('qf-deposit-rate');
+  if (dr) dr.value = '100';
+  const sw = document.getElementById('qf-show-wedding');
+  if (sw) sw.checked = true;
   document.getElementById('qf-items-tbody').innerHTML = '';
   document.getElementById('qf-subtotal').textContent  = 'NT$ 0';
   document.getElementById('q-form-title').textContent = '新增報價單';
@@ -10475,6 +10534,10 @@ async function editQuotation(id) {
   document.getElementById('qf-payment-method').value = q.payment_method || '轉帳';
   document.getElementById('qf-status').value        = q.status || 'draft';
   document.getElementById('qf-notes').value         = q.notes || '';
+  const dr2 = document.getElementById('qf-deposit-rate');
+  if (dr2) dr2.value = String(q.deposit_rate ?? 100);
+  const sw2 = document.getElementById('qf-show-wedding');
+  if (sw2) sw2.checked = q.show_wedding_content !== false;
   document.getElementById('q-form-title').textContent = '編輯報價單';
   document.getElementById('q-form-no').textContent    = q.quote_no || '';
   const printBtn = document.getElementById('qf-print-btn');
@@ -10540,9 +10603,11 @@ async function saveQuotation() {
     image_no:        document.getElementById('qf-image-no').value.trim(),
     image_date:      document.getElementById('qf-image-date').value || null,
     payment_method:  document.getElementById('qf-payment-method').value,
-    status:          document.getElementById('qf-status').value,
-    notes:           document.getElementById('qf-notes').value.trim(),
-    items:           _getQuoteItems(),
+    status:               document.getElementById('qf-status').value,
+    deposit_rate:         parseFloat(document.getElementById('qf-deposit-rate')?.value) || 100,
+    show_wedding_content: document.getElementById('qf-show-wedding')?.checked !== false,
+    notes:                document.getElementById('qf-notes').value.trim(),
+    items:                _getQuoteItems(),
   };
   const id = _qEditingId;
   const url    = id ? `/api/quotations/${id}` : '/api/quotations';
@@ -10737,6 +10802,152 @@ async function loadRevenueDetail() {
     footer.style.display = '';
     footer.innerHTML = `共 <strong>${rows.length}</strong> 筆　合計應收款項：<strong style="color:#c0392b">NT$ ${totalAmt.toLocaleString()}</strong>`;
   }
+}
+
+// ── 報價單複製 ───────────────────────────────────────────────────
+async function duplicateQuotation(id) {
+  if (!confirm('確定要複製此報價單？將建立一份狀態為「草稿」的新報價單。')) return;
+  const {ok, data} = await api(`/api/quotations/${id}/duplicate`, {method:'POST'}, true);
+  if (!ok) { showToast('複製失敗', 'error'); return; }
+  showToast(`已複製為 ${data.quote_no}`, 'success');
+  loadQuotations();
+}
+
+// ── 客戶搜尋建議 ─────────────────────────────────────────────────
+let _clientSuggestTimer = null;
+async function searchClientSuggest(val) {
+  const box = document.getElementById('qf-client-suggest');
+  if (!box) return;
+  clearTimeout(_clientSuggestTimer);
+  if (!val.trim()) { box.style.display='none'; return; }
+  _clientSuggestTimer = setTimeout(async () => {
+    const company = window._qCompany || 'ad';
+    const {ok, data} = await api(`/api/clients?company=${company}&q=${encodeURIComponent(val)}`, {}, true);
+    if (!ok || !data.length) { box.style.display='none'; return; }
+    box.style.display = '';
+    box.innerHTML = data.slice(0,8).map(c => `
+      <div onclick="fillClientFromSuggest(${JSON.stringify(c).replace(/"/g,'&quot;')})"
+           style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px"
+           onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+        <strong>${escHtml(c.name)}</strong>
+        <span style="color:var(--muted);margin-left:8px">${escHtml(c.phone||'')}</span>
+      </div>`).join('');
+  }, 250);
+}
+
+function fillClientFromSuggest(c) {
+  document.getElementById('qf-client-name').value  = c.name  || '';
+  document.getElementById('qf-client-phone').value = c.phone || '';
+  document.getElementById('qf-client-line').value  = c.line_id || '';
+  document.getElementById('qf-client-addr').value  = c.address || '';
+  document.getElementById('qf-client-suggest').style.display = 'none';
+}
+
+function openClientPicker() { switchQTab('clients'); }
+
+// 點擊其他地方關閉建議框
+document.addEventListener('click', e => {
+  const box = document.getElementById('qf-client-suggest');
+  if (box && !box.contains(e.target) && e.target.id !== 'qf-client-name') {
+    box.style.display = 'none';
+  }
+});
+
+// ── 客戶管理 ─────────────────────────────────────────────────────
+let _clientEditingId = null;
+
+async function loadClients() {
+  const q = document.getElementById('cl-search')?.value || '';
+  const company = window._qCompany || 'ad';
+  const {ok, data} = await api(`/api/clients?company=${company}&q=${encodeURIComponent(q)}`, {}, true);
+  const tbody = document.getElementById('cl-tbody');
+  if (!tbody) return;
+  if (!ok) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">尚無客戶資料</div></td></tr>'; return; }
+  tbody.innerHTML = data.map(c => `<tr>
+    <td style="font-weight:600">${escHtml(c.name)}</td>
+    <td>${escHtml(c.phone||'—')}</td>
+    <td>${escHtml(c.line_id||'—')}</td>
+    <td style="font-size:12px;color:var(--muted)">${escHtml(c.address||'—')}</td>
+    <td style="font-size:12px;color:var(--muted)">${escHtml(c.note||'')}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="openClientModal(${c.id})">編輯</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteClient(${c.id})">刪除</button>
+    </td>
+  </tr>`).join('');
+}
+
+function openClientModal(id=null) {
+  _clientEditingId = id || null;
+  let c = {name:'',phone:'',address:'',line_id:'',email:'',note:''};
+  if (id) {
+    const row = document.querySelector(`#cl-tbody tr td`);
+    // read from API if editing
+  }
+  const html = `<div class="modal" style="display:flex" onclick="if(event.target===this)this.remove()">
+    <div class="modal-content" style="max-width:440px;width:95%">
+      <div class="modal-header"><span class="modal-title">${id?'編輯':'新增'}客戶</span>
+        <button class="modal-close" onclick="this.closest('.modal').remove()">✕</button></div>
+      <div style="padding:20px;display:grid;gap:12px">
+        <div><label class="form-label">姓名 *</label><input class="form-input" id="cl-m-name" style="width:100%" value="${escHtml(c.name)}"></div>
+        <div><label class="form-label">電話</label><input class="form-input" id="cl-m-phone" style="width:100%" value="${escHtml(c.phone)}"></div>
+        <div><label class="form-label">Line ID</label><input class="form-input" id="cl-m-line" style="width:100%" value="${escHtml(c.line_id)}"></div>
+        <div><label class="form-label">地址</label><input class="form-input" id="cl-m-addr" style="width:100%" value="${escHtml(c.address)}"></div>
+        <div><label class="form-label">Email</label><input class="form-input" id="cl-m-email" style="width:100%" value="${escHtml(c.email||'')}"></div>
+        <div><label class="form-label">備註</label><input class="form-input" id="cl-m-note" style="width:100%" value="${escHtml(c.note)}"></div>
+      </div>
+      <div style="padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px">
+        <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">取消</button>
+        <button class="btn btn-primary" onclick="saveClient()">儲存</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  if (id) {
+    api(`/api/clients?company=${window._qCompany||'ad'}&q=`, {}, true).then(({data}) => {
+      // find by id
+    });
+    // load from table data - simpler: re-fetch
+    api(`/api/clients?company=${window._qCompany||'ad'}`, {}, true).then(({ok, data}) => {
+      if (!ok) return;
+      const found = data.find(x=>x.id===id);
+      if (!found) return;
+      document.getElementById('cl-m-name').value  = found.name  || '';
+      document.getElementById('cl-m-phone').value = found.phone || '';
+      document.getElementById('cl-m-line').value  = found.line_id || '';
+      document.getElementById('cl-m-addr').value  = found.address || '';
+      document.getElementById('cl-m-email').value = found.email || '';
+      document.getElementById('cl-m-note').value  = found.note  || '';
+    });
+  }
+}
+
+async function saveClient() {
+  const name = document.getElementById('cl-m-name')?.value.trim();
+  if (!name) { showToast('請填寫姓名', 'error'); return; }
+  const body = {
+    company_unit: window._qCompany || 'ad',
+    name,
+    phone:   document.getElementById('cl-m-phone')?.value.trim() || '',
+    line_id: document.getElementById('cl-m-line')?.value.trim()  || '',
+    address: document.getElementById('cl-m-addr')?.value.trim()  || '',
+    email:   document.getElementById('cl-m-email')?.value.trim() || '',
+    note:    document.getElementById('cl-m-note')?.value.trim()  || '',
+  };
+  const url    = _clientEditingId ? `/api/clients/${_clientEditingId}` : '/api/clients';
+  const method = _clientEditingId ? 'PUT' : 'POST';
+  const {ok} = await api(url, {method, body: JSON.stringify(body)});
+  if (!ok) { showToast('儲存失敗', 'error'); return; }
+  document.querySelector('.modal')?.remove();
+  showToast(_clientEditingId ? '已更新' : '已新增', 'success');
+  loadClients();
+}
+
+async function deleteClient(id) {
+  if (!confirm('確定要刪除此客戶？')) return;
+  const {ok} = await api(`/api/clients/${id}`, {method:'DELETE'});
+  if (ok) { showToast('已刪除', 'success'); loadClients(); }
+  else showToast('刪除失敗', 'error');
 }
 
 function exportRevenueDetail() {

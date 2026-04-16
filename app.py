@@ -329,6 +329,20 @@ def init_db():
         "ALTER TABLE quotation_settings ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE quotation_products ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS deposit_rate NUMERIC DEFAULT 100",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS show_wedding_content BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS linked_quotation_id INTEGER",
+        """CREATE TABLE IF NOT EXISTS clients (
+            id           SERIAL PRIMARY KEY,
+            company_unit TEXT DEFAULT 'ad',
+            name         TEXT NOT NULL,
+            phone        TEXT DEFAULT '',
+            address      TEXT DEFAULT '',
+            line_id      TEXT DEFAULT '',
+            email        TEXT DEFAULT '',
+            note         TEXT DEFAULT '',
+            created_at   TIMESTAMPTZ DEFAULT NOW()
+        )""",
     ]
     for sql in migrations:
         try:
@@ -12051,8 +12065,8 @@ def api_quotations_create():
             INSERT INTO quotations
               (quote_no, quote_date, client_name, client_phone, client_address,
                client_line_id, sales_rep, image_no, image_date, payment_method,
-               status, notes, created_by, company_unit)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+               status, notes, created_by, company_unit, deposit_rate, show_wedding_content)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (quote_no, quote_date,
               b.get('client_name','').strip(),
               b.get('client_phone','').strip(),
@@ -12065,7 +12079,9 @@ def api_quotations_create():
               b.get('status','draft'),
               b.get('notes','').strip(),
               session.get('admin_display_name',''),
-              company
+              company,
+              float(b.get('deposit_rate', 100)),
+              bool(b.get('show_wedding_content', True))
               )).fetchone()
         qid = row['id']
         # 寫入品項
@@ -12114,19 +12130,48 @@ def api_quotation_get(qid):
 @login_required
 def api_quotation_update(qid):
     b = request.get_json(force=True) or {}
+    new_status = b.get('status', 'draft')
     with get_db() as conn:
+        old = conn.execute("SELECT status, subtotal, company_unit, quote_no, client_name FROM quotations WHERE id=%s", (qid,)).fetchone()
         conn.execute("""
             UPDATE quotations SET
               quote_date=%s, client_name=%s, client_phone=%s, client_address=%s,
               client_line_id=%s, sales_rep=%s, image_no=%s, image_date=%s,
-              payment_method=%s, status=%s, notes=%s, updated_at=NOW()
+              payment_method=%s, status=%s, notes=%s,
+              deposit_rate=%s, show_wedding_content=%s, updated_at=NOW()
             WHERE id=%s
         """, (b.get('quote_date'), b.get('client_name','').strip(),
               b.get('client_phone','').strip(), b.get('client_address','').strip(),
               b.get('client_line_id','').strip(), b.get('sales_rep','').strip(),
               b.get('image_no','').strip(), b.get('image_date') or None,
-              b.get('payment_method','轉帳'), b.get('status','draft'),
-              b.get('notes','').strip(), qid))
+              b.get('payment_method','轉帳'), new_status,
+              b.get('notes','').strip(),
+              float(b.get('deposit_rate', 100)),
+              bool(b.get('show_wedding_content', True)),
+              qid))
+        # 狀態變為「已接受」時自動建立財務收入分錄
+        if old and old['status'] != 'accepted' and new_status == 'accepted':
+            subtotal = float(old['subtotal'] or 0)
+            if subtotal > 0:
+                company = old['company_unit'] or 'ad'
+                cat = conn.execute(
+                    "SELECT id FROM finance_categories WHERE type='income' AND company_unit=%s ORDER BY sort_order LIMIT 1",
+                    (company,)
+                ).fetchone()
+                cat_id = cat['id'] if cat else None
+                already = conn.execute(
+                    "SELECT id FROM finance_records WHERE linked_quotation_id=%s LIMIT 1", (qid,)
+                ).fetchone()
+                if not already:
+                    from datetime import date as _dd2
+                    conn.execute("""
+                        INSERT INTO finance_records
+                          (record_date, type, title, amount, category_id, company_unit, linked_quotation_id, note)
+                        VALUES (%s,'income',%s,%s,%s,%s,%s,%s)
+                    """, (str(_dd2.today()),
+                          f"報價單收入 {old['quote_no']} - {old['client_name']}",
+                          subtotal, cat_id, company, qid,
+                          '由報價單自動建立'))
         # 重建品項
         conn.execute("DELETE FROM quotation_items WHERE quotation_id=%s", (qid,))
         for i, item in enumerate(b.get('items', [])):
@@ -12161,6 +12206,140 @@ def api_quotation_delete(qid):
     return jsonify({'ok': True})
 
 
+@app.route('/api/quotations/<int:qid>/duplicate', methods=['POST'])
+@login_required
+def api_quotation_duplicate(qid):
+    with get_db() as conn:
+        q = conn.execute("SELECT * FROM quotations WHERE id=%s", (qid,)).fetchone()
+        if not q: return ('', 404)
+        items = conn.execute(
+            "SELECT * FROM quotation_items WHERE quotation_id=%s ORDER BY sort_order", (qid,)
+        ).fetchall()
+        q = dict(q)
+        from datetime import date as _dd3
+        new_no = _next_quote_no(q.get('company_unit', 'ad'))
+        new_row = conn.execute("""
+            INSERT INTO quotations
+              (quote_no, quote_date, client_name, client_phone, client_address,
+               client_line_id, sales_rep, image_no, image_date, payment_method,
+               status, notes, created_by, company_unit, deposit_rate, show_wedding_content)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft',%s,%s,%s,%s,%s) RETURNING id
+        """, (new_no, str(_dd3.today()),
+              q.get('client_name',''), q.get('client_phone',''), q.get('client_address',''),
+              q.get('client_line_id',''), q.get('sales_rep',''),
+              q.get('image_no',''), q.get('image_date'),
+              q.get('payment_method','轉帳'),
+              q.get('notes',''), session.get('admin_display_name',''),
+              q.get('company_unit','ad'),
+              float(q.get('deposit_rate') or 100),
+              bool(q.get('show_wedding_content', True))
+              )).fetchone()
+        new_id = new_row['id']
+        for item in items:
+            item = dict(item)
+            conn.execute("""
+                INSERT INTO quotation_items
+                  (quotation_id, sort_order, product_name, unit, quantity,
+                   unit_price, handmade, people_count, amount, payment_status, note)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (new_id, item['sort_order'], item['product_name'], item['unit'],
+                  item['quantity'], item['unit_price'], item['handmade'],
+                  item['people_count'], item['amount'],
+                  item['payment_status'], item['note']))
+        conn.execute(
+            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
+            (new_id, new_id)
+        )
+    return jsonify({'id': new_id, 'quote_no': new_no}), 201
+
+
+# ── Clients CRUD ──────────────────────────────────────────────────
+@app.route('/api/clients', methods=['GET'])
+@login_required
+def api_clients_list():
+    q       = request.args.get('q', '')
+    company = request.args.get('company', '')
+    conds, params = ['TRUE'], []
+    if company: conds.append("company_unit=%s"); params.append(company)
+    if q:       conds.append("(name ILIKE %s OR phone ILIKE %s)"); params += [f'%{q}%', f'%{q}%']
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM clients WHERE {' AND '.join(conds)} ORDER BY name",
+            params
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/clients', methods=['POST'])
+@login_required
+def api_clients_create():
+    b = request.get_json(force=True) or {}
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO clients (company_unit, name, phone, address, line_id, email, note)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (b.get('company_unit','ad'), b.get('name','').strip(),
+              b.get('phone','').strip(), b.get('address','').strip(),
+              b.get('line_id','').strip(), b.get('email','').strip(),
+              b.get('note','').strip())).fetchone()
+    return jsonify(dict(row)), 201
+
+@app.route('/api/clients/<int:cid>', methods=['PUT'])
+@login_required
+def api_clients_update(cid):
+    b = request.get_json(force=True) or {}
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE clients SET name=%s, phone=%s, address=%s, line_id=%s, email=%s, note=%s
+            WHERE id=%s
+        """, (b.get('name','').strip(), b.get('phone','').strip(),
+              b.get('address','').strip(), b.get('line_id','').strip(),
+              b.get('email','').strip(), b.get('note','').strip(), cid))
+    return jsonify({'ok': True})
+
+@app.route('/api/clients/<int:cid>', methods=['DELETE'])
+@login_required
+def api_clients_delete(cid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM clients WHERE id=%s", (cid,))
+    return jsonify({'ok': True})
+
+
+# ── Annual Revenue (single query, replaces 24 separate calls) ─────
+@app.route('/api/finance/revenue-annual', methods=['GET'])
+@login_required
+def api_finance_revenue_annual():
+    year    = request.args.get('year', '')
+    company = request.args.get('company', '')
+    if not year:
+        from datetime import datetime as _dt
+        year = str(_dt.now().year)
+    c_cond  = "AND company_unit=%s" if company else ""
+    c_param = [company] if company else []
+    with get_db() as conn:
+        this_rows = conn.execute(f"""
+            SELECT to_char(record_date,'MM') as month, type,
+                   COALESCE(SUM(amount),0) as total
+            FROM finance_records
+            WHERE to_char(record_date,'YYYY')=%s {c_cond}
+            GROUP BY 1,2
+        """, [year] + c_param).fetchall()
+        last_rows = conn.execute(f"""
+            SELECT to_char(record_date,'MM') as month,
+                   COALESCE(SUM(amount),0) as total
+            FROM finance_records
+            WHERE to_char(record_date,'YYYY')=%s AND type='income' {c_cond}
+            GROUP BY 1
+        """, [str(int(year)-1)] + c_param).fetchall()
+    inc  = {r['month']: float(r['total']) for r in this_rows if r['type']=='income'}
+    exp  = {r['month']: float(r['total']) for r in this_rows if r['type']=='expense'}
+    last = {r['month']: float(r['total']) for r in last_rows}
+    months = [{'month': str(i).zfill(2),
+               'income':  inc.get(str(i).zfill(2), 0),
+               'expense': exp.get(str(i).zfill(2), 0),
+               'last_income': last.get(str(i).zfill(2), 0)} for i in range(1,13)]
+    return jsonify({'year': year, 'months': months})
+
+
 # ── Print View ────────────────────────────────────────────────────
 @app.route('/quotation/<int:qid>/print')
 @login_required
@@ -12180,8 +12359,13 @@ def quotation_print(qid):
         if not settings:
             settings = conn.execute("SELECT * FROM quotation_settings LIMIT 1").fetchone()
     from flask import render_template
+    qd = dict(q)
+    for k in ('quote_date','image_date','created_at','updated_at'):
+        if qd.get(k): qd[k] = str(qd[k])
+    qd.setdefault('deposit_rate', 100)
+    qd.setdefault('show_wedding_content', True)
     return render_template('quotation_print.html',
-                           q=dict(q), items=[dict(i) for i in items],
+                           q=qd, items=[dict(i) for i in items],
                            s=dict(settings) if settings else {})
 
 

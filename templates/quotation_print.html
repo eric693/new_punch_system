@@ -247,7 +247,8 @@
         <td class="right">{% if item.get('amount') %}{{ '{:,.0f}'.format(item['amount']) }}{% endif %}</td>
         <td class="right">{% if item.get('handmade') %}{{ '{:,.0f}'.format(item['handmade']) }}{% endif %}</td>
         <td class="center">{{ item.get('people_count','') if item.get('people_count') else '' }}</td>
-        <td class="right" style="font-weight:600">{% if item.get('amount') %}{{ '{:,.0f}'.format(item['amount']) }}{% endif %}</td>
+        {% set receivable = (item.get('amount') or 0) + (item.get('handmade') or 0) %}
+        <td class="right" style="font-weight:600">{% if receivable %}{{ '{:,.0f}'.format(receivable) }}{% endif %}</td>
         <td class="center" style="font-size:11px">{{ item.get('payment_status','') }}</td>
         <td style="font-size:11px">{{ item.get('note','') }}</td>
       </tr>
@@ -272,6 +273,7 @@
 
     <!-- 左欄：產品說明 + 備註條款 -->
     <div>
+      {% if q.get('show_wedding_content', True) %}
       <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
         <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">婚禮記錄產品內容</div>
         <div style="line-height:1.8">
@@ -283,6 +285,14 @@
         <div style="margin-top:6px;padding-top:6px;border-top:1px solid #eee;white-space:pre-wrap;line-height:1.7">{{ q.get('notes','') }}</div>
         {% endif %}
       </div>
+      {% else %}
+      {% if q.get('notes') %}
+      <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
+        <div style="font-weight:700;font-size:11.5px;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px">產品說明</div>
+        <div style="white-space:pre-wrap;line-height:1.7">{{ q.get('notes','') }}</div>
+      </div>
+      {% endif %}
+      {% endif %}
 
       <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;font-size:11px;color:#333">
         <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">備　　註</div>
@@ -295,11 +305,15 @@
     <!-- 右欄：付款方式 + 匯款資訊 -->
     <div>
       <div style="border:1px solid #ccc;border-radius:3px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#333">
+        {% set total = q.get('subtotal', 0) or 0 %}
+        {% set rate  = (q.get('deposit_rate') or 100) / 100 %}
+        {% set deposit = (total * rate) | round | int %}
+        {% set final   = (total - deposit) | round | int %}
         <div style="font-weight:700;font-size:11.5px;margin-bottom:5px;border-bottom:1px solid #eee;padding-bottom:3px">付款方式</div>
         <div style="line-height:1.9">
-          <div>（1）訂金款：報價單簽回時全額結清款項</div>
-          <div style="font-weight:700;color:#c0392b;padding-left:16px">NT$ {{ '{:,.0f}'.format(q.get('subtotal', 0) or 0) }} 元整</div>
-          <div>（2）結案款：當日服務完畢後結清，其於 0 元整</div>
+          <div>（1）訂金款：報價單簽回時結清款項</div>
+          <div style="font-weight:700;color:#c0392b;padding-left:16px">NT$ {{ '{:,.0f}'.format(deposit) }} 元整（合約總額 {{ (q.get('deposit_rate') or 100)|int }}%）</div>
+          <div>（2）結案款：當日服務完畢後結清 NT$ {{ '{:,.0f}'.format(final) }} 元整</div>
           <div>（3）款項請以現金、轉帳、匯款方式支付</div>
         </div>
       </div>

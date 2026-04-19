@@ -9977,6 +9977,10 @@ def _init_expense_db():
             created_at        TIMESTAMPTZ DEFAULT NOW()
         )""",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS document_id2 INT REFERENCES finance_documents(id) ON DELETE SET NULL",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS reimbursement_method TEXT NOT NULL DEFAULT '匯款'",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS bank_name TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS bank_account TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS account_holder TEXT NOT NULL DEFAULT ''",
     ]
     for sql in sqls:
         try:
@@ -10127,13 +10131,19 @@ def api_expense_admin_create():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO expense_claims
-              (staff_id, title, amount, expense_date, category, note, document_id, document_id2)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+              (staff_id, title, amount, expense_date, category, note,
+               document_id, document_id2,
+               reimbursement_method, bank_name, bank_account, account_holder)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (staff_id, b['title'].strip(), float(b.get('amount', 0)),
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(),
               b.get('document_id') or None,
-              b.get('document_id2') or None)).fetchone()
+              b.get('document_id2') or None,
+              b.get('reimbursement_method', '匯款').strip(),
+              b.get('bank_name', '').strip(),
+              b.get('bank_account', '').strip(),
+              b.get('account_holder', '').strip())).fetchone()
     return jsonify(_expense_row(row)), 201
 
 

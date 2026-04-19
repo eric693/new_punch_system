@@ -10177,16 +10177,35 @@ def api_expense_review(cid):
         if not claim: return ('', 404)
 
         if action == 'approve' and b.get('create_finance_record', True):
+            # 費用類型 → 財務分類名稱對應
+            _cat_map = {
+                '餐費':   '食材成本',
+                '辦公用品': '消耗品',
+                '交通費': '其他支出',
+                '住宿費': '其他支出',
+                '其他':   '其他支出',
+            }
+            claim_category = (claim.get('category') or '').strip()
+            target_cat_name = _cat_map.get(claim_category, '其他支出')
+            # 先按名稱找，找不到再取第一個 expense 分類
             cat = conn.execute(
-                "SELECT id FROM finance_categories WHERE type='expense' AND active=TRUE ORDER BY sort_order LIMIT 1"
+                "SELECT id FROM finance_categories WHERE type='expense' AND active=TRUE AND name=%s LIMIT 1",
+                (target_cat_name,)
             ).fetchone()
+            if not cat:
+                cat = conn.execute(
+                    "SELECT id FROM finance_categories WHERE type='expense' AND active=TRUE ORDER BY sort_order LIMIT 1"
+                ).fetchone()
+            note_parts = [f"報帳申請 #{cid}"]
+            if claim.get('note'): note_parts.append(claim['note'])
+            if claim.get('document_id2'): note_parts.append(f"附件2 doc#{claim['document_id2']}")
             frec = conn.execute("""
                 INSERT INTO finance_records
                   (record_date, category_id, type, title, amount, note, document_id, created_by)
                 VALUES (%s,%s,'expense',%s,%s,%s,%s,'expense-claim') RETURNING id
             """, (claim['expense_date'], cat['id'] if cat else None,
                   claim['title'], claim['amount'],
-                  f"報帳申請 #{cid}：{claim['note'] or ''}",
+                  '：'.join(note_parts),
                   claim['document_id'])).fetchone()
             finance_rid = frec['id']
 

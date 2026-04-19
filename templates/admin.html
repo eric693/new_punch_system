@@ -1920,13 +1920,6 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <!-- Body -->
       <div class="exp-modal-body">
 
-        <!-- 公司標籤 -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:10px 14px;background:#f5f7ff;border-radius:10px;border:1px solid #e0e5f7">
-          <span style="font-size:13px;color:#4a7bda">🏢</span>
-          <span style="font-size:13px;font-weight:600;color:#1e2a45">進光設計</span>
-          <span style="margin-left:auto;font-size:11px;color:#8892a4">費用申請單</span>
-        </div>
-
         <!-- ① 費用資訊 -->
         <div class="exp-section">
           <div class="exp-section-label blue">① 費用資訊</div>
@@ -8865,7 +8858,7 @@ async function deleteAdminAcc(id, name) {
 let _adminDocId1       = null;
 let _adminDocId2       = null;
 let _expenseStaffCache = null;
-let _staffLoading      = false;
+let _staffLoadPromise  = null;   // 共用 Promise，避免重複請求
 
 function _resetAdminExpensePhoto(n) {
   document.getElementById(`add-exp-photo-input${n}`).value   = '';
@@ -8888,14 +8881,16 @@ function _fillStaffSelect(data) {
 
 async function _preloadExpenseStaff() {
   if (_expenseStaffCache) { _fillStaffSelect(_expenseStaffCache); return; }
-  if (_staffLoading) return;
-  _staffLoading = true;
-  const {ok, data} = await api('/api/punch/staff', {}, true);
-  _staffLoading = false;
-  if (ok && Array.isArray(data)) {
-    _expenseStaffCache = data;
-    _fillStaffSelect(data);
+  // 若已有進行中的請求，等它完成再填入，不發第二次
+  if (!_staffLoadPromise) {
+    _staffLoadPromise = (async () => {
+      const {ok, data} = await api('/api/punch/staff', {}, true);
+      if (ok && Array.isArray(data)) _expenseStaffCache = data;
+      _staffLoadPromise = null;
+    })();
   }
+  await _staffLoadPromise;
+  if (_expenseStaffCache) _fillStaffSelect(_expenseStaffCache);
 }
 
 async function adminPhotoSelected(n, event) {

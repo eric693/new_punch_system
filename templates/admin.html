@@ -8879,7 +8879,7 @@ function _fillStaffSelect(data) {
   const sel = document.getElementById('add-exp-staff');
   if (!sel) return;
   sel.innerHTML = '<option value="">— 選擇員工 —</option>'
-    + data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+    + data.map(s => `<option value="${s.id}">${escHtml(s.name)} (${escHtml(s.employee_code||'')})</option>`).join('');
 }
 
 async function _loadExpenseStaff() {
@@ -8890,12 +8890,17 @@ async function _loadExpenseStaff() {
     return;
   }
   sel.innerHTML = '<option value="">載入中...</option>';
-  const { ok, data } = await api('/api/punch/staff', {}, false);
-  if (ok && Array.isArray(data) && data.length > 0) {
-    _expenseStaffCache = data.filter(s => s.active !== false);
-    _fillStaffSelect(_expenseStaffCache);
-  } else {
+  try {
+    const { ok, data } = await api('/api/punch/staff', {}, false);
+    if (ok && Array.isArray(data) && data.length > 0) {
+      _expenseStaffCache = data.filter(s => s.active !== false);
+      _fillStaffSelect(_expenseStaffCache);
+    } else {
+      sel.innerHTML = '<option value="">— 選擇員工 —</option>';
+    }
+  } catch(e) {
     sel.innerHTML = '<option value="">— 選擇員工 —</option>';
+    showToast('載入員工清單失敗：' + e.message, 'error');
   }
 }
 

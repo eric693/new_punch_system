@@ -1894,7 +1894,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     .exp-row.col2 { grid-template-columns:1fr 1fr }
     .exp-row.col3 { grid-template-columns:1fr 1fr 1fr }
     .exp-field label { display:block;font-size:11px;font-weight:600;color:#8892a4;letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px }
-    .exp-field label .req { color:#d64242;margin-left:2px }
+    .exp-field label .req { color:#d64242;margin-left:2px;vertical-align:middle }
     .exp-field .fi { margin:0;width:100%;box-sizing:border-box }
     .exp-divider { height:1px;background:#edf0f7;margin:4px 0 22px }
     .exp-upload { border:2px dashed #dde3ef;border-radius:12px;padding:20px 12px;text-align:center;cursor:pointer;background:#f8f9fc;min-height:108px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,background .15s }
@@ -8890,21 +8890,13 @@ async function _loadExpenseStaff() {
     return;
   }
   sel.innerHTML = '<option value="">載入中...</option>';
-  try {
-    const res = await fetch('/api/punch/staff');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        _expenseStaffCache = data;
-        _fillStaffSelect(data);
-      }
-    } else {
-      sel.innerHTML = '<option value="">— 選擇員工 —</option>';
-      showToast('載入員工清單失敗（HTTP ' + res.status + '）', 'error');
-    }
-  } catch(e) {
+  const { ok, data } = await api('/api/punch/staff', {}, true);
+  if (ok && Array.isArray(data)) {
+    _expenseStaffCache = data.filter(s => s.active);
+    _fillStaffSelect(_expenseStaffCache);
+  } else {
     sel.innerHTML = '<option value="">— 選擇員工 —</option>';
-    showToast('載入員工清單失敗，請重試', 'error');
+    if (ok) showToast('載入員工清單失敗，請重試', 'error');
   }
 }
 

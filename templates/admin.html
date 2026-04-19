@@ -1918,6 +1918,13 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <!-- Body -->
       <div class="exp-modal-body">
 
+        <!-- 公司標籤 -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:10px 14px;background:#f5f7ff;border-radius:10px;border:1px solid #e0e5f7">
+          <span style="font-size:13px;color:#4a7bda">🏢</span>
+          <span style="font-size:13px;font-weight:600;color:#1e2a45">進光設計</span>
+          <span style="margin-left:auto;font-size:11px;color:#8892a4">費用申請單</span>
+        </div>
+
         <!-- ① 費用資訊 -->
         <div class="exp-section">
           <div class="exp-section-label blue">① 費用資訊</div>
@@ -1933,31 +1940,31 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             </div>
           </div>
 
+          <!-- 費用性質 切換 -->
+          <div class="exp-field" style="margin-bottom:14px">
+            <label>費用性質 <span class="req">*</span></label>
+            <div style="display:flex;gap:0;border:1px solid #dde3ef;border-radius:8px;overflow:hidden;width:fit-content">
+              <button type="button" id="exp-type-btn-支出"
+                onclick="switchExpenseType('支出')"
+                style="padding:7px 22px;border:none;cursor:pointer;font-size:13px;font-weight:600;background:#1e2a45;color:#fff;transition:all .15s">支出</button>
+              <button type="button" id="exp-type-btn-收入"
+                onclick="switchExpenseType('收入')"
+                style="padding:7px 22px;border:none;cursor:pointer;font-size:13px;font-weight:600;background:#fff;color:#8892a4;transition:all .15s">收入</button>
+            </div>
+            <input type="hidden" id="add-exp-type" value="支出">
+          </div>
+
           <div class="exp-row" style="grid-template-columns:1fr">
             <div class="exp-field">
               <label>費用名目 <span class="req">*</span></label>
-              <input class="fi" type="text" id="add-exp-title" placeholder="如：3月餐費、出差交通費、5月健保">
+              <input class="fi" type="text" id="add-exp-title" placeholder="如：5月健保、裝修工程追加款…">
             </div>
           </div>
 
           <div class="exp-row col2">
             <div class="exp-field">
               <label>費用類別</label>
-              <select class="fi" id="add-exp-category">
-                <option value="餐費">餐費</option>
-                <option value="交通費">交通費</option>
-                <option value="住宿費">住宿費</option>
-                <option value="辦公用品">辦公用品</option>
-                <option value="廠商費用">廠商費用</option>
-                <option value="固定營業費用">固定營業費用</option>
-                <option value="健保費用">健保費用</option>
-                <option value="勞工保險金費用">勞工保險金費用</option>
-                <option value="勞工退休金費用">勞工退休金費用</option>
-                <option value="稅金費用">稅金費用</option>
-                <option value="雇員獎金費用">雇員獎金費用</option>
-                <option value="其它雜支費用">其它雜支費用</option>
-                <option value="其他">其他</option>
-              </select>
+              <select class="fi" id="add-exp-category"></select>
             </div>
             <div class="exp-field">
               <label>費用金額（元）<span class="req">*</span></label>
@@ -8917,9 +8924,30 @@ async function adminPhotoSelected(n, event) {
   }
 }
 
+const _EXP_CATEGORIES = {
+  '支出': ['廠商','雇員薪資','雇員獎金','固定營業費用','全民健康保險','勞工保險金','勞工退休金','稅務相關','政府相關','房租費用','建築師事務所','會計師事務所','律師事務所','客戶退款','雜支'],
+  '收入': ['客變','設計','裝修工程','追加','退傭','介紹費','其它'],
+};
+
+function switchExpenseType(type) {
+  document.getElementById('add-exp-type').value = type;
+  ['支出','收入'].forEach(t => {
+    const btn = document.getElementById(`exp-type-btn-${t}`);
+    const active = t === type;
+    btn.style.background = active ? '#1e2a45' : '#fff';
+    btn.style.color      = active ? '#fff'    : '#8892a4';
+  });
+  const sel = document.getElementById('add-exp-category');
+  sel.innerHTML = (_EXP_CATEGORIES[type] || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  // 收入類型不需報帳方式區塊
+  document.getElementById('add-exp-reimburse-method').closest('.exp-field').parentElement.style.display = type === '支出' ? '' : 'none';
+  toggleBankFields();
+}
+
 function toggleBankFields() {
   const method = document.getElementById('add-exp-reimburse-method').value;
-  document.getElementById('add-exp-bank-section').style.display = method === '匯款' ? '' : 'none';
+  const type   = document.getElementById('add-exp-type').value;
+  document.getElementById('add-exp-bank-section').style.display = (type === '支出' && method === '匯款') ? '' : 'none';
 }
 
 async function openAddExpenseModal() {
@@ -8932,10 +8960,9 @@ async function openAddExpenseModal() {
   document.getElementById('add-exp-bank-name').value        = '';
   document.getElementById('add-exp-bank-account').value     = '';
   document.getElementById('add-exp-account-holder').value   = '';
-  toggleBankFields();
+  switchExpenseType('支出'); // 初始化費用性質 + 類別清單 + bank section
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
-  // 員工清單：已有 cache 直接填入，否則載入
   if (_expenseStaffCache) {
     _fillStaffSelect(_expenseStaffCache);
   } else {
@@ -8965,11 +8992,13 @@ async function submitAdminExpense() {
   const btn = document.getElementById('add-exp-submit-btn');
   btn.disabled = true;
   btn.textContent = '送出中…';
+  const expense_type = document.getElementById('add-exp-type').value;
   const {ok} = await api('/api/expense/claims/admin-create', {
     method: 'POST',
     body: JSON.stringify({
       staff_id: parseInt(staff_id), expense_date, title, category, amount, note,
       reimbursement_method, bank_name, account_holder, bank_account,
+      expense_type, company: '進光設計',
       document_id:  _adminDocId1 || null,
       document_id2: _adminDocId2 || null,
     })

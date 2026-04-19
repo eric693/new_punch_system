@@ -438,22 +438,18 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
               <input class="fi" type="date" id="exp-date" style="margin-bottom:8px">
             </div>
             <div style="margin-bottom:10px">
-              <div class="fl">費用類型</div>
-              <select class="fi" id="exp-category" style="margin-bottom:8px">
-                <option value="餐費">餐費</option>
-                <option value="交通費">交通費</option>
-                <option value="住宿費">住宿費</option>
-                <option value="辦公用品">辦公用品</option>
-                <option value="廠商費用">廠商費用</option>
-                <option value="固定營業費用">固定營業費用</option>
-                <option value="健保費用">健保費用</option>
-                <option value="勞工保險金費用">勞工保險金費用</option>
-                <option value="勞工退休金費用">勞工退休金費用</option>
-                <option value="稅金費用">稅金費用</option>
-                <option value="雇員獎金費用">雇員獎金費用</option>
-                <option value="其它雜支費用">其它雜支費用</option>
-                <option value="其他">其他</option>
-              </select>
+              <div class="fl">費用性質</div>
+              <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px;width:fit-content">
+                <button type="button" id="staff-exp-type-btn-支出" onclick="staffSwitchExpType('支出')"
+                  style="padding:6px 18px;border:none;cursor:pointer;font-size:13px;font-weight:600;background:var(--navy,#1e2a45);color:#fff">支出</button>
+                <button type="button" id="staff-exp-type-btn-收入" onclick="staffSwitchExpType('收入')"
+                  style="padding:6px 18px;border:none;cursor:pointer;font-size:13px;font-weight:600;background:#fff;color:#8892a4">收入</button>
+              </div>
+              <input type="hidden" id="exp-type" value="支出">
+            </div>
+            <div style="margin-bottom:10px">
+              <div class="fl">費用類別</div>
+              <select class="fi" id="exp-category" style="margin-bottom:8px"></select>
             </div>
             <div style="margin-bottom:10px">
               <div class="fl">金額（元）</div>
@@ -2053,9 +2049,28 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 let _expPhotoBase64 = null;
 let _expDocumentId  = null;
 
+const _STAFF_EXP_CATS = {
+  '支出': ['廠商','雇員薪資','雇員獎金','固定營業費用','全民健康保險','勞工保險金','勞工退休金','稅務相關','政府相關','房租費用','建築師事務所','會計師事務所','律師事務所','客戶退款','雜支'],
+  '收入': ['客變','設計','裝修工程','追加','退傭','介紹費','其它'],
+};
+
+function staffSwitchExpType(type) {
+  document.getElementById('exp-type').value = type;
+  ['支出','收入'].forEach(t => {
+    const btn = document.getElementById(`staff-exp-type-btn-${t}`);
+    if (!btn) return;
+    const active = t === type;
+    btn.style.background = active ? 'var(--navy,#1e2a45)' : '#fff';
+    btn.style.color      = active ? '#fff' : '#8892a4';
+  });
+  const sel = document.getElementById('exp-category');
+  sel.innerHTML = (_STAFF_EXP_CATS[type] || []).map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
 function initExpenseTab() {
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('exp-date').value = today;
+  staffSwitchExpType('支出'); // 初始化類別
   loadMyExpenses();
 }
 
@@ -2101,8 +2116,9 @@ async function submitExpense() {
   if (!date || !category || !amount || amount <= 0) {
     showToast('請填寫日期、類型及金額', 'err'); return;
   }
+  const expense_type = document.getElementById('exp-type')?.value || '支出';
   const body = { title: category, expense_date: date, category, amount, note,
-                 document_id: _expDocumentId };
+                 expense_type, company: '進光設計', document_id: _expDocumentId };
   const res = await fetch('/api/expense/my-claims', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
   });

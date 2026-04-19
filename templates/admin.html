@@ -8890,13 +8890,12 @@ async function _loadExpenseStaff() {
     return;
   }
   sel.innerHTML = '<option value="">載入中...</option>';
-  const { ok, data } = await api('/api/punch/staff', {}, true);
+  const { ok, data } = await api('/api/punch/staff', {}, false);
   if (ok && Array.isArray(data)) {
     _expenseStaffCache = data.filter(s => s.active);
     _fillStaffSelect(_expenseStaffCache);
   } else {
     sel.innerHTML = '<option value="">— 選擇員工 —</option>';
-    if (ok) showToast('載入員工清單失敗，請重試', 'error');
   }
 }
 

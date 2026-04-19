@@ -1873,148 +1873,175 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div><!-- end page-expense-review -->
 
   <!-- ── 新增費用申請 Modal ── -->
-  <div id="modal-add-expense" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:16px">
-    <div style="width:min(580px,100%);max-height:92vh;overflow-y:auto;background:var(--surface);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);display:flex;flex-direction:column">
+  <style>
+    .exp-modal-wrap { display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px) }
+    .exp-modal { width:min(620px,100%);max-height:90vh;background:#fff;border-radius:20px;box-shadow:0 32px 80px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden }
+    .exp-modal-header { display:flex;align-items:center;justify-content:space-between;padding:22px 28px 18px;border-bottom:1px solid #edf0f7;flex-shrink:0 }
+    .exp-modal-title { font-size:18px;font-weight:700;color:#1e2a45;letter-spacing:-.01em }
+    .exp-modal-sub   { font-size:12px;color:#8892a4;margin-top:3px }
+    .exp-modal-close { width:32px;height:32px;border:none;background:#f0f2f8;border-radius:8px;cursor:pointer;color:#8892a4;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s }
+    .exp-modal-close:hover { background:#e2e6f0;color:#1e2a45 }
+    .exp-modal-body  { flex:1;overflow-y:auto;padding:24px 28px }
+    .exp-modal-footer{ display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:16px 28px;border-top:1px solid #edf0f7;background:#fafbfd;flex-shrink:0 }
+    .exp-section { margin-bottom:22px }
+    .exp-section-label { display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:14px }
+    .exp-section-label.blue  { background:#eef3fd;color:#4a7bda }
+    .exp-section-label.indigo{ background:#eef2ff;color:#6366f1 }
+    .exp-section-label.green { background:#edfaf4;color:#2e9e6b }
+    .exp-row  { display:grid;gap:14px;margin-bottom:14px }
+    .exp-row.col2 { grid-template-columns:1fr 1fr }
+    .exp-row.col3 { grid-template-columns:1fr 1fr 1fr }
+    .exp-field label { display:block;font-size:11px;font-weight:600;color:#8892a4;letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px }
+    .exp-field label .req { color:#d64242;margin-left:2px }
+    .exp-field .fi { margin:0;width:100%;box-sizing:border-box }
+    .exp-divider { height:1px;background:#edf0f7;margin:4px 0 22px }
+    .exp-upload { border:2px dashed #dde3ef;border-radius:12px;padding:20px 12px;text-align:center;cursor:pointer;background:#f8f9fc;min-height:108px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,background .15s }
+    .exp-upload:hover { border-color:#4a7bda;background:#f0f4fc }
+    .exp-upload-icon { font-size:26px;line-height:1 }
+    .exp-upload-text { font-size:12px;color:#8892a4 }
+    .exp-upload img  { max-width:100%;max-height:100px;border-radius:8px;object-fit:contain;display:none }
+    .exp-upload .uploading { font-size:11px;color:#4a7bda;display:none }
+  </style>
 
-      <!-- ── Header ── -->
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+  <div id="modal-add-expense" class="exp-modal-wrap">
+    <div class="exp-modal">
+
+      <!-- Header -->
+      <div class="exp-modal-header">
         <div>
-          <div style="font-size:17px;font-weight:700;color:var(--text)">新增費用申請</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">填寫費用資訊與匯款帳戶</div>
+          <div class="exp-modal-title">新增費用申請</div>
+          <div class="exp-modal-sub">填寫費用資訊、報帳方式與附件</div>
         </div>
-        <button onclick="closeAddExpenseModal()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='none'">×</button>
+        <button class="exp-modal-close" onclick="closeAddExpenseModal()">✕</button>
       </div>
 
-      <!-- ── Body ── -->
-      <div style="padding:20px 24px;flex:1;overflow-y:auto">
+      <!-- Body -->
+      <div class="exp-modal-body">
 
-        <!-- 費用資訊 section -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-          <div style="width:3px;height:14px;background:var(--accent);border-radius:2px"></div>
-          <span style="font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.05em">費用資訊</span>
-        </div>
+        <!-- ① 費用資訊 -->
+        <div class="exp-section">
+          <div class="exp-section-label blue">① 費用資訊</div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">申請員工</label>
-            <select class="fi" id="add-exp-staff" style="margin:0"><option value="">選擇員工...</option></select>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用日期</label>
-            <input class="fi" type="date" id="add-exp-date" style="margin:0">
-          </div>
-        </div>
-
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用名目 <span style="color:var(--red)">*</span></label>
-          <input class="fi" type="text" id="add-exp-title" placeholder="如：3月餐費、出差交通費" style="margin:0">
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用類別</label>
-            <select class="fi" id="add-exp-category" style="margin:0">
-              <option value="餐費">餐費</option>
-              <option value="交通費">交通費</option>
-              <option value="住宿費">住宿費</option>
-              <option value="辦公用品">辦公用品</option>
-              <option value="廠商費用">廠商費用</option>
-              <option value="固定營業費用">固定營業費用</option>
-              <option value="健保費用">健保費用</option>
-              <option value="勞工保險金費用">勞工保險金費用</option>
-              <option value="勞工退休金費用">勞工退休金費用</option>
-              <option value="稅金費用">稅金費用</option>
-              <option value="雇員獎金費用">雇員獎金費用</option>
-              <option value="其它雜支費用">其它雜支費用</option>
-              <option value="其他">其他</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用金額（元）<span style="color:var(--red)">*</span></label>
-            <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0" style="margin:0">
-          </div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">報帳方式</label>
-            <select class="fi" id="add-exp-reimburse-method" onchange="toggleBankFields()" style="margin:0">
-              <option value="匯款">匯款</option>
-              <option value="現金">現金</option>
-              <option value="其他">其他</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">備註（選填）</label>
-            <input class="fi" type="text" id="add-exp-note" placeholder="其他說明" style="margin:0">
-          </div>
-        </div>
-
-        <!-- 匯款帳戶 section -->
-        <div id="add-exp-bank-section">
-          <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-            <div style="width:3px;height:14px;background:#6366f1;border-radius:2px"></div>
-            <span style="font-size:12px;font-weight:600;color:#6366f1;letter-spacing:.05em">匯款帳戶</span>
-          </div>
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">銀行名稱</label>
-            <input class="fi" type="text" id="add-exp-bank-name" placeholder="台灣銀行、國泰世華…" style="margin:0">
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-            <div>
-              <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">戶名</label>
-              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人" style="margin:0">
+          <div class="exp-row col2">
+            <div class="exp-field">
+              <label>申請員工 <span class="req">*</span></label>
+              <select class="fi" id="add-exp-staff"><option value="">— 選擇員工 —</option></select>
             </div>
-            <div>
-              <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">帳號</label>
-              <input class="fi" type="text" id="add-exp-bank-account" placeholder="銀行帳號" style="margin:0">
+            <div class="exp-field">
+              <label>費用日期 <span class="req">*</span></label>
+              <input class="fi" type="date" id="add-exp-date">
+            </div>
+          </div>
+
+          <div class="exp-row" style="grid-template-columns:1fr">
+            <div class="exp-field">
+              <label>費用名目 <span class="req">*</span></label>
+              <input class="fi" type="text" id="add-exp-title" placeholder="如：3月餐費、出差交通費、5月健保">
+            </div>
+          </div>
+
+          <div class="exp-row col2">
+            <div class="exp-field">
+              <label>費用類別</label>
+              <select class="fi" id="add-exp-category">
+                <option value="餐費">餐費</option>
+                <option value="交通費">交通費</option>
+                <option value="住宿費">住宿費</option>
+                <option value="辦公用品">辦公用品</option>
+                <option value="廠商費用">廠商費用</option>
+                <option value="固定營業費用">固定營業費用</option>
+                <option value="健保費用">健保費用</option>
+                <option value="勞工保險金費用">勞工保險金費用</option>
+                <option value="勞工退休金費用">勞工退休金費用</option>
+                <option value="稅金費用">稅金費用</option>
+                <option value="雇員獎金費用">雇員獎金費用</option>
+                <option value="其它雜支費用">其它雜支費用</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div class="exp-field">
+              <label>費用金額（元）<span class="req">*</span></label>
+              <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0">
+            </div>
+          </div>
+
+          <div class="exp-row col2">
+            <div class="exp-field">
+              <label>報帳方式</label>
+              <select class="fi" id="add-exp-reimburse-method" onchange="toggleBankFields()">
+                <option value="匯款">匯款</option>
+                <option value="現金">現金</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div class="exp-field">
+              <label>備註（選填）</label>
+              <input class="fi" type="text" id="add-exp-note" placeholder="其他說明">
             </div>
           </div>
         </div>
 
-        <!-- 附件 section -->
-        <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-          <div style="width:3px;height:14px;background:#2e9e6b;border-radius:2px"></div>
-          <span style="font-size:12px;font-weight:600;color:#2e9e6b;letter-spacing:.05em">附件上傳</span>
+        <!-- ② 匯款帳戶 -->
+        <div id="add-exp-bank-section" class="exp-section">
+          <div class="exp-divider"></div>
+          <div class="exp-section-label indigo">② 匯款帳戶</div>
+
+          <div class="exp-row" style="grid-template-columns:1fr">
+            <div class="exp-field">
+              <label>銀行名稱</label>
+              <input class="fi" type="text" id="add-exp-bank-name" placeholder="台灣銀行、國泰世華、玉山銀行…">
+            </div>
+          </div>
+          <div class="exp-row col2">
+            <div class="exp-field">
+              <label>戶名</label>
+              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名">
+            </div>
+            <div class="exp-field">
+              <label>帳號</label>
+              <input class="fi" type="text" id="add-exp-bank-account" placeholder="銀行帳號">
+            </div>
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">附件 1（發票 / 收據）</label>
-            <div id="add-exp-photo-wrap1"
-              onclick="document.getElementById('add-exp-photo-input1').click()"
-              style="border:2px dashed var(--border);border-radius:12px;padding:18px 10px;text-align:center;cursor:pointer;background:var(--bg);min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color .15s"
-              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-              <input type="file" id="add-exp-photo-input1" accept="image/*" style="display:none" onchange="adminPhotoSelected(1,event)">
-              <div id="add-exp-photo-hint1" style="color:var(--muted);font-size:12px;line-height:1.6">
-                <div style="font-size:22px;margin-bottom:4px">🖼</div>點擊上傳
+
+        <!-- ③ 附件上傳 -->
+        <div class="exp-section" style="margin-bottom:0">
+          <div class="exp-divider"></div>
+          <div class="exp-section-label green">③ 附件上傳</div>
+          <div class="exp-row col2">
+            <div class="exp-field">
+              <label>附件 1（發票 / 收據）</label>
+              <div class="exp-upload" id="add-exp-photo-wrap1" onclick="document.getElementById('add-exp-photo-input1').click()">
+                <input type="file" id="add-exp-photo-input1" accept="image/*" style="display:none" onchange="adminPhotoSelected(1,event)">
+                <div id="add-exp-photo-hint1">
+                  <div class="exp-upload-icon">🧾</div>
+                  <div class="exp-upload-text">點擊上傳圖片</div>
+                </div>
+                <img id="add-exp-photo-preview1">
+                <div class="uploading" id="add-exp-ocr-loading1">上傳辨識中…</div>
               </div>
-              <img id="add-exp-photo-preview1" style="display:none;max-width:100%;max-height:110px;border-radius:8px;object-fit:contain">
-              <div id="add-exp-ocr-loading1" style="display:none;font-size:11px;color:var(--accent);margin-top:6px">上傳辨識中…</div>
             </div>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">附件 2（選填）</label>
-            <div id="add-exp-photo-wrap2"
-              onclick="document.getElementById('add-exp-photo-input2').click()"
-              style="border:2px dashed var(--border);border-radius:12px;padding:18px 10px;text-align:center;cursor:pointer;background:var(--bg);min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color .15s"
-              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-              <input type="file" id="add-exp-photo-input2" accept="image/*" style="display:none" onchange="adminPhotoSelected(2,event)">
-              <div id="add-exp-photo-hint2" style="color:var(--muted);font-size:12px;line-height:1.6">
-                <div style="font-size:22px;margin-bottom:4px">🖼</div>點擊上傳
+            <div class="exp-field">
+              <label>附件 2（選填）</label>
+              <div class="exp-upload" id="add-exp-photo-wrap2" onclick="document.getElementById('add-exp-photo-input2').click()">
+                <input type="file" id="add-exp-photo-input2" accept="image/*" style="display:none" onchange="adminPhotoSelected(2,event)">
+                <div id="add-exp-photo-hint2">
+                  <div class="exp-upload-icon">🧾</div>
+                  <div class="exp-upload-text">點擊上傳圖片</div>
+                </div>
+                <img id="add-exp-photo-preview2">
+                <div class="uploading" id="add-exp-ocr-loading2">上傳辨識中…</div>
               </div>
-              <img id="add-exp-photo-preview2" style="display:none;max-width:100%;max-height:110px;border-radius:8px;object-fit:contain">
-              <div id="add-exp-ocr-loading2" style="display:none;font-size:11px;color:var(--accent);margin-top:6px">上傳辨識中…</div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ── Footer ── -->
-      <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface);border-radius:0 0 16px 16px">
-        <button class="btn btn-outline" onclick="closeAddExpenseModal()" style="min-width:80px">取消</button>
-        <button class="btn btn-primary" id="add-exp-submit-btn" onclick="submitAdminExpense()" style="min-width:100px">送出申請</button>
+      </div><!-- /body -->
+
+      <!-- Footer -->
+      <div class="exp-modal-footer">
+        <button class="btn btn-outline" onclick="closeAddExpenseModal()" style="min-width:82px">取消</button>
+        <button class="btn btn-primary" id="add-exp-submit-btn" onclick="submitAdminExpense()" style="min-width:108px;font-weight:600">送出申請</button>
       </div>
     </div>
   </div>
@@ -8827,10 +8854,14 @@ let _expenseStaffCache = null;
 let _staffLoading      = false;
 
 function _resetAdminExpensePhoto(n) {
-  document.getElementById(`add-exp-photo-input${n}`).value = '';
-  document.getElementById(`add-exp-photo-hint${n}`).style.display = '';
+  document.getElementById(`add-exp-photo-input${n}`).value   = '';
+  document.getElementById(`add-exp-photo-hint${n}`).style.display    = '';
   document.getElementById(`add-exp-photo-preview${n}`).style.display = 'none';
-  document.getElementById(`add-exp-ocr-loading${n}`).style.display = 'none';
+  document.getElementById(`add-exp-ocr-loading${n}`).style.display   = 'none';
+  // reset upload area style
+  const wrap = document.getElementById(`add-exp-photo-wrap${n}`);
+  wrap.style.borderColor = '';
+  wrap.style.background  = '';
   if (n === 1) _adminDocId1 = null; else _adminDocId2 = null;
 }
 
@@ -8856,27 +8887,32 @@ async function _preloadExpenseStaff() {
 async function adminPhotoSelected(n, event) {
   const file = event.target.files[0];
   if (!file) return;
+  // 即時預覽
   const reader = new FileReader();
   reader.onload = e => {
     document.getElementById(`add-exp-photo-hint${n}`).style.display = 'none';
-    const preview = document.getElementById(`add-exp-photo-preview${n}`);
-    preview.src = e.target.result;
-    preview.style.display = '';
+    const img = document.getElementById(`add-exp-photo-preview${n}`);
+    img.src = e.target.result;
+    img.style.display = '';
   };
   reader.readAsDataURL(file);
-  document.getElementById(`add-exp-ocr-loading${n}`).style.display = '';
+  // 上傳
+  const loading = document.getElementById(`add-exp-ocr-loading${n}`);
+  loading.style.display = '';
   try {
     const form = new FormData();
     form.append('file', file);
     const res  = await fetch('/api/expense/admin-upload', { method:'POST', body:form });
     const data = await res.json();
-    document.getElementById(`add-exp-ocr-loading${n}`).style.display = 'none';
+    loading.style.display = 'none';
     if (data.error) { showToast(`附件 ${n} 上傳失敗`, 'error'); return; }
     if (n === 1) _adminDocId1 = data.document_id;
     else          _adminDocId2 = data.document_id;
+    // 上傳成功：框線變綠
+    document.getElementById(`add-exp-photo-wrap${n}`).style.borderColor = '#2e9e6b';
     showToast(`附件 ${n} 上傳成功`, 'success');
   } catch(e) {
-    document.getElementById(`add-exp-ocr-loading${n}`).style.display = 'none';
+    loading.style.display = 'none';
     showToast(`附件 ${n} 上傳失敗`, 'error');
   }
 }

@@ -1874,7 +1874,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 新增費用申請 Modal ── -->
   <div id="modal-add-expense" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:16px">
-    <div style="width:min(580px,100%);max-height:92vh;overflow-y:auto;background:var(--card);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);display:flex;flex-direction:column">
+    <div style="width:min(580px,100%);max-height:92vh;overflow-y:auto;background:var(--surface);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);display:flex;flex-direction:column">
 
       <!-- ── Header ── -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
@@ -1882,7 +1882,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div style="font-size:17px;font-weight:700;color:var(--text)">新增費用申請</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">填寫費用資訊與匯款帳戶</div>
         </div>
-        <button onclick="closeAddExpenseModal()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='none'">×</button>
+        <button onclick="closeAddExpenseModal()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='none'">×</button>
       </div>
 
       <!-- ── Body ── -->
@@ -2012,7 +2012,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
 
       <!-- ── Footer ── -->
-      <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;background:var(--card);border-radius:0 0 16px 16px">
+      <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface);border-radius:0 0 16px 16px">
         <button class="btn btn-outline" onclick="closeAddExpenseModal()" style="min-width:80px">取消</button>
         <button class="btn btn-primary" id="add-exp-submit-btn" onclick="submitAdminExpense()" style="min-width:100px">送出申請</button>
       </div>
@@ -8820,8 +8820,11 @@ async function deleteAdminAcc(id, name) {
 }
 
 // ── 費用審核模組 ───────────────────────────────────────────────
-let _adminDocId1 = null;
-let _adminDocId2 = null;
+// ── 費用申請 Modal 狀態 ─────────────────────────────────────────
+let _adminDocId1       = null;
+let _adminDocId2       = null;
+let _expenseStaffCache = null;
+let _staffLoading      = false;
 
 function _resetAdminExpensePhoto(n) {
   document.getElementById(`add-exp-photo-input${n}`).value = '';
@@ -8831,10 +8834,28 @@ function _resetAdminExpensePhoto(n) {
   if (n === 1) _adminDocId1 = null; else _adminDocId2 = null;
 }
 
+function _fillStaffSelect(data) {
+  const sel = document.getElementById('add-exp-staff');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— 選擇員工 —</option>'
+    + data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+}
+
+async function _preloadExpenseStaff() {
+  if (_expenseStaffCache) { _fillStaffSelect(_expenseStaffCache); return; }
+  if (_staffLoading) return;
+  _staffLoading = true;
+  const {ok, data} = await api('/api/punch/staff', {}, true);
+  _staffLoading = false;
+  if (ok && Array.isArray(data)) {
+    _expenseStaffCache = data;
+    _fillStaffSelect(data);
+  }
+}
+
 async function adminPhotoSelected(n, event) {
   const file = event.target.files[0];
   if (!file) return;
-  // 預覽
   const reader = new FileReader();
   reader.onload = e => {
     document.getElementById(`add-exp-photo-hint${n}`).style.display = 'none';
@@ -8843,7 +8864,6 @@ async function adminPhotoSelected(n, event) {
     preview.style.display = '';
   };
   reader.readAsDataURL(file);
-  // 上傳
   document.getElementById(`add-exp-ocr-loading${n}`).style.display = '';
   try {
     const form = new FormData();
@@ -8851,13 +8871,13 @@ async function adminPhotoSelected(n, event) {
     const res  = await fetch('/api/expense/admin-upload', { method:'POST', body:form });
     const data = await res.json();
     document.getElementById(`add-exp-ocr-loading${n}`).style.display = 'none';
-    if (data.error) { showToast(`附件${n}上傳失敗`, 'error'); return; }
+    if (data.error) { showToast(`附件 ${n} 上傳失敗`, 'error'); return; }
     if (n === 1) _adminDocId1 = data.document_id;
     else          _adminDocId2 = data.document_id;
     showToast(`附件 ${n} 上傳成功`, 'success');
   } catch(e) {
     document.getElementById(`add-exp-ocr-loading${n}`).style.display = 'none';
-    showToast(`附件${n}上傳失敗`, 'error');
+    showToast(`附件 ${n} 上傳失敗`, 'error');
   }
 }
 
@@ -8867,23 +8887,21 @@ function toggleBankFields() {
 }
 
 async function openAddExpenseModal() {
-  const modal = document.getElementById('modal-add-expense');
-  modal.style.display = 'flex';
-  document.getElementById('add-exp-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('add-exp-amount').value = '';
-  document.getElementById('add-exp-title').value = '';
-  document.getElementById('add-exp-note').value = '';
+  document.getElementById('modal-add-expense').style.display = 'flex';
+  document.getElementById('add-exp-date').value             = new Date().toISOString().slice(0,10);
+  document.getElementById('add-exp-amount').value           = '';
+  document.getElementById('add-exp-title').value            = '';
+  document.getElementById('add-exp-note').value             = '';
   document.getElementById('add-exp-reimburse-method').value = '匯款';
-  document.getElementById('add-exp-bank-name').value = '';
-  document.getElementById('add-exp-bank-account').value = '';
-  document.getElementById('add-exp-account-holder').value = '';
+  document.getElementById('add-exp-bank-name').value        = '';
+  document.getElementById('add-exp-bank-account').value     = '';
+  document.getElementById('add-exp-account-holder').value   = '';
   toggleBankFields();
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
-  // 員工清單用 cache（頁面載入時已預載）
-  const sel = document.getElementById('add-exp-staff');
+  // 員工清單：已有 cache 直接填入，否則載入
   if (_expenseStaffCache) {
-    sel.innerHTML = _expenseStaffCache.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+    _fillStaffSelect(_expenseStaffCache);
   } else {
     await _preloadExpenseStaff();
   }
@@ -8894,22 +8912,23 @@ function closeAddExpenseModal() {
 }
 
 async function submitAdminExpense() {
-  const staff_id              = document.getElementById('add-exp-staff').value;
-  const expense_date          = document.getElementById('add-exp-date').value;
-  const title                 = document.getElementById('add-exp-title').value.trim();
-  const category              = document.getElementById('add-exp-category').value;
-  const amount                = parseFloat(document.getElementById('add-exp-amount').value) || 0;
-  const note                  = document.getElementById('add-exp-note').value.trim();
-  const reimbursement_method  = document.getElementById('add-exp-reimburse-method').value;
-  const bank_name             = document.getElementById('add-exp-bank-name').value.trim();
-  const account_holder        = document.getElementById('add-exp-account-holder').value.trim();
-  const bank_account          = document.getElementById('add-exp-bank-account').value.trim();
-  if (!staff_id)    { showToast('請選擇員工', 'error'); return; }
+  const staff_id             = document.getElementById('add-exp-staff').value;
+  const expense_date         = document.getElementById('add-exp-date').value;
+  const title                = document.getElementById('add-exp-title').value.trim();
+  const category             = document.getElementById('add-exp-category').value;
+  const amount               = parseFloat(document.getElementById('add-exp-amount').value) || 0;
+  const note                 = document.getElementById('add-exp-note').value.trim();
+  const reimbursement_method = document.getElementById('add-exp-reimburse-method').value;
+  const bank_name            = document.getElementById('add-exp-bank-name').value.trim();
+  const account_holder       = document.getElementById('add-exp-account-holder').value.trim();
+  const bank_account         = document.getElementById('add-exp-bank-account').value.trim();
+  if (!staff_id)    { showToast('請選擇員工', 'error');   return; }
   if (!expense_date){ showToast('請填寫費用日期', 'error'); return; }
   if (!title)       { showToast('請填寫費用名目', 'error'); return; }
   if (amount <= 0)  { showToast('請填寫費用金額', 'error'); return; }
   const btn = document.getElementById('add-exp-submit-btn');
   btn.disabled = true;
+  btn.textContent = '送出中…';
   const {ok} = await api('/api/expense/claims/admin-create', {
     method: 'POST',
     body: JSON.stringify({
@@ -8920,23 +8939,12 @@ async function submitAdminExpense() {
     })
   });
   btn.disabled = false;
-  if (!ok) { showToast('新增失敗', 'error'); return; }
-  showToast('已新增費用申請', 'success');
+  btn.textContent = '送出申請';
+  if (!ok) { showToast('新增失敗，請再試', 'error'); return; }
+  showToast('費用申請已建立', 'success');
   closeAddExpenseModal();
   document.getElementById('exp-review-status').value = '';
   loadExpenseReview();
-}
-
-let _expenseStaffCache = null;
-
-async function _preloadExpenseStaff() {
-  if (_expenseStaffCache) return;
-  const {ok, data} = await api('/api/punch/staff', {}, true);
-  if (ok && Array.isArray(data)) {
-    _expenseStaffCache = data;
-    const sel = document.getElementById('add-exp-staff');
-    if (sel) sel.innerHTML = data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
-  }
 }
 
 async function loadExpenseReview() {

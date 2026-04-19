@@ -1873,40 +1873,47 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   </div><!-- end page-expense-review -->
 
   <!-- ── 新增費用申請 Modal ── -->
-  <div id="modal-add-expense" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
-    <div class="card" style="width:min(560px,97vw);max-height:94vh;overflow-y:auto;padding:0;position:relative">
-      <!-- Header -->
-      <div style="padding:18px 24px 14px;border-bottom:1px solid var(--border)">
-        <h3 style="margin:0;font-size:16px;font-weight:600">新增費用申請</h3>
+  <div id="modal-add-expense" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:16px">
+    <div style="width:min(580px,100%);max-height:92vh;overflow-y:auto;background:var(--card);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);display:flex;flex-direction:column">
+
+      <!-- ── Header ── -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--text)">新增費用申請</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">填寫費用資訊與匯款帳戶</div>
+        </div>
+        <button onclick="closeAddExpenseModal()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='none'">×</button>
       </div>
-      <div style="padding:18px 24px">
 
-        <!-- ── 費用資訊 ── -->
-        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">費用資訊</div>
+      <!-- ── Body ── -->
+      <div style="padding:20px 24px;flex:1;overflow-y:auto">
 
-        <!-- 申請員工 -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <!-- 費用資訊 section -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <div style="width:3px;height:14px;background:var(--accent);border-radius:2px"></div>
+          <span style="font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.05em">費用資訊</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div>
-            <div class="fl">申請員工</div>
-            <select class="fi" id="add-exp-staff"><option value="">載入中...</option></select>
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">申請員工</label>
+            <select class="fi" id="add-exp-staff" style="margin:0"><option value="">選擇員工...</option></select>
           </div>
           <div>
-            <div class="fl">費用日期</div>
-            <input class="fi" type="date" id="add-exp-date">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用日期</label>
+            <input class="fi" type="date" id="add-exp-date" style="margin:0">
           </div>
         </div>
 
-        <!-- 費用名目 -->
-        <div style="margin-bottom:12px">
-          <div class="fl">費用名目</div>
-          <input class="fi" type="text" id="add-exp-title" placeholder="費用名稱（如：3月餐費、出差交通）">
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用名目 <span style="color:var(--red)">*</span></label>
+          <input class="fi" type="text" id="add-exp-title" placeholder="如：3月餐費、出差交通費" style="margin:0">
         </div>
 
-        <!-- 類別 + 金額 -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div>
-            <div class="fl">費用類別</div>
-            <select class="fi" id="add-exp-category">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用類別</label>
+            <select class="fi" id="add-exp-category" style="margin:0">
               <option value="餐費">餐費</option>
               <option value="交通費">交通費</option>
               <option value="住宿費">住宿費</option>
@@ -1923,77 +1930,91 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             </select>
           </div>
           <div>
-            <div class="fl">費用金額（元）</div>
-            <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">費用金額（元）<span style="color:var(--red)">*</span></label>
+            <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0" style="margin:0">
           </div>
         </div>
 
-        <!-- 報帳方式 -->
-        <div style="margin-bottom:12px">
-          <div class="fl">報帳方式</div>
-          <select class="fi" id="add-exp-reimburse-method" onchange="toggleBankFields()">
-            <option value="匯款">匯款</option>
-            <option value="現金">現金</option>
-            <option value="其他">其他</option>
-          </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">報帳方式</label>
+            <select class="fi" id="add-exp-reimburse-method" onchange="toggleBankFields()" style="margin:0">
+              <option value="匯款">匯款</option>
+              <option value="現金">現金</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">備註（選填）</label>
+            <input class="fi" type="text" id="add-exp-note" placeholder="其他說明" style="margin:0">
+          </div>
         </div>
 
-        <!-- 備註 -->
-        <div style="margin-bottom:18px">
-          <div class="fl">備註（選填）</div>
-          <input class="fi" type="text" id="add-exp-note" placeholder="其他說明">
-        </div>
-
-        <!-- ── 匯款帳戶 ── -->
+        <!-- 匯款帳戶 section -->
         <div id="add-exp-bank-section">
-          <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">匯款帳戶</div>
-
-          <div style="margin-bottom:12px">
-            <div class="fl">銀行名稱</div>
-            <input class="fi" type="text" id="add-exp-bank-name" placeholder="ex: 台灣銀行、國泰世華">
+          <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+            <div style="width:3px;height:14px;background:#6366f1;border-radius:2px"></div>
+            <span style="font-size:12px;font-weight:600;color:#6366f1;letter-spacing:.05em">匯款帳戶</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">銀行名稱</label>
+            <input class="fi" type="text" id="add-exp-bank-name" placeholder="台灣銀行、國泰世華…" style="margin:0">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
             <div>
-              <div class="fl">戶名</div>
-              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名">
+              <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">戶名</label>
+              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人" style="margin:0">
             </div>
             <div>
-              <div class="fl">帳號</div>
-              <input class="fi" type="text" id="add-exp-bank-account" placeholder="銀行帳號">
+              <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px">帳號</label>
+              <input class="fi" type="text" id="add-exp-bank-account" placeholder="銀行帳號" style="margin:0">
             </div>
           </div>
         </div>
 
-        <!-- ── 附件 ── -->
-        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">附件</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
-          <!-- 附件 1 -->
+        <!-- 附件 section -->
+        <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <div style="width:3px;height:14px;background:#2e9e6b;border-radius:2px"></div>
+          <span style="font-size:12px;font-weight:600;color:#2e9e6b;letter-spacing:.05em">附件上傳</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div>
-            <div class="fl" style="margin-bottom:6px">附件 1（發票 / 收據）</div>
-            <div id="add-exp-photo-wrap1" style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:var(--bg);min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center" onclick="document.getElementById('add-exp-photo-input1').click()">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">附件 1（發票 / 收據）</label>
+            <div id="add-exp-photo-wrap1"
+              onclick="document.getElementById('add-exp-photo-input1').click()"
+              style="border:2px dashed var(--border);border-radius:12px;padding:18px 10px;text-align:center;cursor:pointer;background:var(--bg);min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color .15s"
+              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
               <input type="file" id="add-exp-photo-input1" accept="image/*" style="display:none" onchange="adminPhotoSelected(1,event)">
-              <div id="add-exp-photo-hint1" style="color:var(--muted);font-size:12px">點擊上傳</div>
-              <img id="add-exp-photo-preview1" style="display:none;max-width:100%;max-height:100px;border-radius:6px;object-fit:contain">
-              <div id="add-exp-ocr-loading1" style="display:none;font-size:11px;color:var(--accent);margin-top:4px">上傳中...</div>
+              <div id="add-exp-photo-hint1" style="color:var(--muted);font-size:12px;line-height:1.6">
+                <div style="font-size:22px;margin-bottom:4px">🖼</div>點擊上傳
+              </div>
+              <img id="add-exp-photo-preview1" style="display:none;max-width:100%;max-height:110px;border-radius:8px;object-fit:contain">
+              <div id="add-exp-ocr-loading1" style="display:none;font-size:11px;color:var(--accent);margin-top:6px">上傳辨識中…</div>
             </div>
           </div>
-          <!-- 附件 2 -->
           <div>
-            <div class="fl" style="margin-bottom:6px">附件 2（選填）</div>
-            <div id="add-exp-photo-wrap2" style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:var(--bg);min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center" onclick="document.getElementById('add-exp-photo-input2').click()">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">附件 2（選填）</label>
+            <div id="add-exp-photo-wrap2"
+              onclick="document.getElementById('add-exp-photo-input2').click()"
+              style="border:2px dashed var(--border);border-radius:12px;padding:18px 10px;text-align:center;cursor:pointer;background:var(--bg);min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color .15s"
+              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
               <input type="file" id="add-exp-photo-input2" accept="image/*" style="display:none" onchange="adminPhotoSelected(2,event)">
-              <div id="add-exp-photo-hint2" style="color:var(--muted);font-size:12px">點擊上傳</div>
-              <img id="add-exp-photo-preview2" style="display:none;max-width:100%;max-height:100px;border-radius:6px;object-fit:contain">
-              <div id="add-exp-ocr-loading2" style="display:none;font-size:11px;color:var(--accent);margin-top:4px">上傳中...</div>
+              <div id="add-exp-photo-hint2" style="color:var(--muted);font-size:12px;line-height:1.6">
+                <div style="font-size:22px;margin-bottom:4px">🖼</div>點擊上傳
+              </div>
+              <img id="add-exp-photo-preview2" style="display:none;max-width:100%;max-height:110px;border-radius:8px;object-fit:contain">
+              <div id="add-exp-ocr-loading2" style="display:none;font-size:11px;color:var(--accent);margin-top:6px">上傳辨識中…</div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- 底部按鈕 -->
-        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px;border-top:1px solid var(--border)">
-          <button class="btn btn-outline btn-sm" onclick="closeAddExpenseModal()">取消</button>
-          <button class="btn btn-primary btn-sm" id="add-exp-submit-btn" onclick="submitAdminExpense()">送出申請</button>
-        </div>
+      <!-- ── Footer ── -->
+      <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;background:var(--card);border-radius:0 0 16px 16px">
+        <button class="btn btn-outline" onclick="closeAddExpenseModal()" style="min-width:80px">取消</button>
+        <button class="btn btn-primary" id="add-exp-submit-btn" onclick="submitAdminExpense()" style="min-width:100px">送出申請</button>
       </div>
     </div>
   </div>
@@ -8859,13 +8880,12 @@ async function openAddExpenseModal() {
   toggleBankFields();
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
-  // 載入員工清單
+  // 員工清單用 cache（頁面載入時已預載）
   const sel = document.getElementById('add-exp-staff');
-  if (sel.options.length <= 1) {
-    const {ok, data} = await api('/api/punch/staff', {}, true);
-    if (ok && Array.isArray(data)) {
-      sel.innerHTML = data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
-    }
+  if (_expenseStaffCache) {
+    sel.innerHTML = _expenseStaffCache.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+  } else {
+    await _preloadExpenseStaff();
   }
 }
 
@@ -8907,7 +8927,20 @@ async function submitAdminExpense() {
   loadExpenseReview();
 }
 
+let _expenseStaffCache = null;
+
+async function _preloadExpenseStaff() {
+  if (_expenseStaffCache) return;
+  const {ok, data} = await api('/api/punch/staff', {}, true);
+  if (ok && Array.isArray(data)) {
+    _expenseStaffCache = data;
+    const sel = document.getElementById('add-exp-staff');
+    if (sel) sel.innerHTML = data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+  }
+}
+
 async function loadExpenseReview() {
+  _preloadExpenseStaff(); // 背景預載，不等待
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody) return;

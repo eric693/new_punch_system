@@ -6323,10 +6323,17 @@ def api_export_training():
 @app.route('/api/export/expense-claims', methods=['GET'])
 @login_required
 def api_export_expense_claims():
-    """匯出費用報帳 Excel"""
-    status = request.args.get('status', '')
+    """匯出費用報帳 Excel（按表格欄位格式）"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+
+    status    = request.args.get('status', '')
+    year_month = request.args.get('ym', '')   # e.g. 2026-04
     conds, params = ['TRUE'], []
-    if status: conds.append("ec.status=%s"); params.append(status)
+    if status:     conds.append("ec.status=%s");               params.append(status)
+    if year_month: conds.append("TO_CHAR(ec.expense_date,'YYYY-MM')=%s"); params.append(year_month)
 
     with get_db() as conn:
         rows = conn.execute(f"""
@@ -6334,53 +6341,141 @@ def api_export_expense_claims():
             FROM expense_claims ec
             JOIN punch_staff ps ON ps.id = ec.staff_id
             WHERE {' AND '.join(conds)}
-            ORDER BY ec.expense_date DESC, ec.created_at DESC
+            ORDER BY ec.expense_date ASC, ec.created_at ASC
         """, params).fetchall()
 
-    import openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill
-    from io import BytesIO
+    def roc_ym(d):
+        """西元日期 → 民國年月，如 115/03月"""
+        if not d: return ''
+        try:
+            from datetime import date as _date
+            if hasattr(d, 'year'):
+                return f"{d.year - 1911}/{d.month:02d}月"
+            parts = str(d)[:7].split('-')
+            return f"{int(parts[0]) - 1911}/{parts[1]}月"
+        except Exception:
+            return str(d)[:7]
+
+    STATUS_LABEL = {'approved': '已核准', 'rejected': '已拒絕', 'pending': '待審核'}
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = f"費用審核_{status or 'all'}"
+    ws.title = '費用申請匯出'
 
-    headers = ['員工代碼','姓名','部門','費用日期','類型','金額','說明','狀態','審核人','審核備註','申請時間']
-    hdr_fill = PatternFill('solid', fgColor='0F1C3A')
-    hdr_font = Font(bold=True, color='FFFFFF', size=10)
-    alt_fill = PatternFill('solid', fgColor='F4F6FA')
-    center   = Alignment(horizontal='center', vertical='center')
-    STATUS_LABEL = {'approved':'已核准','rejected':'已拒絕','pending':'待審核'}
+    # ── 樣式定義 ──────────────────────────────────────────────────
+    navy      = '0F1C3A'
+    white     = 'FFFFFF'
+    alt_gray  = 'F7F8FB'
+    border_c  = 'CBD2E0'
 
-    for col, h in enumerate(headers, 1):
-        c = ws.cell(1, col, h)
-        c.font = hdr_font; c.fill = hdr_fill; c.alignment = center
-    ws.freeze_panes = 'A2'
-    ws.row_dimensions[1].height = 22
+    hdr_font  = Font(bold=True, color=white, size=10, name='微軟正黑體')
+    body_font = Font(size=10, name='微軟正黑體')
+    hdr_fill  = PatternFill('solid', fgColor=navy)
+    alt_fill  = PatternFill('solid', fgColor=alt_gray)
 
-    for i, r in enumerate(rows, 2):
-        created = str(r['created_at'])[:16] if r['created_at'] else ''
-        vals = [
-            r['employee_code'] or '', r['staff_name'], r['department'] or '',
-            str(r['expense_date']) if r['expense_date'] else '',
-            r['category'] or '', float(r['amount'] or 0), r['title'] or '',
-            STATUS_LABEL.get(r['status'], r['status']),
-            r['reviewed_by'] or '', r['review_note'] or '', created,
+    thin = Side(style='thin', color=border_c)
+    full_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_align   = Alignment(horizontal='left',   vertical='center', wrap_text=True)
+    right_align  = Alignment(horizontal='right',  vertical='center')
+
+    # ── 標題列（公司名 + 表單名） ──────────────────────────────────
+    ws.merge_cells('A1:M1')
+    title_c = ws.cell(1, 1, '進光設計　費用申請表')
+    title_c.font      = Font(bold=True, size=14, name='微軟正黑體', color=navy)
+    title_c.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 32
+
+    # ── 表頭 ──────────────────────────────────────────────────────
+    headers = [
+        ('年月',     8),  ('員工代碼', 10), ('申請人',  12),
+        ('費用名目', 24), ('費用類別', 14), ('費用性質', 9),
+        ('報帳方式', 9),  ('費用金額', 12),
+        ('戶名',    14),  ('銀行',    14),  ('帳號',   18),
+        ('備註',    20),  ('狀態',     9),
+    ]
+    for col, (h, _) in enumerate(headers, 1):
+        c = ws.cell(2, col, h)
+        c.font      = hdr_font
+        c.fill      = hdr_fill
+        c.alignment = center_align
+        c.border    = full_border
+    ws.row_dimensions[2].height = 22
+    ws.freeze_panes = 'A3'
+
+    # ── 資料列 ────────────────────────────────────────────────────
+    total_amount = 0
+    for i, r in enumerate(rows, 3):
+        amt = float(r['amount'] or 0)
+        total_amount += amt
+        fill = alt_fill if i % 2 == 0 else None
+
+        row_vals = [
+            (roc_ym(r['expense_date']),                      center_align),
+            (r['employee_code'] or '',                       center_align),
+            (r['staff_name'] or '',                          left_align),
+            (r['title'] or '',                               left_align),
+            (r['category'] or '',                            center_align),
+            (r.get('expense_type') or '支出',                center_align),
+            (r.get('reimbursement_method') or '匯款',        center_align),
+            (amt,                                            right_align),
+            (r.get('account_holder') or '',                  left_align),
+            (r.get('bank_name') or '',                       left_align),
+            (r.get('bank_account') or '',                    left_align),
+            (r['note'] or '',                                left_align),
+            (STATUS_LABEL.get(r['status'], r['status']),     center_align),
         ]
-        for col, v in enumerate(vals, 1):
-            c = ws.cell(i, col, v)
-            if i % 2 == 0:
-                c.fill = alt_fill
-            c.alignment = Alignment(vertical='center')
+        for col, (val, align) in enumerate(row_vals, 1):
+            c = ws.cell(i, col, val)
+            c.font      = body_font
+            c.alignment = align
+            c.border    = full_border
+            if fill: c.fill = fill
+            # 金額格式
+            if col == 8 and isinstance(val, (int, float)):
+                c.number_format = '$#,##0'
 
-    for col, w in enumerate([10,12,10,12,12,10,24,8,10,20,16], 1):
-        ws.column_dimensions[ws.cell(1,col).column_letter].width = w
+        ws.row_dimensions[i].height = 18
 
+    # ── 合計列 ────────────────────────────────────────────────────
+    total_row = len(rows) + 3
+    ws.merge_cells(f'A{total_row}:G{total_row}')
+    tc = ws.cell(total_row, 1, '合　計')
+    tc.font      = Font(bold=True, size=10, name='微軟正黑體', color=navy)
+    tc.alignment = center_align
+    tc.fill      = PatternFill('solid', fgColor='E8ECF6')
+    tc.border    = full_border
+    for col in range(2, 8):
+        ws.cell(total_row, col).border = full_border
+        ws.cell(total_row, col).fill   = PatternFill('solid', fgColor='E8ECF6')
+    ac = ws.cell(total_row, 8, total_amount)
+    ac.font          = Font(bold=True, size=10, name='微軟正黑體')
+    ac.alignment     = right_align
+    ac.number_format = '$#,##0'
+    ac.fill          = PatternFill('solid', fgColor='E8ECF6')
+    ac.border        = full_border
+    for col in range(9, 14):
+        ws.cell(total_row, col).border = full_border
+        ws.cell(total_row, col).fill   = PatternFill('solid', fgColor='E8ECF6')
+    ws.row_dimensions[total_row].height = 22
+
+    # ── 欄寬 ──────────────────────────────────────────────────────
+    for col, (_, w) in enumerate(headers, 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    # ── 列印設定 ──────────────────────────────────────────────────
+    ws.page_setup.orientation      = 'landscape'
+    ws.page_setup.paperSize         = 9   # A4
+    ws.page_setup.fitToWidth        = 1
+    ws.print_title_rows             = '1:2'
+
+    fname = f"進光設計_費用申請_{year_month or status or 'all'}.xlsx"
     buf = BytesIO(); wb.save(buf); buf.seek(0)
     from flask import Response
     return Response(buf.read(),
                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    headers={'Content-Disposition': f'attachment; filename=expense_claims_{status or "all"}.xlsx'})
+                    headers={'Content-Disposition': f"attachment; filename*=UTF-8''{__import__('urllib.parse').parse.quote(fname)}"})
 
 
 @app.route('/api/export/performance', methods=['GET'])
@@ -10158,15 +10253,17 @@ def api_expense_admin_create():
 @login_required
 def api_expense_admin_list():
     status = request.args.get('status', '')
+    ym     = request.args.get('ym', '')   # YYYY-MM
     conds, params = ['TRUE'], []
-    if status: conds.append("ec.status=%s"); params.append(status)
+    if status: conds.append("ec.status=%s");                              params.append(status)
+    if ym:     conds.append("TO_CHAR(ec.expense_date,'YYYY-MM')=%s");    params.append(ym)
     with get_db() as conn:
         rows = conn.execute(f"""
             SELECT ec.*, ps.name as staff_name, ps.employee_code
             FROM expense_claims ec
             JOIN punch_staff ps ON ps.id=ec.staff_id
             WHERE {' AND '.join(conds)}
-            ORDER BY ec.created_at DESC
+            ORDER BY ec.expense_date ASC, ec.created_at ASC
         """, params).fetchall()
     result = []
     for r in rows:

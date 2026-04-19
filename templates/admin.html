@@ -1854,6 +1854,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <option value="rejected">已拒絕</option>
         <option value="">全部</option>
       </select>
+      <span class="filter-label">年月</span>
+      <input type="month" id="exp-review-ym" class="filter-input" style="min-width:130px" onchange="loadExpenseReview()">
       <button class="btn btn-outline btn-sm" onclick="loadExpenseReview()">重新整理</button>
       <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>
       <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">+ 新增費用申請</button>
@@ -6884,7 +6886,12 @@ function exportTrainingExcel() {
 
 function exportExpenseExcel() {
   const status = document.getElementById('exp-review-status')?.value || '';
-  window.open(`/api/export/expense-claims${status ? '?status=' + status : ''}`, '_blank');
+  const ym     = document.getElementById('exp-review-ym')?.value || '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (ym)     params.set('ym', ym);
+  const qs = params.toString();
+  window.open(`/api/export/expense-claims${qs ? '?' + qs : ''}`, '_blank');
 }
 
 function exportPerfExcel() {
@@ -9015,10 +9022,14 @@ async function submitAdminExpense() {
 async function loadExpenseReview() {
   _preloadExpenseStaff(); // 背景預載，不等待
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
+  const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
-  const qs = status ? `?status=${status}` : '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (ym)     params.set('ym', ym);
+  const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, true);
   const claims = Array.isArray(data) ? data : [];
   if (!ok || !claims.length) {

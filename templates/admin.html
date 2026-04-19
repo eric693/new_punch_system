@@ -8869,7 +8869,6 @@ async function deleteAdminAcc(id, name) {
 let _adminDocId1       = null;
 let _adminDocId2       = null;
 let _expenseStaffCache = null;
-let _staffLoadPromise  = null;   // 共用 Promise，避免重複請求
 
 function _resetAdminExpensePhoto(n) {
   document.getElementById(`add-exp-photo-input${n}`).value   = '';
@@ -8890,18 +8889,30 @@ function _fillStaffSelect(data) {
     + data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
 }
 
-async function _preloadExpenseStaff() {
-  if (_expenseStaffCache) { _fillStaffSelect(_expenseStaffCache); return; }
-  // 若已有進行中的請求，等它完成再填入，不發第二次
-  if (!_staffLoadPromise) {
-    _staffLoadPromise = (async () => {
-      const {ok, data} = await api('/api/punch/staff', {}, true);
-      if (ok && Array.isArray(data)) _expenseStaffCache = data;
-      _staffLoadPromise = null;
-    })();
+async function _loadExpenseStaff() {
+  const sel = document.getElementById('add-exp-staff');
+  if (!sel) return;
+  if (_expenseStaffCache && _expenseStaffCache.length > 0) {
+    _fillStaffSelect(_expenseStaffCache);
+    return;
   }
-  await _staffLoadPromise;
-  if (_expenseStaffCache) _fillStaffSelect(_expenseStaffCache);
+  sel.innerHTML = '<option value="">載入中...</option>';
+  try {
+    const res = await fetch('/api/punch/staff');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        _expenseStaffCache = data;
+        _fillStaffSelect(data);
+      }
+    } else {
+      sel.innerHTML = '<option value="">— 選擇員工 —</option>';
+      showToast('載入員工清單失敗（HTTP ' + res.status + '）', 'error');
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">— 選擇員工 —</option>';
+    showToast('載入員工清單失敗，請重試', 'error');
+  }
 }
 
 async function adminPhotoSelected(n, event) {
@@ -8976,11 +8987,7 @@ async function openAddExpenseModal() {
   switchExpenseType('支出'); // 初始化費用性質 + 類別清單 + bank section
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
-  if (_expenseStaffCache) {
-    _fillStaffSelect(_expenseStaffCache);
-  } else {
-    await _preloadExpenseStaff();
-  }
+  await _loadExpenseStaff();
 }
 
 function closeAddExpenseModal() {
@@ -9026,7 +9033,6 @@ async function submitAdminExpense() {
 }
 
 async function loadExpenseReview() {
-  _preloadExpenseStaff(); // 背景預載，不等待
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody = document.getElementById('exp-review-tbody');

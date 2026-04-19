@@ -2647,6 +2647,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div class="modal-header"><span class="modal-title" id="glm-title">新增打卡地點</span><button class="modal-close" onclick="closeLocModal()">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="glm-id">
+      <div style="margin-bottom:16px;position:relative">
+        <label class="form-label">搜尋地點（自動填入座標）</label>
+        <div style="position:relative">
+          <input class="form-input" id="glm-search" placeholder="輸入地址或地點名稱搜尋…" autocomplete="off" style="width:100%;padding-right:36px" oninput="searchGpsPlace(this.value)">
+          <span id="glm-search-spin" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted)">⏳</span>
+        </div>
+        <div id="glm-search-results" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1px solid #dde3ef;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.13);z-index:9999;max-height:220px;overflow-y:auto;margin-top:2px"></div>
+      </div>
       <div style="margin-bottom:14px"><label class="form-label">地點名稱 *</label><input class="form-input" id="glm-name" placeholder="例：公司門口" style="width:100%"></div>
       <div class="form-row">
         <div><label class="form-label">緯度</label><input class="form-input" id="glm-lat" placeholder="例：25.033964" type="number" step="0.000001"></div>
@@ -4731,9 +4739,54 @@ function openLocModal(id=null) {
     document.getElementById('glm-radius').value = '100';
     document.getElementById('glm-active').value = '1';
   }
+  document.getElementById('glm-search').value = '';
+  document.getElementById('glm-search-results').style.display = 'none';
   document.getElementById('gps-loc-modal').style.display = 'flex';
 }
-function closeLocModal() { document.getElementById('gps-loc-modal').style.display = 'none'; }
+function closeLocModal() {
+  document.getElementById('gps-loc-modal').style.display = 'none';
+  document.getElementById('glm-search-results').style.display = 'none';
+}
+
+let _gpsSearchTimer = null;
+async function searchGpsPlace(q) {
+  const box = document.getElementById('glm-search-results');
+  const spin = document.getElementById('glm-search-spin');
+  clearTimeout(_gpsSearchTimer);
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+  _gpsSearchTimer = setTimeout(async () => {
+    spin.style.display = 'inline';
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&accept-language=zh-TW,zh,en`, { headers: { 'Accept-Language': 'zh-TW' } });
+      const results = await res.json();
+      spin.style.display = 'none';
+      if (!results.length) { box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--muted)">找不到相關地點</div>'; box.style.display = 'block'; return; }
+      box.innerHTML = results.map((r, i) => {
+        const name = r.display_name;
+        const short = name.length > 60 ? name.slice(0, 57) + '…' : name;
+        return `<div style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f2f7;line-height:1.4"
+          onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''"
+          onclick="selectGpsPlace('${escHtml(r.display_name.replace(/'/g,'\\'+'\''))}',${r.lat},${r.lon})">${escHtml(short)}</div>`;
+      }).join('');
+      box.style.display = 'block';
+    } catch(e) {
+      spin.style.display = 'none';
+      box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--red)">搜尋失敗，請稍後再試</div>';
+      box.style.display = 'block';
+    }
+  }, 400);
+}
+function selectGpsPlace(displayName, lat, lng) {
+  document.getElementById('glm-lat').value  = parseFloat(lat).toFixed(6);
+  document.getElementById('glm-lng').value  = parseFloat(lng).toFixed(6);
+  const box = document.getElementById('glm-search-results');
+  box.style.display = 'none';
+  document.getElementById('glm-search').value = displayName;
+  if (!document.getElementById('glm-name').value.trim()) {
+    const short = displayName.split(',')[0].trim();
+    document.getElementById('glm-name').value = short;
+  }
+}
 function getLocGPS() {
   const msg = document.getElementById('glm-gps-msg');
   msg.style.color = 'var(--muted)'; msg.textContent = '取得中...';
@@ -7111,7 +7164,13 @@ function setTabDot(id, count) {
   else el.style.display = 'none';
 }
 
-document.addEventListener('DOMContentLoaded', () => { refreshBadges(); setInterval(refreshBadges, 30000); });
+document.addEventListener('DOMContentLoaded', () => {
+  refreshBadges(); setInterval(refreshBadges, 30000);
+  document.addEventListener('click', e => {
+    const box = document.getElementById('glm-search-results');
+    if (box && !box.contains(e.target) && e.target.id !== 'glm-search') box.style.display = 'none';
+  });
+});
 
 // ── Init ──────────────────────────────────────────────────────
 (function initAdminUI() {

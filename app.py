@@ -491,6 +491,32 @@ def health():
     except Exception as e:
         return jsonify({'status': 'error', 'detail': str(e)}), 500
 
+@app.route('/api/admin/badges')
+@login_required
+def api_admin_badges():
+    perms    = session.get('admin_permissions') or []
+    is_super = session.get('admin_is_super', False)
+    has_sched = is_super or 'sched' in perms
+    has_leave = is_super or 'leave' in perms
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM punch_requests    WHERE status='pending')          AS punch_cnt,
+                (SELECT COUNT(*) FROM overtime_requests WHERE status='pending')          AS ot_cnt,
+                (SELECT COUNT(*) FROM schedule_requests WHERE status='pending')          AS sched_pending_cnt,
+                (SELECT COUNT(*) FROM schedule_requests WHERE status='modified_pending') AS sched_modified_cnt,
+                (SELECT COUNT(*) FROM leave_requests    WHERE status='pending')          AS leave_cnt,
+                (SELECT COUNT(*) FROM expense_claims    WHERE status='pending')          AS expense_cnt
+        """).fetchone()
+    return jsonify({
+        'punch':          int(row['punch_cnt']),
+        'overtime':       int(row['ot_cnt']),
+        'sched_pending':  int(row['sched_pending_cnt'])  if has_sched else 0,
+        'sched_modified': int(row['sched_modified_cnt']) if has_sched else 0,
+        'leave':          int(row['leave_cnt'])          if has_leave else 0,
+        'expense':        int(row['expense_cnt']),
+    })
+
 # ─── Admin Auth ───────────────────────────────────────────────────────────────
 
 def login_required(f):

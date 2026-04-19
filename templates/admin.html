@@ -7070,27 +7070,20 @@ async function toggleAnnPin(id) {
 
 // ── Badges ────────────────────────────────────────────────────
 async function refreshBadges() {
-  const [punchRq, otRq, schedRq1, schedRq2, leaveRq, expenseRq] = await Promise.all([
-    api('/api/punch/requests?status=pending',                    {}, true),
-    api('/api/overtime/requests?status=pending',                 {}, true),
-    api('/api/schedule/admin/requests?status=pending',           {}, true),
-    api('/api/schedule/admin/requests?status=modified_pending',  {}, true),
-    api('/api/leave/requests?status=pending',                    {}, true),
-    api('/api/expense/claims?status=pending',                    {}, true),
-  ]);
-
-  const punchRqCnt = punchRq.ok && Array.isArray(punchRq.data) ? punchRq.data.length : 0;
-  const otCnt      = otRq.ok   && Array.isArray(otRq.data)     ? otRq.data.length    : 0;
-  const schedCnt   = (schedRq1.ok && Array.isArray(schedRq1.data) ? schedRq1.data.length : 0) +
-                     (schedRq2.ok && Array.isArray(schedRq2.data) ? schedRq2.data.length : 0);
-  const leaveCnt   = leaveRq.ok && Array.isArray(leaveRq.data)  ? leaveRq.data.length  : 0;
-  const expenseCnt = expenseRq.ok && Array.isArray(expenseRq.data) ? expenseRq.data.length : 0;
+  const res = await api('/api/admin/badges', {}, true);
+  if (!res.ok) return;
+  const d          = res.data;
+  const punchRqCnt = d.punch          || 0;
+  const otCnt      = d.overtime       || 0;
+  const schedCnt   = (d.sched_pending || 0) + (d.sched_modified || 0);
+  const leaveCnt   = d.leave          || 0;
+  const expenseCnt = d.expense        || 0;
 
   // ── 左側 nav badge（顯示各模組總待審數）──
-  setBadge('badge-punch', punchRqCnt + otCnt);   // 打卡管理 = 補打卡 + 加班
-  setBadge('badge-sched', schedCnt);              // 排班管理 = 排休申請
-  setBadge('badge-leave', leaveCnt);              // 請假管理 = 請假申請
-  setBadge('badge-expense-review', expenseCnt);   // 費用審核 = 待審費用
+  setBadge('badge-punch', punchRqCnt + otCnt);
+  setBadge('badge-sched', schedCnt);
+  setBadge('badge-leave', leaveCnt);
+  setBadge('badge-expense-review', expenseCnt);
 
   // ── Tab 內的小 badge（進入頁面後顯示哪個 tab 有待審）──
   setTabDot('tabdot-punchrq', punchRqCnt);

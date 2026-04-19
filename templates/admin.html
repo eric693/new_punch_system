@@ -1954,13 +1954,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <input type="hidden" id="add-exp-type" value="支出">
           </div>
 
-          <div class="exp-row" style="grid-template-columns:1fr">
-            <div class="exp-field">
-              <label>費用名目 <span class="req">*</span></label>
-              <input class="fi" type="text" id="add-exp-title" placeholder="如：5月健保、裝修工程追加款…">
-              <span class="exp-err-msg">此欄位為必填</span>
-            </div>
-          </div>
+          <input type="hidden" id="add-exp-title" value="">
 
           <div class="exp-row col2">
             <div class="exp-field">
@@ -9033,7 +9027,6 @@ async function openAddExpenseModal() {
   document.getElementById('modal-add-expense').style.display = 'flex';
   document.getElementById('add-exp-date').value             = new Date().toISOString().slice(0,10);
   document.getElementById('add-exp-amount').value           = '';
-  document.getElementById('add-exp-title').value            = '';
   document.getElementById('add-exp-note').value             = '';
   document.getElementById('add-exp-reimburse-method').value = '匯款';
   document.getElementById('add-exp-bank-name').value        = '';
@@ -9042,7 +9035,7 @@ async function openAddExpenseModal() {
   switchExpenseType('支出'); // 初始化費用性質 + 類別清單 + bank section
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
-  ['add-exp-staff','add-exp-date','add-exp-title','add-exp-amount'].forEach(id => {
+  ['add-exp-staff','add-exp-date','add-exp-amount'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.classList.remove('exp-invalid');
@@ -9059,7 +9052,7 @@ function closeAddExpenseModal() {
 async function submitAdminExpense() {
   const staff_id             = document.getElementById('add-exp-staff').value;
   const expense_date         = document.getElementById('add-exp-date').value;
-  const title                = document.getElementById('add-exp-title').value.trim();
+  const title                = document.getElementById('add-exp-category').value.trim() || '費用申請';
   const category             = document.getElementById('add-exp-category').value;
   const amount               = parseFloat(document.getElementById('add-exp-amount').value) || 0;
   const note                 = document.getElementById('add-exp-note').value.trim();
@@ -9075,7 +9068,6 @@ async function submitAdminExpense() {
   }
   _markField('add-exp-staff',  !staff_id);    if (!staff_id)    hasErr = true;
   _markField('add-exp-date',   !expense_date); if (!expense_date) hasErr = true;
-  _markField('add-exp-title',  !title);        if (!title)       hasErr = true;
   _markField('add-exp-amount', amount <= 0);   if (amount <= 0)  hasErr = true;
   if (hasErr) { showToast('請填寫所有必填欄位', 'error'); return; }
   const btn = document.getElementById('add-exp-submit-btn');

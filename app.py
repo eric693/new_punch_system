@@ -10265,7 +10265,6 @@ def api_expense_admin_create():
     b = request.get_json(force=True)
     staff_id = b.get('staff_id')
     if not staff_id:           return jsonify({'error': '請選擇員工'}), 400
-    if not b.get('title','').strip(): return jsonify({'error': '請填寫標題'}), 400
     if not b.get('expense_date'):     return jsonify({'error': '請填寫費用日期'}), 400
     with get_db() as conn:
         row = conn.execute("""
@@ -10275,7 +10274,7 @@ def api_expense_admin_create():
                reimbursement_method, bank_name, bank_account, account_holder,
                expense_type, company)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (staff_id, b['title'].strip(), float(b.get('amount', 0)),
+        """, (staff_id, (b.get('title','').strip() or b.get('category','').strip() or '費用申請'), float(b.get('amount', 0)),
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(),
               b.get('document_id') or None,

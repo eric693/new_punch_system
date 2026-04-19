@@ -205,6 +205,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-holiday" onclick="showPage('holiday',event)">國定假日</a>
     <a href="#" class="nav-item"        id="nav-finance" onclick="showPage('finance',event)">財務管理</a>
     <a href="#" class="nav-item"        id="nav-expense-review" onclick="showPage('expense-review',event)">費用審核<span class="nav-badge" id="badge-expense-review" style="display:none"></span></a>
+    <a href="#" class="nav-item"        id="nav-worklog" onclick="showPage('worklog',event)">工作日誌</a>
     <a href="#" class="nav-item"        id="nav-perf" onclick="showPage('perf',event)">績效考核</a>
     <a href="#" class="nav-item"        id="nav-stores"   onclick="showPage('stores',event)">門市管理</a>
     <a href="#" class="nav-item"        id="nav-training" onclick="showPage('training',event)">教育訓練</a>
@@ -2049,6 +2050,29 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div>
 
+  <!-- ── 工作日誌 ── -->
+  <div class="page" id="page-worklog" style="display:none">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
+      <select class="filter-input" id="wla-staff" style="width:160px" onchange="loadAdminWorklog()">
+        <option value="">全部員工</option>
+      </select>
+      <input type="month" class="filter-input" id="wla-month" onchange="loadAdminWorklog()" style="width:148px">
+      <button class="btn btn-outline btn-sm" onclick="loadAdminWorklog()">重新整理</button>
+    </div>
+    <div id="wla-calendar"></div>
+  </div>
+
+  <!-- 工作日誌 日期詳情 Modal -->
+  <div class="modal-overlay" id="wla-day-modal" style="display:none">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <span class="modal-title" id="wla-day-title">工作日誌</span>
+        <button class="modal-close" onclick="document.getElementById('wla-day-modal').style.display='none'">&times;</button>
+      </div>
+      <div class="modal-body" id="wla-day-body" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <!-- ── 績效考核 ── -->
   <div class="page" id="page-perf" style="display:none">
     <div class="inv-tab-bar" id="perf-tab-bar">
@@ -3448,6 +3472,7 @@ const ALL_MODULES = [
   { key:'holiday',        label:'國定假日' },
   { key:'finance',        label:'財務管理' },
   { key:'expense-review', label:'費用審核' },
+  { key:'worklog',        label:'工作日誌' },
   { key:'perf',           label:'績效考核' },
   { key:'stores',         label:'門市管理' },
   { key:'training',       label:'教育訓練' },
@@ -4284,7 +4309,7 @@ function closeSidebar() {
 function showPage(page, e) {
   if (e) e.preventDefault();
   // 權限檢查（儀表板和帳號管理不受模組限制）
-  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation' };
+  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation', worklog:'worklog' };
   if (moduleGuard[page] && !hasModule(moduleGuard[page])) {
     showToast('您沒有此功能的存取權限', 'error'); return;
   }
@@ -4293,10 +4318,10 @@ function showPage(page, e) {
   const navEl = document.getElementById('nav-' + page);
   if (navEl) navEl.classList.add('active');
   setTimeout(refreshBadges, 600);
-  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','perf','stores','training','quotation'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','worklog','perf','stores','training','quotation'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
-  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
+  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
   document.getElementById('page-title').textContent = titles[page] || page;
   if (page === 'dash')            initDash();
   if (page === 'punch')           initPunch();
@@ -4308,6 +4333,7 @@ function showPage(page, e) {
   if (page === 'finance')         initFinance();
   if (page === 'adminmgr')        loadAdminAccounts();
   if (page === 'expense-review')  loadExpenseReview();
+  if (page === 'worklog')         initAdminWorklog();
   if (page === 'perf')            initPerf();
   if (page === 'stores')          loadStores();
   if (page === 'training')        initTraining();
@@ -7173,7 +7199,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (nameEl && ADMIN_DISPLAY_NAME) nameEl.textContent = ADMIN_DISPLAY_NAME;
 
   // 依權限顯示/隱藏導覽項目
-  const moduleKeys = ['punch','sched','leave','salary','ann','holiday','finance','expense-review','perf','stores','training'];
+  const moduleKeys = ['punch','sched','leave','salary','ann','holiday','finance','expense-review','worklog','perf','stores','training'];
   moduleKeys.forEach(m => {
     const el = document.getElementById('nav-' + m);
     if (el && !hasModule(m)) el.style.display = 'none';
@@ -11386,6 +11412,122 @@ function exportRevenueDetail() {
   if (status) params.set('status', status);
 
   window.open(`/api/revenue/export?${params.toString()}`, '_blank');
+}
+
+/* ── 工作日誌（後台）────────────────────────────────────── */
+let _wlaLogs = [];   // raw rows from API
+
+async function initAdminWorklog() {
+  // 初次進入：載入員工清單 + 設定本月
+  const sel = document.getElementById('wla-staff');
+  if (sel.options.length <= 1) {
+    try {
+      const {ok, data} = await api('/api/punch/staff', {}, true);
+      if (ok && Array.isArray(data)) {
+        data.filter(s => s.active !== false).forEach(s => {
+          const o = document.createElement('option');
+          o.value = s.id; o.textContent = `${s.name}（${s.employee_code||''}）`;
+          sel.appendChild(o);
+        });
+      }
+    } catch(e) {}
+  }
+  const picker = document.getElementById('wla-month');
+  if (!picker.value) {
+    const n = new Date();
+    picker.value = n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0');
+  }
+  loadAdminWorklog();
+}
+
+async function loadAdminWorklog() {
+  const month   = document.getElementById('wla-month').value;
+  const staffId = document.getElementById('wla-staff').value;
+  const cal     = document.getElementById('wla-calendar');
+  if (!month) { cal.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">請選擇月份</div>'; return; }
+  cal.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">載入中...</div>';
+  const qs = '?month=' + month + (staffId ? '&staff_id=' + staffId : '') + '&_=' + Date.now();
+  const {ok, data} = await api('/api/admin/work-logs' + qs, {}, true);
+  if (!ok) { cal.innerHTML = '<div style="color:var(--red);font-size:13px;padding:20px">載入失敗</div>'; return; }
+  _wlaLogs = Array.isArray(data) ? data : [];
+  renderAdminWlCalendar(month);
+}
+
+function renderAdminWlCalendar(month) {
+  const [y, m]      = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstDow    = new Date(y, m-1, 1).getDay();
+  const todayStr    = new Date().toISOString().slice(0,10);
+  const DOW         = ['日','一','二','三','四','五','六'];
+
+  // group logs by date
+  const byDate = {};
+  _wlaLogs.forEach(r => {
+    if (!byDate[r.log_date]) byDate[r.log_date] = [];
+    byDate[r.log_date].push(r);
+  });
+
+  let html = `<div style="background:#fff;border-radius:12px;border:1.5px solid var(--border);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)">`;
+  // week header
+  html += `<div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--navy-mid)">`;
+  DOW.forEach(d => html += `<div style="text-align:center;padding:10px 0;font-size:12px;font-weight:700;color:rgba(255,255,255,.8)">${d}</div>`);
+  html += `</div>`;
+  // days
+  html += `<div style="display:grid;grid-template-columns:repeat(7,1fr)">`;
+  for (let i = 0; i < firstDow; i++) html += `<div style="min-height:90px;border:1px solid #f0f2f7"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds   = month + '-' + String(d).padStart(2,'0');
+    const dow  = (firstDow + d - 1) % 7;
+    const rows = byDate[ds] || [];
+    const isToday = ds === todayStr;
+    const dayColor = dow===0?'var(--red)':dow===6?'var(--accent)':'var(--navy)';
+    html += `<div onclick="${rows.length?`openWlaDayModal('${ds}')`:'void 0'}"
+      style="min-height:90px;border:1px solid #f0f2f7;padding:8px;cursor:${rows.length?'pointer':'default'};
+             background:${isToday?'#eef3fd':rows.length?'#f6fff8':'#fff'};transition:background .1s;vertical-align:top"
+      onmouseover="if(${rows.length>0})this.style.background='${isToday?'#dce8fb':'#ecfaf0'}'"
+      onmouseout="this.style.background='${isToday?'#eef3fd':rows.length?'#f6fff8':'#fff'}'">
+      <div style="font-size:12px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--accent)':dayColor};margin-bottom:4px">${d}</div>
+      ${rows.map(r => `
+        <div style="background:${stringToColor(r.staff_name)};color:#fff;border-radius:4px;padding:2px 5px;margin-bottom:2px;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escHtml(r.staff_name)}: ${escHtml(r.content)}">${escHtml(r.staff_name)}</div>
+      `).join('')}
+    </div>`;
+  }
+  html += `</div>`;
+  // summary bar
+  html += `<div style="padding:12px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:flex;gap:16px">
+    <span>本月共 <strong style="color:var(--navy)">${_wlaLogs.length}</strong> 筆日誌</span>
+    <span>涉及 <strong style="color:var(--navy)">${new Set(_wlaLogs.map(r=>r.staff_id)).size}</strong> 位員工</span>
+  </div>`;
+  html += `</div>`;
+  document.getElementById('wla-calendar').innerHTML = html;
+}
+
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const colors = ['#4a7bda','#2ecc71','#e67e22','#9b59b6','#e74c3c','#1abc9c','#f39c12','#3498db'];
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function openWlaDayModal(dateStr) {
+  const [y,m,d] = dateStr.split('-');
+  const DOW_ZH = ['日','一','二','三','四','五','六'];
+  const dow = DOW_ZH[new Date(dateStr).getDay()];
+  document.getElementById('wla-day-title').textContent = `${y}年${parseInt(m)}月${parseInt(d)}日（週${dow}）工作日誌`;
+  const rows = _wlaLogs.filter(r => r.log_date === dateStr);
+  document.getElementById('wla-day-body').innerHTML = rows.length ? rows.map(r => `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="width:32px;height:32px;border-radius:50%;background:${stringToColor(r.staff_name)};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0">${escHtml(r.staff_name.charAt(0))}</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--navy)">${escHtml(r.staff_name)}</div>
+          <div style="font-size:11px;color:var(--muted)">${r.employee_code||''}</div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:#333;line-height:1.7;white-space:pre-wrap">${escHtml(r.content)}</div>
+    </div>
+  `).join('') : '<div style="text-align:center;color:var(--muted);padding:20px">無日誌記錄</div>';
+  document.getElementById('wla-day-modal').style.display = 'flex';
 }
 </script>
 </html>

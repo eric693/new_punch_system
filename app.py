@@ -12908,3 +12908,85 @@ def api_quotation_export():
     return Response(buf.read(),
                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     headers={'Content-Disposition': f'attachment; filename={fname}'})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 工作日誌模組
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _init_work_logs_db():
+    with get_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS work_logs (
+                id         SERIAL PRIMARY KEY,
+                staff_id   INT NOT NULL REFERENCES punch_staff(id) ON DELETE CASCADE,
+                log_date   DATE NOT NULL,
+                content    TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(staff_id, log_date)
+            )
+        """)
+
+_init_work_logs_db()
+
+
+@app.route('/api/work-logs', methods=['GET'])
+def api_work_logs_my():
+    sid = session.get('punch_staff_id')
+    if not sid:
+        return jsonify({'error': '請先登入'}), 401
+    month = request.args.get('month', '')
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT log_date::text, content, updated_at::text
+            FROM work_logs
+            WHERE staff_id=%s AND to_char(log_date,'YYYY-MM')=%s
+            ORDER BY log_date
+        """, (sid, month)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/work-logs', methods=['POST'])
+def api_work_logs_save():
+    sid = session.get('punch_staff_id')
+    if not sid:
+        return jsonify({'error': '請先登入'}), 401
+    b = request.get_json(force=True)
+    log_date = b.get('log_date', '').strip()
+    content  = b.get('content', '').strip()
+    if not log_date:
+        return jsonify({'error': '日期必填'}), 400
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO work_logs (staff_id, log_date, content)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (staff_id, log_date)
+            DO UPDATE SET content=EXCLUDED.content, updated_at=NOW()
+            RETURNING log_date::text, content, updated_at::text
+        """, (sid, log_date, content)).fetchone()
+    return jsonify(dict(row)), 200
+
+
+@app.route('/api/admin/work-logs', methods=['GET'])
+@login_required
+def api_admin_work_logs():
+    month    = request.args.get('month', '')
+    staff_id = request.args.get('staff_id', '')
+    if not month:
+        return jsonify([])
+    conds  = ["to_char(w.log_date,'YYYY-MM')=%s"]
+    params = [month]
+    if staff_id:
+        conds.append("w.staff_id=%s")
+        params.append(int(staff_id))
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT w.id, w.staff_id, s.name AS staff_name, s.employee_code,
+                   w.log_date::text, w.content, w.updated_at::text
+            FROM work_logs w
+            JOIN punch_staff s ON s.id=w.staff_id
+            WHERE {' AND '.join(conds)}
+            ORDER BY w.log_date, s.name
+        """, params).fetchall()
+    return jsonify([dict(r) for r in rows])

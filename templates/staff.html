@@ -188,6 +188,7 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
         <button class="tab"        id="tab-attendance"    onclick="switchTab('attendance')">出勤月曆</button>
         <button class="tab"        id="tab-payslip"       onclick="switchTab('payslip')">薪資單</button>
         <button class="tab"        id="tab-expense"       onclick="switchTab('expense')" style="position:relative">費用報帳<span id="expense-badge" style="display:none;position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center"></span></button>
+        <button class="tab"        id="tab-worklog"       onclick="switchTab('worklog')">工作日誌</button>
         <button class="tab"        id="tab-myperf"        onclick="switchTab('myperf')">我的考核</button>
         <button class="tab"        id="tab-biodev"        onclick="switchTab('biodev')">安全裝置</button>
       </div>
@@ -400,6 +401,25 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
         <div id="att-calendar"></div>
       </div>
 
+      <!-- 工作日誌 tab -->
+      <div id="panel-worklog" class="tab-body" style="display:none">
+        <div class="month-row" style="margin-bottom:14px">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">月份</span>
+          <input type="month" class="month-inp" id="wl-month-picker" onchange="loadWorklogCalendar()">
+        </div>
+        <div id="wl-calendar" style="margin-bottom:16px"></div>
+        <!-- 編輯區 -->
+        <div id="wl-editor" style="display:none;background:#fff;border-radius:12px;border:1.5px solid var(--border);padding:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span id="wl-editor-date" style="font-size:14px;font-weight:700;color:var(--navy)"></span>
+            <button onclick="closeWlEditor()" style="border:none;background:none;font-size:18px;color:var(--muted);cursor:pointer">✕</button>
+          </div>
+          <textarea id="wl-content" placeholder="記錄今天的工作內容…" rows="6"
+            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'Noto Sans TC',sans-serif;font-size:13px;line-height:1.7;resize:vertical;box-sizing:border-box;outline:none"></textarea>
+          <button onclick="saveWorklog()" style="margin-top:10px;width:100%;padding:11px;border:none;border-radius:8px;background:var(--navy);color:#fff;font-family:'Noto Sans TC',sans-serif;font-size:14px;font-weight:700;cursor:pointer">儲存</button>
+        </div>
+      </div>
+
       <!-- 我的考核 tab -->
       <div id="panel-myperf" class="tab-body" style="display:none">
         <div id="myperf-list">
@@ -570,7 +590,7 @@ function showMain(){
   switchTab('punch');
 }
 function switchTab(tab){
-  ['ann','punch','sched','leave','schedule-view','overtime','attendance','payslip','expense','myperf','biodev'].forEach(t=>{
+  ['ann','punch','sched','leave','schedule-view','overtime','attendance','payslip','expense','worklog','myperf','biodev'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('panel-'+t).style.display=t===tab?'':'none';
   });
@@ -583,6 +603,7 @@ function switchTab(tab){
   if(tab==='attendance')initAttendanceTab();
   if(tab==='payslip')initPayslipTab();
   if(tab==='expense')initExpenseTab();
+  if(tab==='worklog')initWorklogTab();
   if(tab==='myperf')loadMyPerf();
   if(tab==='biodev')initBiodevTab();
 }
@@ -2373,6 +2394,113 @@ async function deleteBioCred(credId){
 
 function escHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── 工作日誌 ─────────────────────────────────────────────── */
+let _wlLogs = {};   // { 'YYYY-MM-DD': content }
+let _wlEditDate = null;
+
+function initWorklogTab() {
+  const picker = document.getElementById('wl-month-picker');
+  if (!picker.value) {
+    const n = new Date();
+    picker.value = n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0');
+  }
+  loadWorklogCalendar();
+}
+
+async function loadWorklogCalendar() {
+  const month = document.getElementById('wl-month-picker').value;
+  if (!month) return;
+  const cal = document.getElementById('wl-calendar');
+  cal.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">載入中...</div>';
+  closeWlEditor();
+  try {
+    const res  = await fetch('/api/work-logs?month=' + month + '&_=' + Date.now());
+    const rows = await res.json();
+    _wlLogs = {};
+    if (Array.isArray(rows)) rows.forEach(r => { _wlLogs[r.log_date] = r.content; });
+  } catch(e) {
+    cal.innerHTML = '<div style="text-align:center;color:var(--red);font-size:13px;padding:20px">載入失敗</div>';
+    return;
+  }
+  renderWlCalendar(month);
+}
+
+function renderWlCalendar(month) {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstDow    = new Date(y, m-1, 1).getDay(); // 0=Sun
+  const todayStr    = new Date().toISOString().slice(0,10);
+  const DOW = ['日','一','二','三','四','五','六'];
+
+  let html = `<div style="background:#fff;border-radius:12px;border:1.5px solid var(--border);overflow:hidden">`;
+  // header row
+  html += `<div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--navy)">`;
+  DOW.forEach(d => html += `<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:rgba(255,255,255,.75)">${d}</div>`);
+  html += `</div>`;
+  // days grid
+  html += `<div style="display:grid;grid-template-columns:repeat(7,1fr)">`;
+  for (let i = 0; i < firstDow; i++) html += `<div style="min-height:56px;border:1px solid #f0f2f7"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds  = month + '-' + String(d).padStart(2,'0');
+    const dow = (firstDow + d - 1) % 7;
+    const hasLog = !!_wlLogs[ds];
+    const isToday = ds === todayStr;
+    const isFuture = ds > todayStr;
+    const dayColor = dow === 0 ? 'var(--red)' : dow === 6 ? 'var(--accent)' : 'var(--navy)';
+    html += `<div onclick="${isFuture ? '' : `openWlEditor('${ds}')`}"
+      style="min-height:56px;border:1px solid #f0f2f7;padding:6px 8px;cursor:${isFuture?'default':'pointer'};
+             background:${isToday?'#eef3fd':hasLog?'#f6fff8':'#fff'};
+             transition:background .1s;position:relative"
+      onmouseover="if(!${isFuture})this.style.background='${isToday?'#dce8fb':hasLog?'#ecfaf0':'#f8f9ff'}'"
+      onmouseout="this.style.background='${isToday?'#eef3fd':hasLog?'#f6fff8':'#fff'}'">
+      <div style="font-size:12px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--accent)':dayColor}">${d}</div>
+      ${hasLog ? `<div style="margin-top:3px;font-size:10px;color:var(--green);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escHtml(_wlLogs[ds])}</div>` : ''}
+      ${isToday && !hasLog ? `<div style="margin-top:4px;font-size:9px;color:var(--accent);font-weight:600">今天</div>` : ''}
+    </div>`;
+  }
+  html += `</div></div>`;
+  document.getElementById('wl-calendar').innerHTML = html;
+}
+
+function openWlEditor(dateStr) {
+  _wlEditDate = dateStr;
+  const [y,m,d] = dateStr.split('-');
+  const DOW_ZH = ['日','一','二','三','四','五','六'];
+  const dow = DOW_ZH[new Date(dateStr).getDay()];
+  document.getElementById('wl-editor-date').textContent = `${y}年${parseInt(m)}月${parseInt(d)}日（週${dow}）`;
+  document.getElementById('wl-content').value = _wlLogs[dateStr] || '';
+  document.getElementById('wl-editor').style.display = '';
+  document.getElementById('wl-content').focus();
+}
+
+function closeWlEditor() {
+  _wlEditDate = null;
+  document.getElementById('wl-editor').style.display = 'none';
+}
+
+async function saveWorklog() {
+  if (!_wlEditDate) return;
+  const content = document.getElementById('wl-content').value.trim();
+  const btn = document.querySelector('#wl-editor button:last-child');
+  btn.disabled = true; btn.textContent = '儲存中…';
+  try {
+    const res = await fetch('/api/work-logs', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ log_date: _wlEditDate, content })
+    });
+    if (!res.ok) throw new Error('儲存失敗');
+    _wlLogs[_wlEditDate] = content;
+    const month = document.getElementById('wl-month-picker').value;
+    renderWlCalendar(month);
+    closeWlEditor();
+  } catch(e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '儲存';
+  }
 }
 </script>
 </body>

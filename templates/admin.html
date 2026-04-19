@@ -1856,6 +1856,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </select>
       <button class="btn btn-outline btn-sm" onclick="loadExpenseReview()">重新整理</button>
       <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">+ 新增費用申請</button>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -1870,6 +1871,43 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
     </div>
   </div><!-- end page-expense-review -->
+
+  <!-- ── 新增費用申請 Modal ── -->
+  <div id="modal-add-expense" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
+    <div class="card" style="width:min(480px,94vw);max-height:90vh;overflow-y:auto;padding:24px;position:relative">
+      <h3 style="margin:0 0 18px;font-size:16px">新增費用申請</h3>
+      <div style="margin-bottom:12px">
+        <div class="fl">申請員工</div>
+        <select class="fi" id="add-exp-staff" style="margin-bottom:8px"><option value="">載入中...</option></select>
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="fl">費用日期</div>
+        <input class="fi" type="date" id="add-exp-date" style="margin-bottom:8px">
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="fl">費用類型</div>
+        <select class="fi" id="add-exp-category" style="margin-bottom:8px">
+          <option value="餐費">餐費</option>
+          <option value="交通費">交通費</option>
+          <option value="住宿費">住宿費</option>
+          <option value="辦公用品">辦公用品</option>
+          <option value="其他">其他</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="fl">金額（元）</div>
+        <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0" style="margin-bottom:8px">
+      </div>
+      <div style="margin-bottom:18px">
+        <div class="fl">說明</div>
+        <input class="fi" type="text" id="add-exp-note" placeholder="費用說明（選填）" style="margin-bottom:8px">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="closeAddExpenseModal()">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="submitAdminExpense()">送出</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── 績效考核 ── -->
   <div class="page" id="page-perf" style="display:none">
@@ -8672,6 +8710,48 @@ async function deleteAdminAcc(id, name) {
 }
 
 // ── 費用審核模組 ───────────────────────────────────────────────
+async function openAddExpenseModal() {
+  const modal = document.getElementById('modal-add-expense');
+  modal.style.display = 'flex';
+  // 今天日期
+  document.getElementById('add-exp-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('add-exp-amount').value = '';
+  document.getElementById('add-exp-note').value = '';
+  // 載入員工清單
+  const sel = document.getElementById('add-exp-staff');
+  if (sel.options.length <= 1) {
+    const {ok, data} = await api('/api/punch/staff', {}, true);
+    if (ok && Array.isArray(data)) {
+      sel.innerHTML = data.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.employee_code||'')})</option>`).join('');
+    }
+  }
+}
+
+function closeAddExpenseModal() {
+  document.getElementById('modal-add-expense').style.display = 'none';
+}
+
+async function submitAdminExpense() {
+  const staff_id = document.getElementById('add-exp-staff').value;
+  const expense_date = document.getElementById('add-exp-date').value;
+  const category = document.getElementById('add-exp-category').value;
+  const amount = parseFloat(document.getElementById('add-exp-amount').value) || 0;
+  const note = document.getElementById('add-exp-note').value.trim();
+  if (!staff_id) { showToast('請選擇員工', 'error'); return; }
+  if (!expense_date) { showToast('請填寫費用日期', 'error'); return; }
+  if (amount <= 0) { showToast('請填寫金額', 'error'); return; }
+  const {ok} = await api('/api/expense/claims/admin-create', {
+    method: 'POST',
+    body: JSON.stringify({ staff_id: parseInt(staff_id), expense_date, category, amount, note, title: category })
+  });
+  if (!ok) { showToast('新增失敗', 'error'); return; }
+  showToast('已新增費用申請', 'success');
+  closeAddExpenseModal();
+  // 切換到全部，讓使用者看到新筆資料
+  document.getElementById('exp-review-status').value = '';
+  loadExpenseReview();
+}
+
 async function loadExpenseReview() {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const tbody = document.getElementById('exp-review-tbody');

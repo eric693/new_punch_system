@@ -10046,6 +10046,26 @@ def api_expense_ocr():
 
 # ── Admin endpoints ─────────────────────────────────────────────
 
+@app.route('/api/expense/claims/admin-create', methods=['POST'])
+@login_required
+def api_expense_admin_create():
+    """管理員代員工新增費用申請"""
+    b = request.get_json(force=True)
+    staff_id = b.get('staff_id')
+    if not staff_id:           return jsonify({'error': '請選擇員工'}), 400
+    if not b.get('title','').strip(): return jsonify({'error': '請填寫標題'}), 400
+    if not b.get('expense_date'):     return jsonify({'error': '請填寫費用日期'}), 400
+    with get_db() as conn:
+        row = conn.execute("""
+            INSERT INTO expense_claims
+              (staff_id, title, amount, expense_date, category, note)
+            VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (staff_id, b['title'].strip(), float(b.get('amount', 0)),
+              b['expense_date'], b.get('category','').strip(),
+              b.get('note','').strip())).fetchone()
+    return jsonify(_expense_row(row)), 201
+
+
 @app.route('/api/expense/claims', methods=['GET'])
 @login_required
 def api_expense_admin_list():

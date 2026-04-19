@@ -1364,12 +1364,12 @@ def api_attendance_monthly_stats():
 
         # 班別指派（用於遲到判斷）
         shift_rows = conn.execute("""
-            SELECT sa.staff_id, sa.date, st.start_time, st.end_time
+            SELECT sa.staff_id, sa.shift_date, st.start_time, st.end_time
             FROM shift_assignments sa
             JOIN shift_types st ON st.id = sa.shift_type_id
-            WHERE TO_CHAR(sa.date,'YYYY-MM') = %s
+            WHERE TO_CHAR(sa.shift_date,'YYYY-MM') = %s
         """, (month,)).fetchall()
-        shift_map = {(r['staff_id'], str(r['date'])): r for r in shift_rows}
+        shift_map = {(r['staff_id'], str(r['shift_date'])): r for r in shift_rows}
 
     # 建立 (staff_id, date_str) → row_dict，並合併跨日班次
     day_map = {}
@@ -6952,7 +6952,7 @@ def api_dashboard_leave_distribution():
         rows = conn.execute("""
             SELECT lt.name, lt.color,
                    COUNT(*) as cnt,
-                   COALESCE(SUM(lr.days), 0) as days
+                   COALESCE(SUM(lr.total_days), 0) as days
             FROM leave_requests lr
             JOIN leave_types lt ON lt.id=lr.leave_type_id
             WHERE lr.status='approved'
@@ -7914,12 +7914,12 @@ def api_attendance_anomalies():
 
         # 取得班別指派（用於遲到／早退判斷）
         shift_rows = conn.execute("""
-            SELECT sa.staff_id, sa.date, st.start_time, st.end_time, st.name as shift_name
+            SELECT sa.staff_id, sa.shift_date, st.start_time, st.end_time, st.name as shift_name
             FROM shift_assignments sa
             JOIN shift_types st ON st.id = sa.shift_type_id
-            WHERE sa.date BETWEEN %s AND %s
+            WHERE sa.shift_date BETWEEN %s AND %s
         """, (date_from, today)).fetchall()
-        shift_map = {(r['staff_id'], str(r['date'])): r for r in shift_rows}
+        shift_map = {(r['staff_id'], str(r['shift_date'])): r for r in shift_rows}
 
         # 今日應出勤但未出勤（排除請假）
         all_staff = conn.execute(
@@ -11435,7 +11435,7 @@ def mobile_leave_list():
     with get_db() as conn:
         rows = conn.execute(
             """SELECT lr.id, lt.name AS leave_type, lr.start_date, lr.end_date,
-                      lr.days, lr.reason, lr.status, lr.created_at
+                      lr.total_days AS days, lr.reason, lr.status, lr.created_at
                FROM leave_requests lr
                JOIN leave_types lt ON lr.leave_type_id = lt.id
                WHERE lr.staff_id=%s ORDER BY lr.created_at DESC LIMIT 50""",
@@ -11668,7 +11668,7 @@ def mobile_admin_leaves():
     with get_db() as conn:
         rows = conn.execute(
             """SELECT lr.id, ps.name AS staff_name, lt.name AS leave_type,
-                      lr.start_date, lr.end_date, lr.days, lr.reason, lr.status, lr.created_at
+                      lr.start_date, lr.end_date, lr.total_days AS days, lr.reason, lr.status, lr.created_at
                FROM leave_requests lr
                JOIN punch_staff ps ON lr.staff_id = ps.id
                JOIN leave_types lt ON lr.leave_type_id = lt.id

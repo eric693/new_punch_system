@@ -1896,6 +1896,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     .exp-field label { display:block;font-size:11px;font-weight:600;color:#8892a4;letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px }
     .exp-field label .req { color:#d64242;margin-left:2px;vertical-align:middle }
     .exp-field .fi { margin:0;width:100%;box-sizing:border-box }
+    .exp-field .fi.exp-invalid { border-color:#d64242 !important;box-shadow:0 0 0 2px rgba(214,66,66,.18) }
+    .exp-field .exp-err-msg { display:none;font-size:11px;color:#d64242;margin-top:4px }
+    .exp-field .fi.exp-invalid ~ .exp-err-msg { display:block }
     .exp-divider { height:1px;background:#edf0f7;margin:4px 0 22px }
     .exp-upload { border:2px dashed #dde3ef;border-radius:12px;padding:20px 12px;text-align:center;cursor:pointer;background:#f8f9fc;min-height:108px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,background .15s }
     .exp-upload:hover { border-color:#4a7bda;background:#f0f4fc }
@@ -1928,10 +1931,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <div class="exp-field">
               <label>申請員工 <span class="req">*</span></label>
               <select class="fi" id="add-exp-staff"><option value="">— 選擇員工 —</option></select>
+              <span class="exp-err-msg">此欄位為必填</span>
             </div>
             <div class="exp-field">
               <label>費用日期 <span class="req">*</span></label>
               <input class="fi" type="date" id="add-exp-date">
+              <span class="exp-err-msg">此欄位為必填</span>
             </div>
           </div>
 
@@ -1953,6 +1958,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <div class="exp-field">
               <label>費用名目 <span class="req">*</span></label>
               <input class="fi" type="text" id="add-exp-title" placeholder="如：5月健保、裝修工程追加款…">
+              <span class="exp-err-msg">此欄位為必填</span>
             </div>
           </div>
 
@@ -1964,6 +1970,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <div class="exp-field">
               <label>費用金額（元）<span class="req">*</span></label>
               <input class="fi" type="number" id="add-exp-amount" placeholder="0" min="0">
+              <span class="exp-err-msg">此欄位為必填</span>
             </div>
           </div>
 
@@ -8976,6 +8983,13 @@ async function openAddExpenseModal() {
   switchExpenseType('支出'); // 初始化費用性質 + 類別清單 + bank section
   _resetAdminExpensePhoto(1);
   _resetAdminExpensePhoto(2);
+  ['add-exp-staff','add-exp-date','add-exp-title','add-exp-amount'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.remove('exp-invalid');
+      el.oninput = el.onchange = () => el.classList.remove('exp-invalid');
+    }
+  });
   await _loadExpenseStaff();
 }
 
@@ -8994,10 +9008,17 @@ async function submitAdminExpense() {
   const bank_name            = document.getElementById('add-exp-bank-name').value.trim();
   const account_holder       = document.getElementById('add-exp-account-holder').value.trim();
   const bank_account         = document.getElementById('add-exp-bank-account').value.trim();
-  if (!staff_id)    { showToast('請選擇員工', 'error');   return; }
-  if (!expense_date){ showToast('請填寫費用日期', 'error'); return; }
-  if (!title)       { showToast('請填寫費用名目', 'error'); return; }
-  if (amount <= 0)  { showToast('請填寫費用金額', 'error'); return; }
+  let hasErr = false;
+  function _markField(id, bad) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('exp-invalid', bad);
+  }
+  _markField('add-exp-staff',  !staff_id);    if (!staff_id)    hasErr = true;
+  _markField('add-exp-date',   !expense_date); if (!expense_date) hasErr = true;
+  _markField('add-exp-title',  !title);        if (!title)       hasErr = true;
+  _markField('add-exp-amount', amount <= 0);   if (amount <= 0)  hasErr = true;
+  if (hasErr) { showToast('請填寫所有必填欄位', 'error'); return; }
   const btn = document.getElementById('add-exp-submit-btn');
   btn.disabled = true;
   btn.textContent = '送出中…';

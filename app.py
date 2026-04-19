@@ -8461,7 +8461,8 @@ def api_finance_record_delete(rid):
 def api_finance_summary(year, month):
     period  = f"{year}-{month.zfill(2)}"
     company = request.args.get('company', '')
-    c_cond  = "AND company_unit=%s" if company else ""
+    c_cond     = "AND company_unit=%s" if company else ""
+    c_cond_fr  = "AND fr.company_unit=%s" if company else ""
     c_param = [company] if company else []
 
     with get_db() as conn:
@@ -8478,7 +8479,7 @@ def api_finance_summary(year, month):
             SELECT fc.name, fc.color, fr.type, COALESCE(SUM(fr.amount),0) as total
             FROM finance_records fr
             LEFT JOIN finance_categories fc ON fc.id=fr.category_id
-            WHERE to_char(fr.record_date,'YYYY-MM')=%s {c_cond}
+            WHERE to_char(fr.record_date,'YYYY-MM')=%s {c_cond_fr}
             GROUP BY fc.name, fc.color, fr.type
             ORDER BY total DESC
         """, [period] + c_param).fetchall()

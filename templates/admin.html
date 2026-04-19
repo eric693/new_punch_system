@@ -8891,8 +8891,8 @@ async function _loadExpenseStaff() {
   }
   sel.innerHTML = '<option value="">載入中...</option>';
   const { ok, data } = await api('/api/punch/staff', {}, false);
-  if (ok && Array.isArray(data)) {
-    _expenseStaffCache = data.filter(s => s.active);
+  if (ok && Array.isArray(data) && data.length > 0) {
+    _expenseStaffCache = data.filter(s => s.active !== false);
     _fillStaffSelect(_expenseStaffCache);
   } else {
     sel.innerHTML = '<option value="">— 選擇員工 —</option>';

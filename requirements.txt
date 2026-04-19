@@ -1,7 +1,7 @@
 flask==3.0.3
 line-bot-sdk==3.11.0
 gunicorn==22.0.0
-psycopg[binary]
+psycopg[binary,pool]
 Pillow>=10.0.0
 anthropic>=0.86.0
 openpyxl>=3.1.0

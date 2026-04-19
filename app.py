@@ -11,6 +11,8 @@ from functools import wraps
 
 import psycopg
 from psycopg.rows import dict_row
+from contextlib import contextmanager
+from psycopg_pool import ConnectionPool
 from flask import (
     Flask, request, jsonify, render_template,
     session, redirect, url_for, abort
@@ -47,8 +49,31 @@ WEEKDAY_ZH = ['一', '二', '三', '四', '五', '六', '日']
 
 # ─── PostgreSQL ───────────────────────────────────────────────────────────────
 
+_db_pool: 'ConnectionPool | None' = None
+
+def _init_db_pool():
+    global _db_pool
+    if DATABASE_URL and _db_pool is None:
+        try:
+            _db_pool = ConnectionPool(
+                DATABASE_URL,
+                min_size=1,
+                max_size=10,
+                kwargs={'row_factory': dict_row},
+                open=True,
+            )
+            print("[pool] Connection pool initialized")
+        except Exception as e:
+            print(f"[pool] Failed to init pool: {e}")
+
+@contextmanager
 def get_db():
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    if _db_pool is not None:
+        with _db_pool.connection() as conn:
+            yield conn
+    else:
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+            yield conn
 
 def _hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -384,6 +409,7 @@ def init_db():
     print("[OK] Database initialised")
 
 
+_init_db_pool()
 init_db()
 
 # ─── Keep-Alive ───────────────────────────────────────────────────────────────
@@ -399,7 +425,7 @@ def keep_alive():
             )
         except Exception as e:
             print(f"[keep-alive] ping failed: {e}")
-        time.sleep(14 * 60)
+        time.sleep(9 * 60)
 
 threading.Thread(target=keep_alive, daemon=True).start()
 

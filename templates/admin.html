@@ -3448,12 +3448,23 @@ function hasModule(m) { return ADMIN_IS_SUPER || ADMIN_PERMS.includes(m); }
 // ── Unified API helper ────────────────────────────────────────
 // Returns { ok, data } — data.error is set on failure
 // Never throws; always shows toast on non-ok unless silent=true
+let _sessionExpired = false;   // 防止重複觸發 401 redirect
+
 async function api(url, opts = {}, silent = false) {
   try {
     const res  = await fetch(url, { headers: {'Content-Type':'application/json'}, ...opts });
     let data;
     try { data = await res.json(); } catch(e) { data = {}; }
     if (!res.ok) {
+      // 401 統一處理：只彈一次，3 秒後跳登入頁
+      if (res.status === 401) {
+        if (!_sessionExpired) {
+          _sessionExpired = true;
+          showToast('登入已過期，請重新登入', 'error');
+          setTimeout(() => { window.location.href = '/admin/login'; }, 2000);
+        }
+        return { ok: false, data, status: 401 };
+      }
       const msg = data.error || `請求失敗（HTTP ${res.status}）`;
       if (!silent) showToast(msg, 'error');
       return { ok: false, data, status: res.status };

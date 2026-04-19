@@ -26,6 +26,9 @@ from linebot.models import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.config['PERMANENT_SESSION_LIFETIME'] = __import__('datetime').timedelta(days=30)
+app.config['SESSION_COOKIE_HTTPONLY']    = True
+app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
 LINE_CHANNEL_SECRET       = os.environ.get('LINE_CHANNEL_SECRET', '')
@@ -551,6 +554,7 @@ def admin_login():
                 if isinstance(perms, str):
                     try: perms = _json.loads(perms)
                     except: perms = []
+                session.permanent             = True
                 session['logged_in']          = True
                 session['admin_id']           = row['id']
                 session['admin_username']     = row['username']
@@ -11999,6 +12003,7 @@ def webauthn_auth_complete():
             if isinstance(perms, str):
                 try: perms = _json3.loads(perms)
                 except: perms = []
+            session.permanent             = True
             session['logged_in']          = True
             session['admin_id']           = admin['id']
             session['admin_username']     = admin['username']

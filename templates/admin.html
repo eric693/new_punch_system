@@ -9063,11 +9063,11 @@ async function loadExpenseReview() {
   const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
   tbody.innerHTML = claims.map(c => `
     <tr>
-      <td>${esc(c.staff_name||'—')}</td>
+      <td>${escHtml(c.staff_name||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
-      <td>${esc(c.category)}</td>
+      <td>${escHtml(c.category)}</td>
       <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.note||'—')}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.note||'—')}</td>
       <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
       <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
       <td>

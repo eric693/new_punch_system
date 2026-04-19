@@ -9976,6 +9976,7 @@ def _init_expense_db():
             finance_record_id INT REFERENCES finance_records(id) ON DELETE SET NULL,
             created_at        TIMESTAMPTZ DEFAULT NOW()
         )""",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS document_id2 INT REFERENCES finance_documents(id) ON DELETE SET NULL",
     ]
     for sql in sqls:
         try:
@@ -10072,6 +10073,48 @@ def api_expense_ocr():
 
 # ── Admin endpoints ─────────────────────────────────────────────
 
+@app.route('/api/expense/admin-upload', methods=['POST'])
+@login_required
+def api_expense_admin_upload():
+    """管理員上傳費用附件（不做 OCR 自動填入，僅存檔回傳 document_id）"""
+    import base64 as _b64, re as _re3
+    file = request.files.get('file')
+    if not file: return jsonify({'error': '請上傳圖片'}), 400
+    media_type = file.content_type or 'image/jpeg'
+    if media_type not in ('image/jpeg','image/png','image/gif','image/webp'):
+        media_type = 'image/jpeg'
+    result = {}
+    raw = file.read()  # 一次讀完，後續共用
+    if ANTHROPIC_API_KEY:
+        try:
+            import anthropic as _ant
+            img_b64 = _b64.standard_b64encode(raw).decode()
+            client = _ant.Anthropic(api_key=ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model='claude-sonnet-4-6', max_tokens=256,
+                messages=[{'role':'user','content':[
+                    {'type':'image','source':{'type':'base64','media_type':media_type,'data':img_b64}},
+                    {'type':'text','text':'請辨識此收據或發票，以JSON格式回傳：{"date":"YYYY-MM-DD","vendor":"廠商","title":"建議標題","total_amount":數字,"doc_type":"receipt或invoice"}\n只回傳JSON。'}
+                ]}]
+            )
+            text = msg.content[0].text.strip()
+            text = _re3.sub(r'^```json\s*','',text,flags=_re3.MULTILINE)
+            text = _re3.sub(r'\s*```$','',text,flags=_re3.MULTILINE)
+            result = _json.loads(text)
+        except Exception:
+            pass
+    try:
+        with get_db() as conn:
+            doc = conn.execute("""
+                INSERT INTO finance_documents (filename, doc_type, ocr_raw)
+                VALUES (%s,%s,%s) RETURNING id
+            """, (file.filename, result.get('doc_type','receipt'), _json.dumps(result))).fetchone()
+        result['document_id'] = doc['id']
+    except Exception as e:
+        return jsonify({'error': f'儲存失敗：{e}'}), 500
+    return jsonify(result)
+
+
 @app.route('/api/expense/claims/admin-create', methods=['POST'])
 @login_required
 def api_expense_admin_create():
@@ -10084,11 +10127,13 @@ def api_expense_admin_create():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO expense_claims
-              (staff_id, title, amount, expense_date, category, note)
-            VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
+              (staff_id, title, amount, expense_date, category, note, document_id, document_id2)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (staff_id, b['title'].strip(), float(b.get('amount', 0)),
               b['expense_date'], b.get('category','').strip(),
-              b.get('note','').strip())).fetchone()
+              b.get('note','').strip(),
+              b.get('document_id') or None,
+              b.get('document_id2') or None)).fetchone()
     return jsonify(_expense_row(row)), 201
 
 

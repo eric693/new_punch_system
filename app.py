@@ -463,6 +463,7 @@ def _run_annual_leave_sync():
 
 def _annual_leave_sync_loop():
     import time as _time_sync
+    _time_sync.sleep(30)  # wait for module to finish loading before first sync
     # 啟動時立即執行一次
     _run_annual_leave_sync()
     while True:

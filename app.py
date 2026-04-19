@@ -64,6 +64,8 @@ def _init_db_pool():
                 max_size=10,
                 kwargs={'row_factory': dict_row},
                 open=True,
+                reconnect_timeout=30,
+                check=ConnectionPool.check_connection,
             )
             print("[pool] Connection pool initialized")
         except Exception as e:
@@ -72,8 +74,14 @@ def _init_db_pool():
 @contextmanager
 def get_db():
     if _db_pool is not None:
-        with _db_pool.connection() as conn:
-            yield conn
+        try:
+            with _db_pool.connection() as conn:
+                yield conn
+        except psycopg.OperationalError:
+            # stale/broken connection — get a fresh one
+            _db_pool.check()
+            with _db_pool.connection() as conn:
+                yield conn
     else:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
             yield conn

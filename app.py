@@ -4236,7 +4236,7 @@ def api_leave_attachment_get(rid):
     return Response(
         bytes(row['attachment']),
         mimetype=row['attachment_type'] or 'application/octet-stream',
-        headers={'Content-Disposition': f'inline; filename="{row["attachment_name"]}"'}
+        headers={'Content-Disposition': f'inline; filename="{os.path.basename(row["attachment_name"] or "attachment")}"'}
     )
 
 # ── Leave Balance ─────────────────────────────────────────────────
@@ -10128,6 +10128,8 @@ def _init_expense_db():
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS account_holder TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS expense_type TEXT NOT NULL DEFAULT '支出'",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS company TEXT NOT NULL DEFAULT '進光設計'",
+        "CREATE INDEX IF NOT EXISTS idx_expense_claims_staff_id ON expense_claims(staff_id)",
+        "CREATE INDEX IF NOT EXISTS idx_expense_claims_status ON expense_claims(status)",
     ]
     for sql in sqls:
         try:
@@ -10169,12 +10171,16 @@ def api_expense_submit():
     b = request.get_json(force=True)
     if not b.get('title','').strip():  return jsonify({'error': '請填寫標題'}), 400
     if not b.get('expense_date'):      return jsonify({'error': '請填寫費用日期'}), 400
+    try:
+        amount = float(b.get('amount', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': '金額格式錯誤'}), 400
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO expense_claims
               (staff_id, title, amount, expense_date, category, note, document_id, expense_type, company)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (sid, b['title'].strip(), float(b.get('amount', 0)),
+        """, (sid, b['title'].strip(), amount,
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(), b.get('document_id') or None,
               b.get('expense_type', '支出').strip(),

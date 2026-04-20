@@ -2070,10 +2070,20 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 let _expPhotoBase64 = null;
 let _expDocumentId  = null;
 
-const _STAFF_EXP_CATS = {
+let _STAFF_EXP_CATS = {
   '支出': ['廠商','雇員薪資','雇員獎金','固定營業費用','全民健康保險','勞工保險金','勞工退休金','稅務相關','政府相關','房租費用','建築師事務所','會計師事務所','律師事務所','客戶退款','雜支'],
   '收入': ['客變','設計','裝修工程','追加','退傭','介紹費','其它'],
 };
+async function fetchExpenseCategories() {
+  try {
+    const res = await fetch('/api/expense/categories');
+    if (res.ok) {
+      const data = await res.json();
+      if (data['支出'] && data['支出'].length) _STAFF_EXP_CATS['支出'] = data['支出'];
+      if (data['收入'] && data['收入'].length) _STAFF_EXP_CATS['收入'] = data['收入'];
+    }
+  } catch(e) {}
+}
 
 function staffSwitchExpType(type) {
   document.getElementById('exp-type').value = type;
@@ -2088,10 +2098,11 @@ function staffSwitchExpType(type) {
   sel.innerHTML = (_STAFF_EXP_CATS[type] || []).map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
-function initExpenseTab() {
+async function initExpenseTab() {
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('exp-date').value = today;
-  staffSwitchExpType('支出'); // 初始化類別
+  await fetchExpenseCategories();
+  staffSwitchExpType('支出');
   loadMyExpenses();
 }
 

@@ -1214,6 +1214,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab"        id="fintab-payroll"   onclick="switchFinTab('payroll')">薪資連動</button>
       <button class="inv-tab"        id="fintab-stmts"     onclick="switchFinTab('stmts')">財務報表</button>
       <button class="inv-tab"        id="fintab-settings"  onclick="switchFinTab('settings')">財務設定</button>
+      <button class="inv-tab"        id="fintab-deptcats"  onclick="switchFinTab('deptcats')">部門類別</button>
     </div>
 
     <!-- 損益儀表板 -->
@@ -1699,7 +1700,81 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
     </div>
+    <!-- 部門類別設定 -->
+    <div id="fin-panel-deptcats" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span style="font-size:13px;color:var(--muted)">依部門設定員工可見的支出／收入類別。未特別設定的部門使用「預設」設定。</span>
+        <button class="btn btn-primary" onclick="openDeptCatModal()">新增部門設定</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>部門</th><th>支出類別數</th><th>收入類別數</th><th>更新時間</th><th>操作</th></tr></thead>
+            <tbody id="deptcats-tbody"><tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div><!-- end page-finance -->
+
+  <!-- 部門類別設定 Modal -->
+  <div class="modal-overlay" id="deptcat-modal" style="display:none" onclick="if(event.target===this)closeDeptCatModal()">
+    <div class="modal-box" style="max-width:620px;width:95%">
+      <div class="modal-header">
+        <span class="modal-title" id="deptcat-modal-title">新增部門類別設定</span>
+        <button class="modal-close" onclick="closeDeptCatModal()">✕</button>
+      </div>
+      <div style="padding:20px">
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">部門 <span style="color:var(--muted);font-weight:400">（留空為預設設定，套用至未指定部門的員工）</span></label>
+          <div style="display:flex;gap:8px">
+            <select class="form-input" id="deptcat-dept-sel" onchange="deptcatDeptSelChange()" style="flex:1">
+              <option value="">— 預設（所有未指定部門）—</option>
+            </select>
+            <input class="form-input" id="deptcat-dept-input" placeholder="或輸入部門名稱" style="flex:1">
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <!-- 支出 -->
+          <div>
+            <label class="form-label" style="margin-bottom:8px;display:block">支出類別</label>
+            <div style="border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;background:var(--bg)">
+              <div id="deptcat-expense-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+              <div style="display:flex;gap:6px">
+                <input class="form-input" id="deptcat-expense-input" placeholder="新增類別" style="font-size:13px;padding:5px 10px" onkeydown="if(event.key==='Enter'){event.preventDefault();addDeptCatTag('expense')}">
+                <button class="btn btn-sm btn-primary" onclick="addDeptCatTag('expense')">+</button>
+              </div>
+            </div>
+            <div style="margin-top:6px">
+              <span style="font-size:11px;color:var(--muted)">快速加入：</span>
+              <div id="deptcat-expense-defaults" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px"></div>
+            </div>
+          </div>
+          <!-- 收入 -->
+          <div>
+            <label class="form-label" style="margin-bottom:8px;display:block">收入類別</label>
+            <div style="border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;background:var(--bg)">
+              <div id="deptcat-income-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+              <div style="display:flex;gap:6px">
+                <input class="form-input" id="deptcat-income-input" placeholder="新增類別" style="font-size:13px;padding:5px 10px" onkeydown="if(event.key==='Enter'){event.preventDefault();addDeptCatTag('income')}">
+                <button class="btn btn-sm btn-primary" onclick="addDeptCatTag('income')">+</button>
+              </div>
+            </div>
+            <div style="margin-top:6px">
+              <span style="font-size:11px;color:var(--muted)">快速加入：</span>
+              <div id="deptcat-income-defaults" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+          <button class="btn btn-outline" onclick="closeDeptCatModal()">取消</button>
+          <button class="btn btn-primary" onclick="saveDeptCatConfig()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ── 帳號管理 ── -->
   <div class="page" id="page-adminmgr" style="display:none">
@@ -7221,7 +7296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let finCatList = [], finOcrResult = null, finTrendChart = null, finCatChart = null;
 
 function switchFinTab(tab) {
-  ['dash','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings'].forEach(t => {
+  ['dash','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings','deptcats'].forEach(t => {
     const btn = document.getElementById('fintab-'+t);
     const panel = document.getElementById('fin-panel-'+t);
     if (btn)   btn.classList.toggle('active', t===tab);
@@ -7237,6 +7312,7 @@ function switchFinTab(tab) {
   if (tab==='budget')    loadBudgetVsActual();
   if (tab==='payroll')   loadPayrollSyncStatus();
   if (tab==='settings')  loadFinSettings();
+  if (tab==='deptcats')  loadDeptCats();
 }
 async function initFinance() {
   const now = new Date();
@@ -7796,6 +7872,148 @@ async function saveFinSettings() {
   };
   const {ok} = await api('/api/finance/settings', {method:'POST', body:JSON.stringify(body)});
   if (ok) showToast('設定已儲存','success');
+}
+
+// ── 部門費用類別設定 ──────────────────────────────────────────
+let _deptCatDefaults = { expense_cats: [], income_cats: [] };
+let _deptCatEditingDept = null; // null = new, string = editing existing
+
+async function loadDeptCats() {
+  const tbody = document.getElementById('deptcats-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  const { ok, data } = await api('/api/admin/dept-expense-cats', {}, true);
+  if (!ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入失敗</div></td></tr>'; return; }
+  _deptCatDefaults = data.defaults || { expense_cats: [], income_cats: [] };
+  if (!data.configs || data.configs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無設定</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.configs.map(c => {
+    const deptLabel = c.department === '' ? '<span style="color:var(--accent);font-weight:600">預設</span>' : escHtml(c.department);
+    const canDel    = c.department !== '';
+    const deptKey   = c.department === '' ? '__default__' : encodeURIComponent(c.department);
+    return `<tr>
+      <td>${deptLabel}</td>
+      <td>${c.expense_cats.length} 項</td>
+      <td>${c.income_cats.length} 項</td>
+      <td style="font-size:12px;color:var(--muted)">${c.updated_at ? c.updated_at.slice(0,16).replace('T',' ') : ''}</td>
+      <td>
+        <button class="btn btn-sm" onclick='editDeptCatConfig(${JSON.stringify(c)})'>編輯</button>
+        ${canDel ? `<button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="deleteDeptCatConfig('${deptKey}','${escHtml(c.department)}')">刪除</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openDeptCatModal(config) {
+  const modal = document.getElementById('deptcat-modal');
+  const title = document.getElementById('deptcat-modal-title');
+  const deptSel = document.getElementById('deptcat-dept-sel');
+  // Populate department select with existing departments
+  api('/api/admin/dept-expense-cats', {}, true).then(({ ok, data }) => {
+    if (!ok) return;
+    const depts = data.departments || [];
+    deptSel.innerHTML = '<option value="">— 預設（所有未指定部門）—</option>' +
+      depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    // Render default quick-add chips
+    renderDeptCatDefaults('expense', data.defaults.expense_cats || []);
+    renderDeptCatDefaults('income',  data.defaults.income_cats  || []);
+  });
+  if (config) {
+    title.textContent = '編輯部門類別設定';
+    _deptCatEditingDept = config.department;
+    deptSel.value = config.department;
+    document.getElementById('deptcat-dept-input').value = config.department;
+    document.getElementById('deptcat-dept-input').disabled = true;
+    deptSel.disabled = true;
+    renderDeptCatTags('expense', config.expense_cats || []);
+    renderDeptCatTags('income',  config.income_cats  || []);
+  } else {
+    title.textContent = '新增部門類別設定';
+    _deptCatEditingDept = null;
+    deptSel.value = '';
+    deptSel.disabled = false;
+    document.getElementById('deptcat-dept-input').value = '';
+    document.getElementById('deptcat-dept-input').disabled = false;
+    renderDeptCatTags('expense', []);
+    renderDeptCatTags('income',  []);
+  }
+  modal.style.display = 'flex';
+}
+
+function editDeptCatConfig(config) { openDeptCatModal(config); }
+
+function closeDeptCatModal() {
+  document.getElementById('deptcat-modal').style.display = 'none';
+}
+
+function deptcatDeptSelChange() {
+  const sel = document.getElementById('deptcat-dept-sel');
+  document.getElementById('deptcat-dept-input').value = sel.value;
+}
+
+function renderDeptCatDefaults(type, cats) {
+  const el = document.getElementById(`deptcat-${type}-defaults`);
+  el.innerHTML = cats.map(c =>
+    `<span style="cursor:pointer;padding:2px 8px;border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--accent)" onclick="addDeptCatTagValue('${type}','${c.replace(/'/g,"\\'")}')">+${c}</span>`
+  ).join('');
+}
+
+function renderDeptCatTags(type, cats) {
+  const el = document.getElementById(`deptcat-${type}-tags`);
+  el.innerHTML = cats.map(c =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--navy);color:#fff;border-radius:12px;font-size:12px">
+      ${escHtml(c)}
+      <span style="cursor:pointer;opacity:.7;font-size:10px" onclick="removeDeptCatTag('${type}','${c.replace(/'/g,"\\'")}')">✕</span>
+    </span>`
+  ).join('');
+  el.dataset.cats = JSON.stringify(cats);
+}
+
+function addDeptCatTag(type) {
+  const input = document.getElementById(`deptcat-${type}-input`);
+  const val = input.value.trim();
+  if (!val) return;
+  addDeptCatTagValue(type, val);
+  input.value = '';
+}
+
+function addDeptCatTagValue(type, val) {
+  const el = document.getElementById(`deptcat-${type}-tags`);
+  const cats = JSON.parse(el.dataset.cats || '[]');
+  if (cats.includes(val)) return;
+  cats.push(val);
+  renderDeptCatTags(type, cats);
+}
+
+function removeDeptCatTag(type, val) {
+  const el = document.getElementById(`deptcat-${type}-tags`);
+  const cats = JSON.parse(el.dataset.cats || '[]').filter(c => c !== val);
+  renderDeptCatTags(type, cats);
+}
+
+async function saveDeptCatConfig() {
+  const selVal   = document.getElementById('deptcat-dept-sel').value;
+  const inputVal = document.getElementById('deptcat-dept-input').value.trim();
+  const department = inputVal !== '' ? inputVal : selVal;
+  const expense_cats = JSON.parse(document.getElementById('deptcat-expense-tags').dataset.cats || '[]');
+  const income_cats  = JSON.parse(document.getElementById('deptcat-income-tags').dataset.cats  || '[]');
+  const { ok, data } = await api('/api/admin/dept-expense-cats', {
+    method: 'POST',
+    body: JSON.stringify({ department, expense_cats, income_cats }),
+  }, true);
+  if (!ok) { showToast(data?.error || '儲存失敗', 'error'); return; }
+  showToast('已儲存', 'success');
+  closeDeptCatModal();
+  loadDeptCats();
+}
+
+async function deleteDeptCatConfig(deptKey, deptLabel) {
+  if (!confirm(`確定要刪除「${deptLabel}」的類別設定？`)) return;
+  const { ok, data } = await api(`/api/admin/dept-expense-cats/${deptKey}`, { method: 'DELETE' }, true);
+  if (!ok) { showToast(data?.error || '刪除失敗', 'error'); return; }
+  showToast('已刪除', 'success');
+  loadDeptCats();
 }
 
 // ── OCR 批次辨識 ──────────────────────────────────────────────

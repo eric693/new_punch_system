@@ -17,6 +17,7 @@ from flask import (
     Flask, request, jsonify, render_template,
     session, redirect, url_for, abort
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
@@ -25,10 +26,12 @@ from linebot.models import (
 )
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['PERMANENT_SESSION_LIFETIME'] = __import__('datetime').timedelta(days=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
+app.config['SESSION_COOKIE_SECURE']     = True
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
 LINE_CHANNEL_SECRET       = os.environ.get('LINE_CHANNEL_SECRET', '')
@@ -579,27 +582,34 @@ def admin_login():
         if not username or not password:
             error = '請輸入帳號與密碼'
         else:
-            with get_db() as conn:
-                row = conn.execute(
-                    "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
-                    (username,)
-                ).fetchone()
-            if row and row['password_hash'] == _hash_pw(password):
-                perms = row['permissions']
-                if isinstance(perms, str):
-                    try: perms = _json.loads(perms)
-                    except: perms = []
-                session.permanent             = True
-                session['logged_in']          = True
-                session['admin_id']           = row['id']
-                session['admin_username']     = row['username']
-                session['admin_display_name'] = row['display_name'] or row['username']
-                session['admin_permissions']  = perms
-                session['admin_is_super']     = bool(row['is_super'])
+            try:
                 with get_db() as conn:
-                    conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (row['id'],))
-                return redirect(url_for('admin_dashboard'))
-            error = '帳號或密碼錯誤'
+                    row = conn.execute(
+                        "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
+                        (username,)
+                    ).fetchone()
+                if row and row['password_hash'] == _hash_pw(password):
+                    perms = row['permissions']
+                    if isinstance(perms, str):
+                        try: perms = _json.loads(perms)
+                        except: perms = []
+                    session.permanent             = True
+                    session['logged_in']          = True
+                    session['admin_id']           = row['id']
+                    session['admin_username']     = row['username']
+                    session['admin_display_name'] = row['display_name'] or row['username']
+                    session['admin_permissions']  = perms
+                    session['admin_is_super']     = bool(row['is_super'])
+                    try:
+                        with get_db() as conn:
+                            conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (row['id'],))
+                    except Exception:
+                        pass
+                    return redirect(url_for('admin_dashboard'))
+                error = '帳號或密碼錯誤'
+            except Exception as e:
+                print(f"[ERROR] admin_login db error: {e}")
+                error = '系統錯誤，請稍後再試'
     return render_template('login.html', error=error)
 
 @app.route('/admin/logout')

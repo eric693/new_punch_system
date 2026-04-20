@@ -592,7 +592,7 @@ def admin_login():
                     perms = row['permissions']
                     if isinstance(perms, str):
                         try: perms = _json.loads(perms)
-                        except: perms = []
+                        except (ValueError, TypeError): perms = []
                     session.permanent             = True
                     session['logged_in']          = True
                     session['admin_id']           = row['id']
@@ -639,7 +639,7 @@ def _admin_row(r):
     perms = d.get('permissions')
     if isinstance(perms, str):
         try: d['permissions'] = _json.loads(perms)
-        except: d['permissions'] = []
+        except (ValueError, TypeError): d['permissions'] = []
     if d.get('created_at'):   d['created_at']   = d['created_at'].isoformat()
     if d.get('last_login_at'): d['last_login_at'] = d['last_login_at'].isoformat()
     return d
@@ -805,7 +805,7 @@ def sched_req_row(row):
     d = dict(row)
     if isinstance(d.get('dates'), str):
         try: d['dates'] = _json.loads(d['dates'])
-        except: d['dates'] = []
+        except (ValueError, TypeError): d['dates'] = []
     if d.get('reviewed_at'): d['reviewed_at'] = d['reviewed_at'].isoformat()
     if d.get('created_at'):  d['created_at']  = d['created_at'].isoformat()
     if d.get('updated_at'):  d['updated_at']  = d['updated_at'].isoformat()
@@ -2802,7 +2802,7 @@ def api_sched_admin_calendar(month):
         dates_val = r['dates']
         if isinstance(dates_val, str):
             try: dates_val = _json.loads(dates_val)
-            except: dates_val = []
+            except (ValueError, TypeError): dates_val = []
         for d in (dates_val or []):
             if r['staff_id'] not in staff_off:
                 staff_off[r['staff_id']] = {}
@@ -2977,7 +2977,7 @@ def api_shift_assignment_create():
                         row_dates = row['dates'] or []
                         if isinstance(row_dates, str):
                             try: row_dates = _json.loads(row_dates)
-                            except: row_dates = []
+                            except (ValueError, TypeError): row_dates = []
                         if sid not in leave_lookup:
                             leave_lookup[sid] = set()
                         leave_lookup[sid].update(row_dates)
@@ -3139,7 +3139,7 @@ def api_shift_import():
                 dates_val = lr['dates']
                 if isinstance(dates_val, str):
                     try: dates_val = _json.loads(dates_val)
-                    except: dates_val = []
+                    except (ValueError, TypeError): dates_val = []
                 if sid not in leave_lookup:
                     leave_lookup[sid] = set()
                 leave_lookup[sid].update(dates_val or [])
@@ -4515,7 +4515,7 @@ def salary_record_row(row):
         if d.get(f) is not None: d[f] = float(d[f])
     if isinstance(d.get('items'), str):
         try: d['items'] = _json.loads(d['items'])
-        except: d['items'] = []
+        except (ValueError, TypeError): d['items'] = []
     if d.get('confirmed_at'): d['confirmed_at'] = d['confirmed_at'].isoformat()
     if d.get('created_at'):   d['created_at']   = d['created_at'].isoformat()
     if d.get('updated_at'):   d['updated_at']   = d['updated_at'].isoformat()
@@ -7428,7 +7428,7 @@ def api_auto_generate_schedule():
         rdates = sr['requested_dates']
         if isinstance(rdates, str):
             try: rdates = _json.loads(rdates)
-            except: rdates = []
+            except (ValueError, TypeError): rdates = []
         for ds in (rdates or []):
             off_days.add((sr['staff_id'], ds))
 
@@ -7583,7 +7583,7 @@ def api_salary_pdf(rid):
 
     def money(v):
         try: return f"${float(v):,.0f}"
-        except: return '$0'
+        except (ValueError, TypeError): return '$0'
 
     def esc_h(s):
         return str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
@@ -7868,9 +7868,16 @@ def api_leave_batch():
     new_status = 'approved' if action == 'approve' else 'rejected'
     done = 0
     with get_db() as conn:
+        # 一次撈出所有 pending 的請假單，避免迴圈內逐筆查詢
+        pending = {
+            r['id']: r for r in conn.execute(
+                "SELECT * FROM leave_requests WHERE id = ANY(%s) AND status='pending'",
+                (ids,)
+            ).fetchall()
+        }
         for rid in ids:
-            old = conn.execute("SELECT * FROM leave_requests WHERE id=%s", (rid,)).fetchone()
-            if not old or old['status'] != 'pending':
+            old = pending.get(rid)
+            if not old:
                 continue
             row = conn.execute("""
                 UPDATE leave_requests SET status=%s, reviewed_by=%s,
@@ -9007,7 +9014,7 @@ def _get_finance_settings():
         with get_db() as conn:
             rows = conn.execute("SELECT setting_key, setting_value FROM finance_settings").fetchall()
             return {r['setting_key']: r['setting_value'] for r in rows}
-    except:
+    except Exception:
         return {}
 
 
@@ -9473,7 +9480,7 @@ def api_bank_import():
         s = s.strip().replace('/', '-').replace('.', '-')
         for fmt in ('%Y-%m-%d','%Y-%m-%d','%m-%d-%Y','%d-%m-%Y'):
             try: _dt.strptime(s, fmt); return True
-            except: pass
+            except Exception: pass
         # ROC year: 民國 e.g. 113/01/15
         import re
         if re.match(r'^\d{2,3}[/-]\d{1,2}[/-]\d{1,2}$', s):
@@ -9500,7 +9507,7 @@ def api_bank_import():
         import re
         s = re.sub(r'[,$\s]', '', str(s).strip())
         try: return float(s)
-        except: return None
+        except Exception: return None
 
     inserted = 0
     with get_db() as conn:
@@ -10481,7 +10488,7 @@ def _perf_template_row(r):
     if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
     if isinstance(d.get('items'), str):
         try: d['items'] = _json.loads(d['items'])
-        except: d['items'] = []
+        except (ValueError, TypeError): d['items'] = []
     return d
 
 def _perf_review_row(r):
@@ -10491,7 +10498,7 @@ def _perf_review_row(r):
         if d.get(f): d[f] = d[f].isoformat()
     if isinstance(d.get('scores'), str):
         try: d['scores'] = _json.loads(d['scores'])
-        except: d['scores'] = {}
+        except (ValueError, TypeError): d['scores'] = {}
     if d.get('total_score') is not None: d['total_score'] = float(d['total_score'])
     if d.get('max_score')   is not None: d['max_score']   = float(d['max_score'])
     if d.get('salary_delta')is not None: d['salary_delta']= float(d['salary_delta'])
@@ -10605,7 +10612,7 @@ def api_perf_review_create():
             items = tpl.get('items') or []
             if isinstance(items, str):
                 try: items = _json.loads(items)
-                except: items = []
+                except (ValueError, TypeError): items = []
             if items:
                 max_s = sum(float(it.get('max_score', 10)) for it in items)
                 total = sum(
@@ -11217,7 +11224,7 @@ def mobile_login():
         perms = admin['permissions']
         if isinstance(perms, str):
             try: perms = _json.loads(perms)
-            except: perms = []
+            except (ValueError, TypeError): perms = []
         token = _make_jwt({
             'sub': str(admin['id']), 'role': 'admin',
             'username': admin['username'],
@@ -11299,7 +11306,7 @@ def mobile_me():
         d = dict(admin)
         if isinstance(d['permissions'], str):
             try: d['permissions'] = _json.loads(d['permissions'])
-            except: d['permissions'] = []
+            except (ValueError, TypeError): d['permissions'] = []
         return jsonify(d)
 
 # ── Employee: Punch ────────────────────────────────────────────────────────────
@@ -12053,7 +12060,7 @@ def webauthn_auth_complete():
             perms = admin['permissions']
             if isinstance(perms, str):
                 try: perms = _json3.loads(perms)
-                except: perms = []
+                except (ValueError, TypeError): perms = []
             session.permanent             = True
             session['logged_in']          = True
             session['admin_id']           = admin['id']

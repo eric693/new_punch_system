@@ -1559,33 +1559,50 @@ def get_line_punch_config():
         return None
 
 
+# Thread-local storage for the current webhook event's reply token.
+# When set, _send_line_punch / _push_line_msg will use reply_message (free)
+# instead of push_message (consumes quota). The token is consumed on first use.
+_line_reply_ctx = threading.local()
+
+
 def _send_line_punch(user_id, text):
     cfg = get_line_punch_config()
     if not cfg or not cfg.get('enabled') or not cfg.get('channel_access_token'):
         return
+    token = getattr(_line_reply_ctx, 'reply_token', None)
     try:
-        LineBotApi(cfg['channel_access_token']).push_message(
-            user_id, TextSendMessage(text=text)
-        )
+        api = LineBotApi(cfg['channel_access_token'])
+        if token:
+            _line_reply_ctx.reply_token = None  # consume – reply_token is single-use
+            api.reply_message(token, TextSendMessage(text=text))
+        else:
+            api.push_message(user_id, TextSendMessage(text=text))
     except Exception as e:
-        print(f"[LINE PUNCH] push_message error: {e}")
+        print(f"[LINE PUNCH] send error: {e}")
 
 
 def _push_line_msg(user_id, *messages):
-    """Push one or more raw message dicts via LINE push API."""
+    """Send one or more raw message dicts; uses reply API when inside a webhook event."""
     cfg = get_line_punch_config()
     if not cfg or not cfg.get('enabled') or not cfg.get('channel_access_token'):
         return
-    body = _json.dumps({'to': user_id, 'messages': list(messages)}).encode('utf-8')
+    token = getattr(_line_reply_ctx, 'reply_token', None)
+    if token:
+        _line_reply_ctx.reply_token = None  # consume
+        body = _json.dumps({'replyToken': token, 'messages': list(messages)}).encode('utf-8')
+        url  = 'https://api.line.me/v2/bot/message/reply'
+    else:
+        body = _json.dumps({'to': user_id, 'messages': list(messages)}).encode('utf-8')
+        url  = 'https://api.line.me/v2/bot/message/push'
     req = urllib.request.Request(
-        'https://api.line.me/v2/bot/message/push', data=body, method='POST',
+        url, data=body, method='POST',
         headers={'Content-Type': 'application/json',
                  'Authorization': f'Bearer {cfg["channel_access_token"]}'}
     )
     try:
         urllib.request.urlopen(req, timeout=15)
     except Exception as e:
-        print(f'[LINE] push error: {e}')
+        print(f'[LINE] send error: {e}')
 
 
 def _qr_pb(*items):
@@ -2020,6 +2037,9 @@ def line_punch_webhook():
 
 
 def _handle_line_punch_event(event, cfg):
+    # Store reply token so _send_line_punch/_push_line_msg can use reply_message (free)
+    _line_reply_ctx.reply_token = event.get('replyToken') or None
+
     source   = event.get('source', {})
     user_id  = source.get('userId')
     evt_type = event.get('type')

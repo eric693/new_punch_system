@@ -13100,7 +13100,7 @@ def api_expense_categories():
         if staff:
             department = staff['department'] or ''
     ec, ic = _get_dept_cats(department)
-    return jsonify({'支出': ec, '收入': ic})
+    return jsonify({'支出': ec, '收入': ic, 'department': department})
 
 
 @app.route('/api/admin/dept-expense-cats', methods=['GET'])

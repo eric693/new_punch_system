@@ -457,6 +457,7 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
               <div class="fl">費用日期</div>
               <input class="fi" type="date" id="exp-date" style="margin-bottom:8px">
             </div>
+            <div id="exp-dept-hint" style="font-size:11px;color:var(--muted,#8892a4);margin-bottom:6px"></div>
             <div style="margin-bottom:10px">
               <div class="fl">費用性質</div>
               <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px;width:fit-content">
@@ -2081,6 +2082,9 @@ async function fetchExpenseCategories() {
       const data = await res.json();
       if (data['支出'] && data['支出'].length) _STAFF_EXP_CATS['支出'] = data['支出'];
       if (data['收入'] && data['收入'].length) _STAFF_EXP_CATS['收入'] = data['收入'];
+      // show department hint for debugging
+      const hint = document.getElementById('exp-dept-hint');
+      if (hint) hint.textContent = data.department ? `部門：${data.department}` : '部門：未設定';
     }
   } catch(e) {}
 }

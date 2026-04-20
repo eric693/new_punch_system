@@ -10670,7 +10670,7 @@ initFinance = async function() {
 // 覆寫 switchFinTab 以加入 revenue
 const _origSwitchFinTab = switchFinTab;
 switchFinTab = function(tab) {
-  ['dash','revenue','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings'].forEach(t => {
+  ['dash','revenue','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings','deptcats'].forEach(t => {
     const btn   = document.getElementById('fintab-'+t);
     const panel = document.getElementById('fin-panel-'+t);
     if (btn)   btn.classList.toggle('active', t===tab);
@@ -10689,6 +10689,7 @@ switchFinTab = function(tab) {
   if (tab==='payroll')   loadPayrollSyncStatus();
   if (tab==='stmts')     loadStatements();
   if (tab==='settings')  loadFinSettings();
+  if (tab==='deptcats')  loadDeptCats();
 };
 
 // 覆寫 loadFinSummary 以帶公司參數

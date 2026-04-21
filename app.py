@@ -69,6 +69,8 @@ def _init_db_pool():
                 kwargs={'row_factory': dict_row},
                 open=True,
                 reconnect_timeout=30,
+                max_lifetime=600,   # recycle connections every 10 min before they go stale
+                max_idle=300,       # close connections idle > 5 min
                 check=ConnectionPool.check_connection,
             )
             print("[pool] Connection pool initialized")
@@ -428,18 +430,31 @@ _init_db_pool()
 init_db()
 
 # ─── Keep-Alive ───────────────────────────────────────────────────────────────
+# Only run in gunicorn worker #1 (GUNICORN_WORKER_ID=1 set via config) or when
+# running directly (no gunicorn). This prevents N workers from each spawning a
+# ping thread and flooding logs when the service is temporarily unreachable.
+
+_WORKER_ID = os.environ.get('GUNICORN_WORKER_ID', '1')
 
 def keep_alive():
-    time.sleep(10)
+    if _WORKER_ID != '1':
+        return
+    time.sleep(30)  # wait for server to fully start
+    base = RENDER_EXTERNAL_URL.rstrip('/') if RENDER_EXTERNAL_URL else 'http://localhost:5000'
+    consecutive_failures = 0
     while True:
         try:
-            base = RENDER_EXTERNAL_URL.rstrip('/') if RENDER_EXTERNAL_URL else 'http://localhost:5000'
             urllib.request.urlopen(
                 urllib.request.Request(f'{base}/health', headers={'User-Agent': 'KeepAlive/1.0'}),
-                timeout=10
+                timeout=30,
             )
+            if consecutive_failures > 0:
+                print(f"[keep-alive] recovered after {consecutive_failures} failure(s)")
+            consecutive_failures = 0
         except Exception as e:
-            print(f"[keep-alive] ping failed: {e}")
+            consecutive_failures += 1
+            if consecutive_failures == 1 or consecutive_failures % 10 == 0:
+                print(f"[keep-alive] ping failed ({consecutive_failures}x): {e}")
         time.sleep(9 * 60)
 
 threading.Thread(target=keep_alive, daemon=True).start()

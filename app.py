@@ -10196,6 +10196,7 @@ def _init_expense_db():
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS account_holder TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS expense_type TEXT NOT NULL DEFAULT '支出'",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS company TEXT NOT NULL DEFAULT '進光設計'",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS vendor TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_expense_claims_staff_id ON expense_claims(staff_id)",
         "CREATE INDEX IF NOT EXISTS idx_expense_claims_status ON expense_claims(status)",
     ]
@@ -10246,13 +10247,14 @@ def api_expense_submit():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO expense_claims
-              (staff_id, title, amount, expense_date, category, note, document_id, expense_type, company)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+              (staff_id, title, amount, expense_date, category, note, document_id, expense_type, company, vendor)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (sid, b['title'].strip(), amount,
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(), b.get('document_id') or None,
               b.get('expense_type', '支出').strip(),
-              b.get('company', '進光設計').strip())).fetchone()
+              b.get('company', '進光設計').strip(),
+              b.get('vendor', '').strip())).fetchone()
     return jsonify(_expense_row(row)), 201
 
 
@@ -10356,8 +10358,8 @@ def api_expense_admin_create():
               (staff_id, title, amount, expense_date, category, note,
                document_id, document_id2,
                reimbursement_method, bank_name, bank_account, account_holder,
-               expense_type, company)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+               expense_type, company, vendor)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (staff_id, (b.get('title','').strip() or b.get('category','').strip() or '費用申請'), float(b.get('amount', 0)),
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(),
@@ -10368,7 +10370,8 @@ def api_expense_admin_create():
               b.get('bank_account', '').strip(),
               b.get('account_holder', '').strip(),
               b.get('expense_type', '支出').strip(),
-              b.get('company', '進光設計').strip())).fetchone()
+              b.get('company', '進光設計').strip(),
+              b.get('vendor', '').strip())).fetchone()
     return jsonify(_expense_row(row)), 201
 
 

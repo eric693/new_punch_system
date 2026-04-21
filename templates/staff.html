@@ -473,6 +473,10 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
               <select class="fi" id="exp-category" style="margin-bottom:8px"></select>
             </div>
             <div style="margin-bottom:10px">
+              <div class="fl">廠商名稱</div>
+              <input class="fi" type="text" id="exp-vendor" placeholder="請款廠商（選填）" style="margin-bottom:8px">
+            </div>
+            <div style="margin-bottom:10px">
               <div class="fl">金額（元）</div>
               <input class="fi" type="number" id="exp-amount" placeholder="0" min="0" style="margin-bottom:8px">
             </div>
@@ -2149,11 +2153,12 @@ async function submitExpense() {
   const category = document.getElementById('exp-category').value;
   const amount   = parseFloat(document.getElementById('exp-amount').value);
   const note     = document.getElementById('exp-note').value.trim();
+  const vendor   = document.getElementById('exp-vendor').value.trim();
   if (!date || !category || !amount || amount <= 0) {
     showToast('請填寫日期、類型及金額', 'err'); return;
   }
   const expense_type = document.getElementById('exp-type')?.value || '支出';
-  const body = { title: category, expense_date: date, category, amount, note,
+  const body = { title: category, expense_date: date, category, amount, note, vendor,
                  expense_type, company: '進光設計', document_id: _expDocumentId };
   const res = await fetch('/api/expense/my-claims', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
@@ -2164,6 +2169,7 @@ async function submitExpense() {
     // Reset form
     document.getElementById('exp-amount').value = '';
     document.getElementById('exp-note').value   = '';
+    document.getElementById('exp-vendor').value = '';
     document.getElementById('exp-photo-input').value = '';
     document.getElementById('exp-photo-hint').style.display = '';
     document.getElementById('exp-photo-preview').style.display = 'none';
@@ -2190,7 +2196,7 @@ async function loadMyExpenses() {
     <div style="border-bottom:1px solid var(--border);padding:12px 0;display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:14px;margin-bottom:2px">${esc(c.category)} — NT$ ${fmtNum(c.amount)}</div>
-        <div style="font-size:12px;color:var(--muted)">${c.expense_date} ${c.note ? '・'+esc(c.note) : ''}</div>
+        <div style="font-size:12px;color:var(--muted)">${c.expense_date}${c.vendor ? ' ・'+esc(c.vendor) : ''}${c.note ? ' ・'+esc(c.note) : ''}</div>
         ${c.reviewer_note ? `<div style="font-size:11px;color:var(--red);margin-top:2px">備注：${esc(c.reviewer_note)}</div>` : ''}
       </div>
       <div style="font-size:12px;font-weight:600;color:${statusColor[c.status]||'var(--muted)'}">

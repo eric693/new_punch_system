@@ -2046,16 +2046,23 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
           <div class="exp-row col2">
             <div class="exp-field">
+              <label>廠商名稱（選填）</label>
+              <input class="fi" type="text" id="add-exp-vendor" placeholder="請款廠商">
+            </div>
+            <div class="exp-field">
+              <label>備註（選填）</label>
+              <input class="fi" type="text" id="add-exp-note" placeholder="其他說明">
+            </div>
+          </div>
+
+          <div class="exp-row col2">
+            <div class="exp-field">
               <label>報帳方式</label>
               <select class="fi" id="add-exp-reimburse-method" onchange="toggleBankFields()">
                 <option value="匯款">匯款</option>
                 <option value="現金">現金</option>
                 <option value="其他">其他</option>
               </select>
-            </div>
-            <div class="exp-field">
-              <label>備註（選填）</label>
-              <input class="fi" type="text" id="add-exp-note" placeholder="其他說明">
             </div>
           </div>
         </div>
@@ -9272,6 +9279,7 @@ async function openAddExpenseModal() {
   document.getElementById('add-exp-date').value             = new Date().toISOString().slice(0,10);
   document.getElementById('add-exp-amount').value           = '';
   document.getElementById('add-exp-note').value             = '';
+  document.getElementById('add-exp-vendor').value           = '';
   document.getElementById('add-exp-reimburse-method').value = '匯款';
   document.getElementById('add-exp-bank-name').value        = '';
   document.getElementById('add-exp-bank-account').value     = '';
@@ -9300,6 +9308,7 @@ async function submitAdminExpense() {
   const category             = document.getElementById('add-exp-category').value;
   const amount               = parseFloat(document.getElementById('add-exp-amount').value) || 0;
   const note                 = document.getElementById('add-exp-note').value.trim();
+  const vendor               = document.getElementById('add-exp-vendor').value.trim();
   const reimbursement_method = document.getElementById('add-exp-reimburse-method').value;
   const bank_name            = document.getElementById('add-exp-bank-name').value.trim();
   const account_holder       = document.getElementById('add-exp-account-holder').value.trim();
@@ -9321,7 +9330,7 @@ async function submitAdminExpense() {
   const {ok} = await api('/api/expense/claims/admin-create', {
     method: 'POST',
     body: JSON.stringify({
-      staff_id: parseInt(staff_id), expense_date, title, category, amount, note,
+      staff_id: parseInt(staff_id), expense_date, title, category, amount, note, vendor,
       reimbursement_method, bank_name, account_holder, bank_account,
       expense_type, company: '進光設計',
       document_id:  _adminDocId1 || null,

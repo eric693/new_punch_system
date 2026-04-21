@@ -13,6 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from contextlib import contextmanager
 from psycopg_pool import ConnectionPool
+from psycopg_pool.errors import PoolTimeout
 from flask import (
     Flask, request, jsonify, render_template,
     session, redirect, url_for, abort
@@ -78,12 +79,12 @@ def _init_db_pool():
 def get_db():
     if _db_pool is not None:
         try:
-            with _db_pool.connection() as conn:
+            with _db_pool.connection(timeout=5.0) as conn:
                 yield conn
         except psycopg.OperationalError:
             # stale/broken connection — get a fresh one
             _db_pool.check()
-            with _db_pool.connection() as conn:
+            with _db_pool.connection(timeout=5.0) as conn:
                 yield conn
     else:
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:

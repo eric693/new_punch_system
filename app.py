@@ -19,6 +19,7 @@ from flask import (
     session, redirect, url_for, abort
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import HTTPException
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
@@ -533,19 +534,15 @@ def health():
         return jsonify({'status': 'error', 'detail': str(e)}), 500
 
 
-@app.errorhandler(500)
-def handle_500(e):
-    if request.path.startswith('/api/'):
-        return jsonify({'error': '伺服器錯誤，請稍後再試'}), 500
-    return e
-
-
 @app.errorhandler(Exception)
 def handle_unhandled(e):
+    # Let HTTP exceptions (404, 401, etc.) pass through unchanged
+    if isinstance(e, HTTPException):
+        return e
     print(f"[ERROR] unhandled exception on {request.path}: {e}")
     if request.path.startswith('/api/'):
         return jsonify({'error': '伺服器錯誤，請稍後再試'}), 500
-    raise e
+    return jsonify({'error': '伺服器錯誤，請稍後再試'}), 500
 
 # ─── Admin Auth ───────────────────────────────────────────────────────────────
 

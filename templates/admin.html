@@ -1940,10 +1940,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>申請人</th><th>日期</th><th>類型</th><th>金額</th><th>說明</th><th>收據</th><th>狀態</th><th>操作</th>
+            <th>申請人</th><th>日期</th><th>性質</th><th>類型</th><th>廠商</th><th>金額</th><th>說明</th><th>報帳方式</th><th>收據</th><th>狀態</th><th>操作</th>
           </tr></thead>
           <tbody id="exp-review-tbody">
-            <tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
+            <tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -9352,7 +9352,7 @@ async function loadExpenseReview() {
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (ym)     params.set('ym', ym);
@@ -9360,19 +9360,40 @@ async function loadExpenseReview() {
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, true);
   const claims = Array.isArray(data) ? data : [];
   if (!ok || !claims.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無資料</div></td></tr>';
     setBadge('badge-expense-review', 0);
     return;
   }
   const statusMap   = { pending:'待審核', approved:'已核准', rejected:'已拒絕' };
   const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
-  tbody.innerHTML = claims.map(c => `
+  const expTypeColor = { '支出':'var(--red)', '收入':'var(--green)' };
+  tbody.innerHTML = claims.map(c => {
+    const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.account_holder || c.bank_account);
+    const bankRow = hasBankInfo ? `
+      <tr style="background:var(--bg-subtle,#f8f9fb)">
+        <td colspan="11" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
+          ${escHtml(c.bank_name||'')}
+          ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
+          ${c.bank_account   ? `・帳號：<span style="font-family:'DM Mono',monospace">${escHtml(c.bank_account)}</span>` : ''}
+        </td>
+      </tr>` : '';
+    const reviewerNoteRow = c.review_note ? `
+      <tr style="background:#fff8f8">
+        <td colspan="11" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
+          審核備注：${escHtml(c.review_note)}
+        </td>
+      </tr>` : '';
+    return `
     <tr>
       <td>${escHtml(c.staff_name||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
-      <td>${escHtml(c.category)}</td>
+      <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
+      <td>${escHtml(c.category||'—')}</td>
+      <td style="color:var(--navy);font-size:12px">${escHtml(c.vendor||'—')}</td>
       <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.note||'—')}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.note||'—')}</td>
+      <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
       <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
       <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
       <td>
@@ -9382,7 +9403,8 @@ async function loadExpenseReview() {
         ` : '—'}
       </td>
     </tr>
-  `).join('');
+    ${bankRow}${reviewerNoteRow}`;
+  }).join('');
   // Badge: count pending
   const pendingCnt = status === '' ? claims.filter(c=>c.status==='pending').length : (status==='pending' ? claims.length : 0);
   setBadge('badge-expense-review', pendingCnt);

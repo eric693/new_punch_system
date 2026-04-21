@@ -83,14 +83,18 @@ def get_db():
         try:
             with _db_pool.connection(timeout=5.0) as conn:
                 yield conn
-        except psycopg.OperationalError:
-            # stale/broken connection — get a fresh one
-            _db_pool.check()
-            with _db_pool.connection(timeout=5.0) as conn:
-                yield conn
-    else:
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
-            yield conn
+            return
+        except (psycopg.OperationalError, PoolTimeout) as exc:
+            print(f"[pool] connection failed ({type(exc).__name__}), falling back to direct connect")
+            # Pool is broken — try to reset it in background, then fall through to direct connect
+            try:
+                _db_pool.check()
+            except Exception:
+                pass
+    # Direct fallback (also used when pool not initialised)
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row,
+                         connect_timeout=10) as conn:
+        yield conn
 
 def _hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()

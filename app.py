@@ -86,15 +86,24 @@ def get_db():
             return
         except (psycopg.OperationalError, PoolTimeout) as exc:
             print(f"[pool] connection failed ({type(exc).__name__}), falling back to direct connect")
-            # Pool is broken — try to reset it in background, then fall through to direct connect
             try:
                 _db_pool.check()
             except Exception:
                 pass
-    # Direct fallback (also used when pool not initialised)
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row,
-                         connect_timeout=10) as conn:
-        yield conn
+    # Direct fallback with up to 3 attempts (handles brief DB blips)
+    last_exc = None
+    for attempt in range(3):
+        try:
+            with psycopg.connect(DATABASE_URL, row_factory=dict_row,
+                                 connect_timeout=10) as conn:
+                yield conn
+            return
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                print(f"[db] direct connect attempt {attempt+1} failed: {e}, retrying...")
+                time.sleep(2)
+    raise last_exc
 
 def _hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -522,6 +531,21 @@ def health():
         return jsonify({'status': 'ok', 'db': 'connected'}), 200
     except Exception as e:
         return jsonify({'status': 'error', 'detail': str(e)}), 500
+
+
+@app.errorhandler(500)
+def handle_500(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'error': '伺服器錯誤，請稍後再試'}), 500
+    return e
+
+
+@app.errorhandler(Exception)
+def handle_unhandled(e):
+    print(f"[ERROR] unhandled exception on {request.path}: {e}")
+    if request.path.startswith('/api/'):
+        return jsonify({'error': '伺服器錯誤，請稍後再試'}), 500
+    raise e
 
 # ─── Admin Auth ───────────────────────────────────────────────────────────────
 

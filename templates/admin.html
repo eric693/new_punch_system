@@ -1940,7 +1940,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>申請人</th><th>日期</th><th>性質</th><th>類型</th><th>廠商</th><th>金額</th><th>說明</th><th>報帳方式</th><th>收據</th><th>狀態</th><th>操作</th>
+            <th>申請人</th><th>日期</th><th>性質</th><th>類型</th><th>廠商</th><th style="text-align:right">金額</th><th>說明</th><th>報帳方式</th><th>收據</th><th>狀態</th><th>操作</th>
           </tr></thead>
           <tbody id="exp-review-tbody">
             <tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>
@@ -9392,7 +9392,7 @@ async function loadExpenseReview() {
       <td>${escHtml(c.category||'—')}</td>
       <td style="color:var(--navy);font-size:12px">${escHtml(c.vendor||'—')}</td>
       <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
-      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.note||'—')}</td>
+      <td style="min-width:160px;white-space:normal;word-break:break-word">${escHtml(c.note||'—')}</td>
       <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
       <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
       <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>

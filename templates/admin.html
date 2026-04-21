@@ -2081,7 +2081,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div class="exp-row col2">
             <div class="exp-field">
               <label>戶名</label>
-              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名">
+              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名"
+                oninput="const v=document.getElementById('add-exp-vendor');if(!v.value.trim())v.value=this.value;">
             </div>
             <div class="exp-field">
               <label>帳號</label>

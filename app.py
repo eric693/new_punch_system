@@ -10407,7 +10407,14 @@ def api_expense_admin_create():
               b.get('expense_type', '支出').strip(),
               b.get('company', '進光設計').strip(),
               b.get('vendor', '').strip())).fetchone()
-    return jsonify(_expense_row(row)), 201
+        staff = conn.execute(
+            "SELECT name, employee_code FROM punch_staff WHERE id=%s", (staff_id,)
+        ).fetchone()
+    d = _expense_row(row)
+    if staff:
+        d['staff_name']    = staff['name']
+        d['employee_code'] = staff['employee_code'] or ''
+    return jsonify(d), 201
 
 
 @app.route('/api/expense/claims', methods=['GET'])
@@ -10498,13 +10505,20 @@ def api_expense_review(cid):
               reviewed_at=NOW(), finance_record_id=%s
             WHERE id=%s RETURNING *
         """, (new_status, reviewed_by, review_note, finance_rid, cid)).fetchone()
+        staff = conn.execute(
+            "SELECT name, employee_code FROM punch_staff WHERE id=%s", (claim['staff_id'],)
+        ).fetchone() if row else None
 
     if row:
         extra = f"標題：{claim['title']}　金額：${float(claim['amount']):,.0f}"
         if review_note: extra += f"\n意見：{review_note}"
         _notify_review_result(claim['staff_id'], '費用報帳', action, extra)
-
-    return jsonify(_expense_row(row)) if row else ('', 404)
+        d = _expense_row(row)
+        if staff:
+            d['staff_name']    = staff['name']
+            d['employee_code'] = staff['employee_code'] or ''
+        return jsonify(d)
+    return ('', 404)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

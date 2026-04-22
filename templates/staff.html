@@ -2080,19 +2080,21 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 /* ── 費用報帳 ──────────────────────────────────────────────── */
 let _expPhotoBase64 = null;
 let _expDocumentId  = null;
+let _expCatsLoaded  = false;
 
 let _STAFF_EXP_CATS = {
   '支出': ['廠商','雇員薪資','雇員獎金','固定營業費用','全民健康保險','勞工保險金','勞工退休金','稅務相關','政府相關','房租費用','建築師事務所','會計師事務所','律師事務所','客戶退款','雜支'],
   '收入': ['客變','設計','裝修工程','追加','退傭','介紹費','其它'],
 };
 async function fetchExpenseCategories() {
+  if (_expCatsLoaded) return;
   try {
     const res = await fetch('/api/expense/categories');
     if (res.ok) {
       const data = await res.json();
       if (data['支出'] && data['支出'].length) _STAFF_EXP_CATS['支出'] = data['支出'];
       if (data['收入'] && data['收入'].length) _STAFF_EXP_CATS['收入'] = data['收入'];
-      // show department hint for debugging
+      _expCatsLoaded = true;
       const hint = document.getElementById('exp-dept-hint');
       if (hint) hint.textContent = data.department ? `部門：${data.department}` : '部門：未設定';
     }
@@ -2115,9 +2117,8 @@ function staffSwitchExpType(type) {
 async function initExpenseTab() {
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('exp-date').value = today;
-  await fetchExpenseCategories();
+  await Promise.all([fetchExpenseCategories(), loadMyExpenses()]);
   staffSwitchExpType('支出');
-  loadMyExpenses();
 }
 
 async function expPhotoSelected(event) {
@@ -2154,6 +2155,22 @@ async function expPhotoSelected(event) {
   }
 }
 
+function _renderExpenseItem(c) {
+  const statusMap   = { pending:'審核中', approved:'已核准', rejected:'已拒絕' };
+  const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
+  return `<div style="border-bottom:1px solid var(--border);padding:12px 0;display:flex;align-items:center;gap:10px">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:14px;margin-bottom:2px">${esc(c.category)} — NT$ ${fmtNum(c.amount)}</div>
+      <div style="font-size:12px;color:var(--muted)">${c.expense_date}${c.vendor ? ' ・'+esc(c.vendor) : ''}${c.note ? ' ・'+esc(c.note) : ''}</div>
+      ${c.reviewer_note ? `<div style="font-size:11px;color:var(--red);margin-top:2px">備注：${esc(c.reviewer_note)}</div>` : ''}
+    </div>
+    <div style="font-size:12px;font-weight:600;color:${statusColor[c.status]||'var(--muted)'}">
+      ${statusMap[c.status]||c.status}
+    </div>
+    ${c.document_id ? `<span style="font-size:11px;color:var(--accent)">有附件</span>` : ''}
+  </div>`;
+}
+
 async function submitExpense() {
   const date     = document.getElementById('exp-date').value;
   const category = document.getElementById('exp-category').value;
@@ -2181,7 +2198,11 @@ async function submitExpense() {
     document.getElementById('exp-photo-preview').style.display = 'none';
     _expPhotoBase64 = null;
     _expDocumentId  = null;
-    loadMyExpenses();
+    // 直接插入新資料到列表頂端，不需重新 fetch
+    const list = document.getElementById('exp-list');
+    const isEmpty = list.querySelector('[data-exp-empty]');
+    if (isEmpty) list.innerHTML = '';
+    list.insertAdjacentHTML('afterbegin', _renderExpenseItem(data));
   } else {
     showToast(data.error || '送出失敗', 'err');
   }
@@ -2193,26 +2214,12 @@ async function loadMyExpenses() {
   const res = await fetch('/api/expense/my-claims');
   const claims = await res.json();
   if (!Array.isArray(claims) || !claims.length) {
-    list.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:24px">尚無申請記錄</div>';
+    list.innerHTML = '<div data-exp-empty style="text-align:center;color:var(--muted);font-size:13px;padding:24px">尚無申請記錄</div>';
     return;
   }
-  const statusMap = { pending:'審核中', approved:'已核准', rejected:'已拒絕' };
-  const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
-  list.innerHTML = claims.map(c => `
-    <div style="border-bottom:1px solid var(--border);padding:12px 0;display:flex;align-items:center;gap:10px">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;margin-bottom:2px">${esc(c.category)} — NT$ ${fmtNum(c.amount)}</div>
-        <div style="font-size:12px;color:var(--muted)">${c.expense_date}${c.vendor ? ' ・'+esc(c.vendor) : ''}${c.note ? ' ・'+esc(c.note) : ''}</div>
-        ${c.reviewer_note ? `<div style="font-size:11px;color:var(--red);margin-top:2px">備注：${esc(c.reviewer_note)}</div>` : ''}
-      </div>
-      <div style="font-size:12px;font-weight:600;color:${statusColor[c.status]||'var(--muted)'}">
-        ${statusMap[c.status]||c.status}
-      </div>
-      ${c.document_id ? `<span style="font-size:11px;color:var(--accent)">有附件</span>` : ''}
-    </div>
-  `).join('');
+  list.innerHTML = claims.map(_renderExpenseItem).join('');
   // Update badge
-  const pending = claims.filter(c => c.status === 'approved').length; // show newly approved
+  const pending = claims.filter(c => c.status === 'approved').length;
   const badge = document.getElementById('expense-badge');
   if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
   else badge.style.display = 'none';

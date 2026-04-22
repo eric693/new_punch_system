@@ -9333,7 +9333,7 @@ async function submitAdminExpense() {
   btn.disabled = true;
   btn.textContent = '送出中…';
   const expense_type = document.getElementById('add-exp-type').value;
-  const {ok} = await api('/api/expense/claims/admin-create', {
+  const {ok, data} = await api('/api/expense/claims/admin-create', {
     method: 'POST',
     body: JSON.stringify({
       staff_id: parseInt(staff_id), expense_date, title, category, amount, note, vendor,
@@ -9348,8 +9348,21 @@ async function submitAdminExpense() {
   if (!ok) { showToast('新增失敗，請再試', 'error'); return; }
   showToast('費用申請已建立', 'success');
   closeAddExpenseModal();
-  document.getElementById('exp-review-status').value = '';
-  loadExpenseReview();
+  // 直接插入新行到表格最前面，不需重新 fetch 整個列表
+  const tbody = document.getElementById('exp-review-tbody');
+  if (tbody) {
+    const isEmpty = tbody.querySelector('td[colspan]');
+    if (isEmpty) tbody.innerHTML = '';
+    tbody.insertAdjacentHTML('afterbegin', _renderAdminExpenseRows(data));
+    // 更新 badge
+    const badge = document.getElementById('badge-expense-review');
+    if (badge) {
+      const cur = parseInt(badge.textContent) || 0;
+      setBadge('badge-expense-review', cur + 1);
+    }
+  } else {
+    loadExpenseReview();
+  }
 }
 
 async function loadExpenseReview() {
@@ -9372,57 +9385,85 @@ async function loadExpenseReview() {
   const statusMap   = { pending:'待審核', approved:'已核准', rejected:'已拒絕' };
   const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
   const expTypeColor = { '支出':'var(--red)', '收入':'var(--green)' };
-  tbody.innerHTML = claims.map(c => {
-    const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.account_holder || c.bank_account);
-    const bankRow = hasBankInfo ? `
-      <tr style="background:var(--bg-subtle,#f8f9fb)">
-        <td colspan="11" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
-          <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
-          ${escHtml(c.bank_name||'')}
-          ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
-          ${c.bank_account   ? `・帳號：<span style="font-family:'DM Mono',monospace">${escHtml(c.bank_account)}</span>` : ''}
-        </td>
-      </tr>` : '';
-    const reviewerNoteRow = c.review_note ? `
-      <tr style="background:#fff8f8">
-        <td colspan="11" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
-          審核備注：${escHtml(c.review_note)}
-        </td>
-      </tr>` : '';
-    return `
-    <tr>
-      <td>${escHtml(c.staff_name||'—')}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
-      <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
-      <td>${escHtml(c.category||'—')}</td>
-      <td style="color:var(--navy);font-size:12px">${escHtml(c.vendor||'—')}</td>
-      <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
-      <td style="min-width:160px;white-space:normal;word-break:break-word">${escHtml(c.note||'—')}</td>
-      <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
-      <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
-      <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
-      <td>
-        ${c.status === 'pending' ? `
-          <button class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
-          <button class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
-        ` : '—'}
+  tbody.innerHTML = claims.map(_renderAdminExpenseRows).join('');
+  // Badge: count pending
+  const pendingCnt = status === '' ? claims.filter(c=>c.status==='pending').length : (status==='pending' ? claims.length : 0);
+  setBadge('badge-expense-review', pendingCnt);
+}
+
+function _renderAdminExpenseRows(c) {
+  const statusMap   = { pending:'待審核', approved:'已核准', rejected:'已拒絕' };
+  const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
+  const expTypeColor = { '支出':'var(--red)', '收入':'var(--green)' };
+  const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.account_holder || c.bank_account);
+  const bankRow = hasBankInfo ? `
+    <tr style="background:var(--bg-subtle,#f8f9fb)">
+      <td colspan="11" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
+        <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
+        ${escHtml(c.bank_name||'')}
+        ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
+        ${c.bank_account   ? `・帳號：<span style="font-family:'DM Mono',monospace">${escHtml(c.bank_account)}</span>` : ''}
       </td>
-    </tr>
-    ${bankRow}${reviewerNoteRow}`;
-  }).join('');
+    </tr>` : '';
+  const reviewerNoteRow = c.review_note ? `
+    <tr style="background:#fff8f8">
+      <td colspan="11" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
+        審核備注：${escHtml(c.review_note)}
+      </td>
+    </tr>` : '';
+  return `
+  <tr data-exp-id="${c.id}">
+    <td>${escHtml(c.staff_name||'—')}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
+    <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
+    <td>${escHtml(c.category||'—')}</td>
+    <td style="color:var(--navy);font-size:12px">${escHtml(c.vendor||'—')}</td>
+    <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
+    <td style="min-width:160px;white-space:normal;word-break:break-word">${escHtml(c.note||'—')}</td>
+    <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
+    <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
+    <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
+    <td>
+      ${c.status === 'pending' ? `
+        <button class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
+        <button class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
+      ` : '—'}
+    </td>
+  </tr>
+  ${bankRow}${reviewerNoteRow}`;
   // Badge: count pending
   const pendingCnt = status === '' ? claims.filter(c=>c.status==='pending').length : (status==='pending' ? claims.length : 0);
   setBadge('badge-expense-review', pendingCnt);
 }
 
 async function reviewExpense(id, action, review_note='') {
-  // backend expects action: 'approve' or 'reject', note field: 'review_note'
-  const {ok} = await api(`/api/expense/claims/${id}`, {
+  const {ok, data} = await api(`/api/expense/claims/${id}`, {
     method:'PUT', body: JSON.stringify({action, review_note})
   });
   if (!ok) return;
   showToast(action==='approve' ? '已核准' : '已拒絕', 'success');
-  loadExpenseReview();
+  // 直接替換那一行，不重新 fetch 整個列表
+  const tbody = document.getElementById('exp-review-tbody');
+  const oldRow = tbody ? tbody.querySelector(`tr[data-exp-id="${id}"]`) : null;
+  if (oldRow && data) {
+    // 移除舊行（含可能跟著的 bank/note 附加行）
+    let next = oldRow.nextElementSibling;
+    while (next && !next.getAttribute('data-exp-id')) {
+      const tmp = next.nextElementSibling;
+      next.remove();
+      next = tmp;
+    }
+    oldRow.insertAdjacentHTML('afterend', _renderAdminExpenseRows(data));
+    oldRow.remove();
+    // 更新 badge
+    const badge = document.getElementById('badge-expense-review');
+    if (badge) {
+      const cur = parseInt(badge.textContent) || 0;
+      setBadge('badge-expense-review', Math.max(0, cur - 1));
+    }
+  } else {
+    loadExpenseReview();
+  }
 }
 
 function promptRejectExpense(id) {

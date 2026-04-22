@@ -4795,10 +4795,12 @@ async function deletePunchStaff(id) {
 let gpsLocList = [], editingLocId = null;
 
 async function loadGpsSettings() {
-  const { ok: ok1, data: s } = await api('/api/punch/settings', {}, true);
-  if (ok1) document.getElementById('gps-required').value = s.gps_required ? '1' : '0';
-  const { ok: ok2, data: locs } = await api('/api/punch/locations', {}, true);
-  gpsLocList = ok2 ? locs : [];
+  const [r1, r2] = await Promise.all([
+    api('/api/punch/settings', {}, true),
+    api('/api/punch/locations', {}, true),
+  ]);
+  if (r1.ok) document.getElementById('gps-required').value = r1.data.gps_required ? '1' : '0';
+  gpsLocList = r2.ok ? r2.data : [];
   renderLocList();
 }
 async function saveGpsConfig() {
@@ -4923,15 +4925,18 @@ async function deleteLocation(id) {
 
 // ── LINE Punch Config ─────────────────────────────────────────
 async function loadLinePunchConfig() {
-  const { ok, data: d } = await api('/api/line-punch/config', {}, true);
-  if (ok) {
+  document.getElementById('lp-webhook-url').textContent = window.location.origin + '/line-punch/webhook';
+  const [r1] = await Promise.all([
+    api('/api/line-punch/config', {}, true),
+    loadLinePunchStaff(),
+  ]);
+  if (r1.ok) {
+    const d = r1.data;
     document.getElementById('lp-enabled').value = d.enabled ? '1' : '0';
     document.getElementById('lp-token').value   = '';
     document.getElementById('lp-secret').value  = '';
     document.getElementById('lp-save-msg').textContent = d.enabled ? '目前狀態：已啟用' : '目前狀態：未啟用';
   }
-  document.getElementById('lp-webhook-url').textContent = window.location.origin + '/line-punch/webhook';
-  await loadLinePunchStaff();
 }
 async function saveLinePunchConfig() {
   const token   = document.getElementById('lp-token').value.trim();
@@ -5479,13 +5484,13 @@ async function openShiftAssignModal(prefillDate=null, prefillStaffId=null) {
   samSelectedDates = new Set(); samSelectedStaff = new Set();
   if (prefillDate)    samSelectedDates.add(prefillDate);
   if (prefillStaffId) samSelectedStaff.add(parseInt(prefillStaffId));
-  if (!shiftTypes.length) {
-    const { ok, data } = await api('/api/shifts/types', {}, true);
-    shiftTypes = ok ? data.filter(t=>t.active) : [];
-  }
-  if (!punchStaffList.length) {
-    const { ok, data } = await api('/api/punch/staff', {}, true);
-    punchStaffList = ok ? data : [];
+  if (!shiftTypes.length || !punchStaffList.length) {
+    const [r1, r2] = await Promise.all([
+      shiftTypes.length    ? null : api('/api/shifts/types', {}, true),
+      punchStaffList.length ? null : api('/api/punch/staff', {}, true),
+    ]);
+    if (r1 && r1.ok) shiftTypes     = r1.data.filter(t=>t.active);
+    if (r2 && r2.ok) punchStaffList = r2.data;
   }
   const sl = document.getElementById('sam-staff-list');
   sl.innerHTML = punchStaffList.filter(s=>s.active).map(s => `<label style="display:flex;align-items:center;gap:5px;padding:4px 8px;border:1.5px solid ${samSelectedStaff.has(s.id)?'var(--navy)':'var(--border)'};border-radius:6px;cursor:pointer;font-size:12px;background:${samSelectedStaff.has(s.id)?'var(--navy)':'#fff'};color:${samSelectedStaff.has(s.id)?'#fff':'var(--text)'}"><input type="checkbox" data-sid="${s.id}" ${samSelectedStaff.has(s.id)?'checked':''} style="display:none" onchange="toggleSamStaff(${s.id},this)">${escHtml(s.name)}</label>`).join('');

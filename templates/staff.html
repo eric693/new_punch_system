@@ -834,7 +834,6 @@ async function loadScheduleView(){
   if (!month) return;
   const wrap = document.getElementById('schedule-view-content');
   wrap.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div>';
-  await _loadHolidaysForMonth(month);
 
   let cfgData = {vacation_quota:8,max_off_per_day:2,off_counts:{},notes:''};
   let reqData  = null;
@@ -845,6 +844,7 @@ async function loadScheduleView(){
       fetch('/api/schedule/config/' + month).then(safeJ),
       fetch('/api/schedule/my-request/' + month).then(safeJ),
       fetch('/api/shifts/my-schedule?month=' + month).then(safeJ),
+      _loadHolidaysForMonth(month),
     ]);
     if (c) cfgData  = c;
     if (r && !r.error) reqData = r;
@@ -1171,11 +1171,13 @@ async function loadAttendance(){
   const cal = document.getElementById('att-calendar');
   const sum = document.getElementById('att-summary');
   cal.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:24px">載入中...</div>';
-  await _loadHolidaysForMonth(month);
 
   let records = {};
   try {
-    const res  = await fetch('/api/punch/my-records?month=' + month + '&_=' + Date.now());
+    const [, res] = await Promise.all([
+      _loadHolidaysForMonth(month),
+      fetch('/api/punch/my-records?month=' + month + '&_=' + Date.now())
+    ]);
     const data = await res.json();
     if (!res.ok) {
       // Session 過期 → 重新登入
@@ -1485,29 +1487,30 @@ async function initLeaveTab() {
   const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   if (!document.getElementById('leave-month-picker').value)
     document.getElementById('leave-month-picker').value = ym;
-  // 載入假別
-  if (!leaveTypeList.length) {
-    try {
-      const res = await fetch('/api/leave/types/public');
-      if (res.ok) leaveTypeList = await res.json();
-    } catch(e) {}
-  }
-  // 填入假別選單
-  const sel = document.getElementById('leave-type-sel');
-  sel.innerHTML = leaveTypeList.map(t =>
-    `<option value="${t.id}" data-pay="${t.pay_rate}" data-max="${t.max_days||''}" data-color="${t.color}" data-code="${t.code||''}">${esc(t.name)}</option>`
-  ).join('');
-  sel.addEventListener('change', () => { updateLeaveTypeInfo(); updateLeaveAttachmentWrap(); });
-  updateLeaveTypeInfo();
-  updateLeaveAttachmentWrap();
   // 設定預設日期為今天
   const today = new Date().toISOString().slice(0, 10);
   if (!document.getElementById('leave-start').value) {
     document.getElementById('leave-start').value = today;
     document.getElementById('leave-end').value   = today;
   }
+  // 假別 + 餘額 + 年假日曆 + 歷史記錄並行載入
+  const fillTypes = async () => {
+    if (!leaveTypeList.length) {
+      try {
+        const res = await fetch('/api/leave/types/public');
+        if (res.ok) leaveTypeList = await res.json();
+      } catch(e) {}
+    }
+    const sel = document.getElementById('leave-type-sel');
+    sel.innerHTML = leaveTypeList.map(t =>
+      `<option value="${t.id}" data-pay="${t.pay_rate}" data-max="${t.max_days||''}" data-color="${t.color}" data-code="${t.code||''}">${esc(t.name)}</option>`
+    ).join('');
+    sel.addEventListener('change', () => { updateLeaveTypeInfo(); updateLeaveAttachmentWrap(); });
+    updateLeaveTypeInfo();
+    updateLeaveAttachmentWrap();
+  };
   previewLeaveStaff();
-  await Promise.all([loadMyLeaveBalance(), loadAnnualLeaveCard(), loadMyLeaveHistory()]);
+  await Promise.all([fillTypes(), loadMyLeaveBalance(), loadAnnualLeaveCard(), loadMyLeaveHistory()]);
 }
 
 function updateLeaveTypeInfo() {

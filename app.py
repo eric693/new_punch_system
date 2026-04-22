@@ -6788,77 +6788,50 @@ def api_dashboard():
     else:
         month = today.strftime('%Y-%m')
 
+    # Pre-compute today's UTC timestamp range for index-friendly queries
+    from datetime import datetime as _ddt2
+    _today_start = _ddt2(today.year, today.month, today.day, tzinfo=TW)
+    _today_end   = _today_start + _tdd(days=1)
+
     with get_db() as conn:
 
-        # ── 今日出勤狀況 ─────────────────────────────────────────
-        total_staff = conn.execute(
-            "SELECT COUNT(*) as c FROM punch_staff WHERE active=TRUE"
-        ).fetchone()['c']
-
-        # 今日已打上班卡的人數
-        clocked_in = conn.execute("""
-            SELECT COUNT(DISTINCT staff_id) as c
-            FROM punch_records
-            WHERE punch_type='in'
-              AND (punched_at AT TIME ZONE 'Asia/Taipei')::date = %s
-        """, (today,)).fetchone()['c']
-
-        # 今日已打下班卡的人數
-        clocked_out = conn.execute("""
-            SELECT COUNT(DISTINCT staff_id) as c
-            FROM punch_records
-            WHERE punch_type='out'
-              AND (punched_at AT TIME ZONE 'Asia/Taipei')::date = %s
-        """, (today,)).fetchone()['c']
-
-        # 今日請假人數（已核准）
-        on_leave_today = conn.execute("""
-            SELECT COUNT(DISTINCT staff_id) as c
-            FROM leave_requests
-            WHERE status='approved'
-              AND start_date <= %s AND end_date >= %s
-        """, (today, today)).fetchone()['c']
-
-        # 今日出勤明細（每人狀態）
+        # ── 今日出勤明細（每人狀態）+ 計數 + 請假 —— 一次 JOIN 取完 ──
         today_detail_rows = conn.execute("""
             SELECT ps.id, ps.name, ps.role,
                    MAX(CASE WHEN pr.punch_type='in'  THEN to_char(pr.punched_at AT TIME ZONE 'Asia/Taipei','HH24:MI') END) as clock_in,
                    MAX(CASE WHEN pr.punch_type='out' THEN to_char(pr.punched_at AT TIME ZONE 'Asia/Taipei','HH24:MI') END) as clock_out,
-                   COUNT(pr.id) as punch_count
+                   COUNT(pr.id) as punch_count,
+                   MAX(lt.name) as leave_name
             FROM punch_staff ps
             LEFT JOIN punch_records pr
               ON pr.staff_id = ps.id
-              AND (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date = %s
+              AND pr.punched_at >= %s AND pr.punched_at < %s
+            LEFT JOIN leave_requests lr
+              ON lr.staff_id = ps.id AND lr.status='approved'
+              AND lr.start_date <= %s AND lr.end_date >= %s
+            LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
             WHERE ps.active = TRUE
             GROUP BY ps.id, ps.name, ps.role
             ORDER BY ps.name
-        """, (today,)).fetchall()
+        """, (_today_start, _today_end, today, today)).fetchall()
+
+        # 從明細彙整今日統計數字（不需要再跑獨立 COUNT 查詢）
+        total_staff    = len(today_detail_rows)
+        clocked_in     = sum(1 for r in today_detail_rows if r['clock_in'])
+        clocked_out    = sum(1 for r in today_detail_rows if r['clock_out'])
+        on_leave_today = sum(1 for r in today_detail_rows if r['leave_name'] and not r['clock_in'])
 
         today_detail = []
         for r in today_detail_rows:
-            # Check if on leave
-            leave_row = conn.execute("""
-                SELECT lt.name as leave_name
-                FROM leave_requests lr
-                JOIN leave_types lt ON lt.id = lr.leave_type_id
-                WHERE lr.staff_id=%s AND lr.status='approved'
-                  AND lr.start_date <= %s AND lr.end_date >= %s
-                LIMIT 1
-            """, (r['id'], today, today)).fetchone()
-
             if r['clock_in']:
                 if r['clock_out']:
-                    status = 'done'
-                    status_label = '已下班'
+                    status, status_label = 'done', '已下班'
                 else:
-                    status = 'working'
-                    status_label = '上班中'
-            elif leave_row:
-                status = 'leave'
-                status_label = leave_row['leave_name']
+                    status, status_label = 'working', '上班中'
+            elif r['leave_name']:
+                status, status_label = 'leave', r['leave_name']
             else:
-                status = 'absent'
-                status_label = '未出勤'
+                status, status_label = 'absent', '未出勤'
 
             today_detail.append({
                 'id':           r['id'],

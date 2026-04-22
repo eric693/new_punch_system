@@ -399,6 +399,14 @@ def init_db():
             note         TEXT DEFAULT '',
             created_at   TIMESTAMPTZ DEFAULT NOW()
         )""",
+        # ── 效能索引 ──────────────────────────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_punch_records_staff_punched ON punch_records(staff_id, punched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_records_staff_type_punched ON punch_records(staff_id, punch_type, punched_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_records_punched ON punch_records(punched_at DESC)",
+        # Functional index for to_char month queries throughout the codebase
+        "CREATE INDEX IF NOT EXISTS idx_punch_records_tw_month ON punch_records(to_char(punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM'))",
+        "CREATE INDEX IF NOT EXISTS idx_punch_staff_username ON punch_staff(username)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_staff_line_user ON punch_staff(line_user_id) WHERE line_user_id IS NOT NULL",
     ]
     for sql in migrations:
         try:
@@ -469,9 +477,26 @@ def keep_alive():
             consecutive_failures += 1
             if consecutive_failures == 1 or consecutive_failures % 10 == 0:
                 print(f"[keep-alive] ping failed ({consecutive_failures}x): {e}")
-        time.sleep(9 * 60)
+        time.sleep(4 * 60)  # 4 min — under pool max_idle (5 min) to keep connections warm
 
 threading.Thread(target=keep_alive, daemon=True).start()
+
+
+def _db_pool_keep_alive():
+    """Ping pool every 4 min to prevent idle connections from being dropped."""
+    if _WORKER_ID != '1':
+        return
+    time.sleep(60)
+    while True:
+        try:
+            if _db_pool is not None:
+                with _db_pool.connection(timeout=5.0) as conn:
+                    conn.execute('SELECT 1')
+        except Exception as e:
+            print(f"[db-keepalive] {e}")
+        time.sleep(240)
+
+threading.Thread(target=_db_pool_keep_alive, daemon=True).start()
 
 
 # ─── 特休自動同步 ─────────────────────────────────────────────────────────────
@@ -931,6 +956,28 @@ def api_punch_settings_get():
         'locations': [loc_row(r) for r in locs]
     })
 
+@app.route('/api/punch/init', methods=['GET'])
+def api_punch_init():
+    """Combined init: returns me (if logged in) + gps settings in a single request."""
+    sid = session.get('punch_staff_id')
+    with get_db() as conn:
+        cfg  = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
+        locs = conn.execute(
+            "SELECT * FROM punch_locations WHERE active=TRUE ORDER BY id"
+        ).fetchall()
+        staff = None
+        if sid:
+            staff = conn.execute(
+                "SELECT id, name, role FROM punch_staff WHERE id=%s AND active=TRUE", (sid,)
+            ).fetchone()
+            if not staff:
+                session.pop('punch_staff_id', None)
+    return jsonify({
+        'me': dict(staff) if staff else None,
+        'gps_required': cfg['gps_required'] if cfg else False,
+        'locations': [loc_row(r) for r in locs],
+    })
+
 @app.route('/api/punch/config', methods=['PUT'])
 @login_required
 def api_punch_config_update():
@@ -1017,30 +1064,29 @@ def api_punch_clock():
         cfg  = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
         locs = conn.execute("SELECT * FROM punch_locations WHERE active=TRUE").fetchall()
 
-    gps_required = cfg['gps_required'] if cfg else False
-    gps_distance = None
-    matched_loc  = None
+        gps_required = cfg['gps_required'] if cfg else False
+        gps_distance = None
+        matched_loc  = None
 
-    if lat is not None and lng is not None and locs:
-        for loc in locs:
-            d = _gps_distance(lat, lng, float(loc['lat']), float(loc['lng']))
-            if gps_distance is None or d < gps_distance:
-                gps_distance = d
-                matched_loc  = loc
+        if lat is not None and lng is not None and locs:
+            for loc in locs:
+                d = _gps_distance(lat, lng, float(loc['lat']), float(loc['lng']))
+                if gps_distance is None or d < gps_distance:
+                    gps_distance = d
+                    matched_loc  = loc
 
-    if gps_required:
-        if lat is None or lng is None:
-            return jsonify({'error': '無法取得 GPS，請允許定位權限後重試'}), 403
-        if not locs:
-            return jsonify({'error': '管理員尚未設定任何打卡地點'}), 403
-        if gps_distance is None or gps_distance > int(matched_loc['radius_m']):
-            return jsonify({
-                'error': f'距離最近地點「{matched_loc["location_name"]}」{gps_distance} 公尺，超出允許範圍（{matched_loc["radius_m"]} 公尺）',
-                'distance': gps_distance,
-                'radius': int(matched_loc['radius_m'])
-            }), 403
+        if gps_required:
+            if lat is None or lng is None:
+                return jsonify({'error': '無法取得 GPS，請允許定位權限後重試'}), 403
+            if not locs:
+                return jsonify({'error': '管理員尚未設定任何打卡地點'}), 403
+            if gps_distance is None or gps_distance > int(matched_loc['radius_m']):
+                return jsonify({
+                    'error': f'距離最近地點「{matched_loc["location_name"]}」{gps_distance} 公尺，超出允許範圍（{matched_loc["radius_m"]} 公尺）',
+                    'distance': gps_distance,
+                    'radius': int(matched_loc['radius_m'])
+                }), 403
 
-    with get_db() as conn:
         recent = conn.execute("""
             SELECT id FROM punch_records
             WHERE staff_id=%s AND punch_type=%s
@@ -1066,15 +1112,17 @@ def api_punch_today():
     sid = session.get('punch_staff_id')
     if not sid:
         return jsonify([])
+    now_tw = _dt.now(TW_TZ)
+    today_start = _dt(now_tw.year, now_tw.month, now_tw.day, tzinfo=TW_TZ)
+    tomorrow_start = today_start + _td(days=1)
     with get_db() as conn:
         rows = conn.execute("""
             SELECT pr.*, ps.name as staff_name
             FROM punch_records pr JOIN punch_staff ps ON ps.id=pr.staff_id
             WHERE pr.staff_id=%s
-              AND (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date
-                = (NOW() AT TIME ZONE 'Asia/Taipei')::date
+              AND pr.punched_at >= %s AND pr.punched_at < %s
             ORDER BY pr.punched_at ASC
-        """, (sid,)).fetchall()
+        """, (sid, today_start, tomorrow_start)).fetchall()
     return jsonify([punch_record_row(r) for r in rows])
 
 @app.route('/api/punch/my-records', methods=['GET'])
@@ -1085,16 +1133,20 @@ def api_punch_my_records():
         return jsonify({'error': 'not logged in'}), 401
     month = request.args.get('month', '')
     if not month:
-        from datetime import timezone as _tz, timedelta as _tda
-        month = _dt.now(_tz(_tda(hours=8))).strftime('%Y-%m')
+        month = _dt.now(TW_TZ).strftime('%Y-%m')
+    import calendar as _cal_mr
+    _y_mr, _m_mr = int(month[:4]), int(month[5:])
+    month_start = _dt(_y_mr, _m_mr, 1, tzinfo=TW_TZ)
+    last_day    = _cal_mr.monthrange(_y_mr, _m_mr)[1]
+    month_end   = _dt(_y_mr, _m_mr, last_day, tzinfo=TW_TZ) + _td(days=1)
     with get_db() as conn:
         rows = conn.execute("""
             SELECT punch_type, punched_at, gps_distance, location_name, is_manual
             FROM punch_records
             WHERE staff_id=%s
-              AND to_char(punched_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') = %s
+              AND punched_at >= %s AND punched_at < %s
             ORDER BY punched_at ASC
-        """, (sid, month)).fetchall()
+        """, (sid, month_start, month_end)).fetchall()
     from datetime import timezone as _tz2, timedelta as _tdb
     TW = _tz2(_tdb(hours=8))
     LABEL = {'in': '上班', 'out': '下班', 'break_out': '休息開始', 'break_in': '休息結束'}
@@ -1253,7 +1305,12 @@ def api_punch_records():
     conds, params = ["TRUE"], []
     if staff_id: conds.append("pr.staff_id=%s"); params.append(int(staff_id))
     if month:
-        conds.append("TO_CHAR(pr.punched_at,'YYYY-MM')=%s"); params.append(month)
+        import calendar as _cal_pr
+        _ypr, _mpr = int(month[:4]), int(month[5:])
+        _pr_start = _dt(_ypr, _mpr, 1, tzinfo=TW_TZ)
+        _pr_end   = _dt(_ypr, _mpr, _cal_pr.monthrange(_ypr, _mpr)[1], tzinfo=TW_TZ) + _td(days=1)
+        conds.append("pr.punched_at >= %s AND pr.punched_at < %s")
+        params.extend([_pr_start, _pr_end])
     elif date_from:
         conds.append("(pr.punched_at AT TIME ZONE 'Asia/Taipei')::date>=%s"); params.append(date_from)
         if date_to:
@@ -1322,7 +1379,11 @@ def api_punch_summary():
     from datetime import date as _date2, timedelta as _td2, datetime as _dt2
     import calendar as _cal2
     _y2, _m2 = int(month[:4]), int(month[5:])
-    _next_date2 = (_date2(_y2, _m2, _cal2.monthrange(_y2, _m2)[1]) + _td2(days=1)).isoformat()
+    # Range: TW 1st of month 00:00 → TW 1st of month+2 00:00 (include overflow day)
+    _range_start = _dt2(_y2, _m2, 1, tzinfo=TW_TZ)
+    _last2       = _cal2.monthrange(_y2, _m2)[1]
+    _range_end   = _dt2(_y2, _m2, _last2, tzinfo=TW_TZ) + _td2(days=2)
+    _next_date2  = (_date2(_y2, _m2, _last2) + _td2(days=1)).isoformat()
 
     with get_db() as conn:
         rows = conn.execute("""
@@ -1333,11 +1394,10 @@ def api_punch_summary():
                    COUNT(*) as punch_count,
                    BOOL_OR(pr.is_manual) as has_manual
             FROM punch_records pr JOIN punch_staff ps ON ps.id=pr.staff_id
-            WHERE TO_CHAR(pr.punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM')=%s
-               OR (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date = %s
+            WHERE pr.punched_at >= %s AND pr.punched_at < %s
             GROUP BY ps.id, ps.name, (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date
             ORDER BY (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date ASC, ps.name
-        """, (month, _next_date2)).fetchall()
+        """, (_range_start, _range_end)).fetchall()
 
     # Build per-(staff, date) dict
     day_map = {}
@@ -1389,10 +1449,13 @@ def api_attendance_monthly_stats():
     回傳：出勤天數、總工時、遲到次數、缺打卡次數、平均工時
     """
     month = request.args.get('month') or _dt.now(TW_TZ).strftime('%Y-%m')
-    from datetime import date as _date3, timedelta as _td3
+    from datetime import date as _date3, timedelta as _td3, datetime as _dt3
     import calendar as _cal3
     _y3, _m3 = int(month[:4]), int(month[5:])
-    _next_date3 = (_date3(_y3, _m3, _cal3.monthrange(_y3, _m3)[1]) + _td3(days=1)).isoformat()
+    _last3      = _cal3.monthrange(_y3, _m3)[1]
+    _next_date3 = (_date3(_y3, _m3, _last3) + _td3(days=1)).isoformat()
+    _range3_start = _dt3(_y3, _m3, 1, tzinfo=TW_TZ)
+    _range3_end   = _dt3(_y3, _m3, _last3, tzinfo=TW_TZ) + _td3(days=2)
 
     with get_db() as conn:
         # 每人每日打卡彙整（多抓下個月第一天，供跨日班次合併）
@@ -1406,12 +1469,11 @@ def api_attendance_monthly_stats():
                    BOOL_OR(pr.punch_type='out') as has_out
             FROM punch_records pr
             JOIN punch_staff ps ON ps.id = pr.staff_id AND ps.active = TRUE
-            WHERE TO_CHAR(pr.punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM') = %s
-               OR (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date = %s
+            WHERE pr.punched_at >= %s AND pr.punched_at < %s
             GROUP BY ps.id, ps.name, ps.department, ps.role,
                      (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date
             ORDER BY ps.name, work_date
-        """, (month, _next_date3)).fetchall()
+        """, (_range3_start, _range3_end)).fetchall()
 
         # 班別指派（用於遲到判斷）
         shift_rows = conn.execute("""

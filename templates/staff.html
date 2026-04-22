@@ -555,10 +555,13 @@ function tick(){
 setInterval(tick,1000);tick();
 
 (async()=>{
-  gpsSettings=await fetch('/api/punch/settings').then(r=>r.json()).catch(()=>({}));
-  const r=await fetch('/api/punch/me');
-  if(r.ok){me=await r.json();showMain();}
-  else showLogin();
+  try{
+    const r=await fetch('/api/punch/init');
+    const d=await r.json();
+    gpsSettings={gps_required:d.gps_required,locations:d.locations||[]};
+    if(d.me){me=d.me;showMain();}
+    else showLogin();
+  }catch(e){showLogin();}
 })();
 
 function showLogin(){

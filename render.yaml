@@ -8,9 +8,9 @@ services:
   - type: web
     name: punch-system
     env: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt && (apt-get install -y fonts-wqy-microhei 2>/dev/null || true)
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 60
+    startCommand: gunicorn app:app -c gunicorn.conf.py --bind 0.0.0.0:$PORT
     envVars:
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false

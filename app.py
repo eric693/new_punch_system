@@ -65,8 +65,8 @@ def _init_db_pool():
         try:
             _db_pool = ConnectionPool(
                 DATABASE_URL,
-                min_size=1,
-                max_size=10,
+                min_size=3,
+                max_size=20,
                 kwargs={'row_factory': dict_row},
                 open=True,
                 reconnect_timeout=30,
@@ -108,6 +108,43 @@ def get_db():
 
 def _hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
+
+
+# ─── In-Memory Caches ─────────────────────────────────────────────────────────
+# punch_config 和 punch_locations 幾乎不變，快取後每次打卡少 2 個 DB 查詢。
+
+_punch_cfg_cache:  dict = {'data': None, 'at': 0.0}
+_punch_locs_cache: dict = {'data': None, 'at': 0.0}
+_PUNCH_CFG_TTL  = 300   # 5 分鐘
+_PUNCH_LOCS_TTL = 60    # 1 分鐘
+
+
+def _get_cfg_cached(conn):
+    now = time.time()
+    if _punch_cfg_cache['data'] is not None and now - _punch_cfg_cache['at'] < _PUNCH_CFG_TTL:
+        return _punch_cfg_cache['data']
+    row = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
+    _punch_cfg_cache['data'] = row
+    _punch_cfg_cache['at']   = now
+    return row
+
+
+def _invalidate_cfg_cache():
+    _punch_cfg_cache['data'] = None
+
+
+def _get_locs_cached(conn):
+    now = time.time()
+    if _punch_locs_cache['data'] is not None and now - _punch_locs_cache['at'] < _PUNCH_LOCS_TTL:
+        return _punch_locs_cache['data']
+    rows = conn.execute("SELECT * FROM punch_locations WHERE active=TRUE").fetchall()
+    _punch_locs_cache['data'] = rows
+    _punch_locs_cache['at']   = now
+    return rows
+
+
+def _invalidate_locs_cache():
+    _punch_locs_cache['data'] = None
 
 
 def init_db():
@@ -947,10 +984,8 @@ def api_punch_me():
 def api_punch_settings_get():
     """Public: GPS config + active locations for the punch page."""
     with get_db() as conn:
-        cfg  = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
-        locs = conn.execute(
-            "SELECT * FROM punch_locations WHERE active=TRUE ORDER BY id"
-        ).fetchall()
+        cfg  = _get_cfg_cached(conn)
+        locs = _get_locs_cached(conn)
     return jsonify({
         'gps_required': cfg['gps_required'] if cfg else False,
         'locations': [loc_row(r) for r in locs]
@@ -961,10 +996,8 @@ def api_punch_init():
     """Combined init: returns me (if logged in) + gps settings in a single request."""
     sid = session.get('punch_staff_id')
     with get_db() as conn:
-        cfg  = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
-        locs = conn.execute(
-            "SELECT * FROM punch_locations WHERE active=TRUE ORDER BY id"
-        ).fetchall()
+        cfg  = _get_cfg_cached(conn)
+        locs = _get_locs_cached(conn)
         staff = None
         if sid:
             staff = conn.execute(
@@ -988,6 +1021,7 @@ def api_punch_config_update():
             "UPDATE punch_config SET gps_required=%s, updated_at=NOW() WHERE id=1",
             (gps_required,)
         )
+    _invalidate_cfg_cache()
     return jsonify({'gps_required': gps_required})
 
 @app.route('/api/punch/locations', methods=['GET'])
@@ -1012,6 +1046,7 @@ def api_punch_locations_create():
             "INSERT INTO punch_locations (location_name, lat, lng, radius_m) VALUES (%s,%s,%s,%s) RETURNING *",
             (name, lat, lng, radius_m)
         ).fetchone()
+    _invalidate_locs_cache()
     return jsonify(loc_row(row)), 201
 
 @app.route('/api/punch/locations/<int:lid>', methods=['PUT'])
@@ -1030,6 +1065,7 @@ def api_punch_locations_update(lid):
             "UPDATE punch_locations SET location_name=%s,lat=%s,lng=%s,radius_m=%s,active=%s,updated_at=NOW() WHERE id=%s RETURNING *",
             (name, lat, lng, radius_m, active, lid)
         ).fetchone()
+    _invalidate_locs_cache()
     return jsonify(loc_row(row)) if row else ('', 404)
 
 @app.route('/api/punch/locations/<int:lid>', methods=['DELETE'])
@@ -1037,6 +1073,7 @@ def api_punch_locations_update(lid):
 def api_punch_locations_delete(lid):
     with get_db() as conn:
         conn.execute("DELETE FROM punch_locations WHERE id=%s", (lid,))
+    _invalidate_locs_cache()
     return jsonify({'deleted': lid})
 
 # ── Clock In/Out ──────────────────────────────────────────────────
@@ -1061,8 +1098,8 @@ def api_punch_clock():
         ).fetchone()
         if not staff:
             return jsonify({'error': '員工不存在'}), 404
-        cfg  = conn.execute("SELECT * FROM punch_config WHERE id=1").fetchone()
-        locs = conn.execute("SELECT * FROM punch_locations WHERE active=TRUE").fetchall()
+        cfg  = _get_cfg_cached(conn)
+        locs = _get_locs_cached(conn)
 
         gps_required = cfg['gps_required'] if cfg else False
         gps_distance = None
@@ -6844,11 +6881,18 @@ def api_dashboard():
                 'status_label': status_label,
             })
 
-        # ── 待審申請數 ───────────────────────────────────────────
-        pending_punch   = conn.execute("SELECT COUNT(*) as c FROM punch_requests WHERE status='pending'").fetchone()['c']
-        pending_ot      = conn.execute("SELECT COUNT(*) as c FROM overtime_requests WHERE status='pending'").fetchone()['c']
-        pending_sched   = conn.execute("SELECT COUNT(*) as c FROM schedule_requests WHERE status IN ('pending','modified_pending')").fetchone()['c']
-        pending_leave   = conn.execute("SELECT COUNT(*) as c FROM leave_requests WHERE status='pending'").fetchone()['c']
+        # ── 待審申請數（單一查詢）────────────────────────────────
+        _prow = conn.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM punch_requests    WHERE status='pending')                    AS punch_cnt,
+                (SELECT COUNT(*) FROM overtime_requests WHERE status='pending')                    AS ot_cnt,
+                (SELECT COUNT(*) FROM schedule_requests WHERE status IN ('pending','modified_pending')) AS sched_cnt,
+                (SELECT COUNT(*) FROM leave_requests    WHERE status='pending')                    AS leave_cnt
+        """).fetchone()
+        pending_punch = _prow['punch_cnt']
+        pending_ot    = _prow['ot_cnt']
+        pending_sched = _prow['sched_cnt']
+        pending_leave = _prow['leave_cnt']
 
         # ── 本月薪資總覽 ─────────────────────────────────────────
         sal_rows = conn.execute("""

@@ -4690,9 +4690,7 @@ async function submitManualPunch() {
 }
 
 // ── 員工管理 ──────────────────────────────────────────────────
-async function loadPunchStaff() {
-  const { ok, data } = await api('/api/punch/staff', {}, true);
-  punchStaffList = ok ? data : [];
+function renderPunchStaff() {
   const tb = document.getElementById('punch-staff-tbody');
   document.getElementById('punch-staff-count').textContent = `共 ${punchStaffList.length} 位員工`;
   if (!punchStaffList.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
@@ -4712,6 +4710,11 @@ async function loadPunchStaff() {
     </td>
   </tr>`;
   }).join('');
+}
+async function loadPunchStaff() {
+  const { ok, data } = await api('/api/punch/staff', {}, true);
+  punchStaffList = ok ? data : [];
+  renderPunchStaff();
 }
 function openPunchStaffModal(id=null) {
   punchEditStaffId = id;
@@ -4781,14 +4784,26 @@ async function savePunchStaff() {
   if (!body.username) { showToast('請填寫帳號', 'error'); return; }
   const url    = id ? `/api/punch/staff/${id}` : '/api/punch/staff';
   const method = id ? 'PUT' : 'POST';
-  const { ok } = await api(url, { method, body: JSON.stringify(body) });
+  const { ok, data } = await api(url, { method, body: JSON.stringify(body) });
   if (!ok) return;
-  closePunchStaffModal(); showToast(id ? '已更新' : '員工已新增', 'success'); await loadPunchStaff();
+  if (data) {
+    if (id) {
+      const idx = punchStaffList.findIndex(x => x.id === parseInt(id));
+      if (idx !== -1) punchStaffList[idx] = data;
+      else punchStaffList.push(data);
+    } else {
+      punchStaffList.push(data);
+      punchStaffList.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
+    }
+  }
+  closePunchStaffModal(); showToast(id ? '已更新' : '員工已新增', 'success'); renderPunchStaff();
 }
 async function deletePunchStaff(id) {
   if (!confirm('確定刪除此員工？其所有打卡記錄也會一併刪除。')) return;
-  await api(`/api/punch/staff/${id}`, { method: 'DELETE' });
-  showToast('已刪除', 'success'); await loadPunchStaff();
+  const { ok } = await api(`/api/punch/staff/${id}`, { method: 'DELETE' });
+  if (!ok) return;
+  punchStaffList = punchStaffList.filter(x => x.id !== id);
+  showToast('已刪除', 'success'); renderPunchStaff();
 }
 
 // ── GPS ────────────────────────────────────────────────────────

@@ -4487,7 +4487,11 @@ function showPage(page, e) {
   );
   const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  if (page === 'dash')            initDash();
+  // 儀表板每次都刷新（顯示今日即時數據），其他模組只在首次進入時初始化
+  if (page === 'dash') { initDash(); return; }
+  if (_initedModules.has(page)) return;
+  _initedModules.add(page);
+
   if (page === 'punch')           initPunch();
   if (page === 'sched')           initSched();
   if (page === 'leave')           initLeave();
@@ -4521,6 +4525,7 @@ let punchEditRecId = null;
 let punchEditStaffId = null;
 let _currentPage = 'dash';
 let _currentPunchTab = '';
+const _initedModules = new Set();
 
 const PUNCH_LABEL = { in:'上班打卡', out:'下班打卡', break_out:'休息開始', break_in:'休息結束' };
 const PUNCH_COLOR = { in:'var(--green)', out:'var(--red)', break_out:'#e07b2a', break_in:'var(--accent)' };

@@ -1784,12 +1784,9 @@ def _flex_ask(title, color, question, hint=''):
 
 # ── Leave interactive flow ────────────────────────────────────────────
 
-# Hourly time slots for leave start/end selection (fits all on one page within LINE's 13-item limit)
-_LV_TIMES = [
-    '08:00','09:00','10:00','11:00','12:00',
-    '13:00','14:00','15:00','16:00','17:00','18:00','19:00',
-]
-_LV_TIME_PAGE = 12  # 12 hourly slots + cancel = 13, fits on one page
+# Half-hour time slots 00:00–23:30 for leave start/end selection
+_LV_TIMES = [f'{h:02d}:{m:02d}' for h in range(24) for m in (0, 30)]
+_LV_TIME_PAGE = 10  # 10 items + prev/next + cancel stays within LINE's 13-item limit
 
 
 def _lv_parse_time(s):

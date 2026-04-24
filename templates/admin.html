@@ -9462,13 +9462,13 @@ async function submitAdminExpense() {
   if (!ok) { showToast('新增失敗，請再試', 'error'); return; }
   showToast('費用申請已建立', 'success');
   closeAddExpenseModal();
-  // 直接插入新行到表格最前面，不需重新 fetch 整個列表
+  _expClaimsMap[data.id] = data;
   const tbody = document.getElementById('exp-review-tbody');
   if (tbody) {
-    const isEmpty = tbody.querySelector('td[colspan]');
+    // 用 .empty-state-text 精確偵測空白/載入狀態，避免誤判銀行資訊的 colspan 行
+    const isEmpty = tbody.querySelector('.empty-state-text');
     if (isEmpty) tbody.innerHTML = '';
     tbody.insertAdjacentHTML('afterbegin', _renderAdminExpenseRows(data));
-    // 更新 badge
     const badge = document.getElementById('badge-expense-review');
     if (badge) {
       const cur = parseInt(badge.textContent) || 0;

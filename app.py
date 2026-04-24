@@ -4190,13 +4190,12 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
         except (ValueError, Exception):
             daily_hours = 0.0
         if daily_hours > 0:
-            import math as _math
             working_days = sum(
                 1 for i in range((e - s).days + 1)
                 if (s + _tdd(days=i)).weekday() != 6
             )
             raw = working_days * daily_hours / 8.0
-            return _math.ceil(raw * 2) / 2  # ceil to nearest 0.5 (min 0.5 when hours > 0)
+            return max(0.5, round(raw * 2) / 2)  # round to nearest 0.5, min 0.5
 
     # Half-day flag logic
     days = 0.0

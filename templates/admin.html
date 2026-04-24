@@ -5982,7 +5982,7 @@ function previewLeaveDays() {
       return;
     }
     const raw = workingDays * dailyHours / 8;
-    days = Math.ceil(raw * 2) / 2;
+    days = Math.max(0.5, Math.round(raw * 2) / 2);
   } else {
     days = workingDays;
   }

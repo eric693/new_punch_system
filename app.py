@@ -18,6 +18,7 @@ from flask import (
     Flask, request, jsonify, render_template,
     session, redirect, url_for, abort
 )
+from flask_compress import Compress
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.exceptions import HTTPException
 from linebot import LineBotApi, WebhookHandler
@@ -28,6 +29,7 @@ from linebot.models import (
 )
 
 app = Flask(__name__)
+Compress(app)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['PERMANENT_SESSION_LIFETIME'] = __import__('datetime').timedelta(days=30)

@@ -5977,8 +5977,12 @@ function previewLeaveDays() {
     const [sh, sm] = lvStart.split(':').map(Number);
     const [eh, em] = lvEnd.split(':').map(Number);
     const dailyHours = (eh * 60 + em - sh * 60 - sm) / 60;
+    if (dailyHours <= 0) {
+      document.getElementById('lam-days-preview').textContent = '結束時間必須晚於開始時間';
+      return;
+    }
     const raw = workingDays * dailyHours / 8;
-    days = Math.round(raw * 2) / 2;
+    days = Math.ceil(raw * 2) / 2;
   } else {
     days = workingDays;
   }

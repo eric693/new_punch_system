@@ -10461,8 +10461,11 @@ function downloadEdi(type, eventType) {
    ===================================================================== */
 async function loadStores() {
   const r = await api('/api/stores');
-  if (!r.ok) { showToast('載入門市失敗', 'error'); return; }
   const tbody = document.getElementById('stores-tbody');
+  if (!r.ok) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入失敗，請重新整理</div></td></tr>';
+    return;
+  }
   if (!tbody) return;
   tbody.innerHTML = r.data.length === 0
     ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">尚無門市資料</td></tr>'
@@ -11599,9 +11602,12 @@ async function loadQProducts() {
   const company = window._qCompany || '';
   const qs = company ? `?company=${company}` : '';
   const {ok, data} = await api('/api/quotation/products' + qs, {}, true);
-  if (!ok) return;
-  _qProductList = data;
   const tbody = document.getElementById('qproducts-tbody');
+  if (!ok) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入失敗，請重新整理</div></td></tr>';
+    return;
+  }
+  _qProductList = data;
   if (!tbody) return;
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無常用品項</div></td></tr>'; return; }
   tbody.innerHTML = data.map(p => `<tr>

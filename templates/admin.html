@@ -4487,11 +4487,17 @@ function showPage(page, e) {
   );
   const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  // 儀表板每次刷新；expense-review 每次進入都更新（動態篩選，且失敗後需能重試）
+  // 儀表板每次刷新；expense-review 每次進入都更新
   if (page === 'dash')           { initDash(); return; }
   if (page === 'expense-review') { loadExpenseReview(); return; }
-  // 其他模組只在首次進入時初始化，切換回來直接顯示已有資料
-  if (_initedModules.has(page)) return;
+  // 已初始化且內容正常（不是卡在「載入中...」）→ 直接顯示，不重新 fetch
+  if (_initedModules.has(page)) {
+    const pageEl = document.getElementById('page-' + page);
+    const stuck  = pageEl && pageEl.querySelector('.empty-state-text');
+    if (!stuck || stuck.textContent.trim() !== '載入中...') return;
+    // 還卡在載入中 → 移除快取，重試
+    _initedModules.delete(page);
+  }
   _initedModules.add(page);
   if (page === 'punch')      initPunch();
   if (page === 'sched')      initSched();
@@ -7218,7 +7224,11 @@ async function loadAnnList() {
   const catFilter    = document.getElementById('ann-filter-cat').value;
   const statusFilter = document.getElementById('ann-filter-status').value;
   const { ok, data } = await api('/api/announcements', {}, true);
-  if (!ok) return;
+  if (!ok) {
+    document.getElementById('ann-list').innerHTML =
+      '<div class="card" style="padding:48px;text-align:center;color:var(--muted)">載入失敗，請點「重新整理」或稍後再試</div>';
+    return;
+  }
   let list = data;
   if (catFilter)    list = list.filter(a => a.category === catFilter);
   if (statusFilter === 'active')   list = list.filter(a => a.active && (!a.expires_at || new Date(a.expires_at) > new Date()));

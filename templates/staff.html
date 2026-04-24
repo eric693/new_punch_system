@@ -2223,18 +2223,22 @@ async function submitExpense() {
 async function loadMyExpenses() {
   const list = document.getElementById('exp-list');
   list.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:24px">載入中...</div>';
-  const res = await fetch('/api/expense/my-claims');
-  const claims = await res.json();
-  if (!Array.isArray(claims) || !claims.length) {
-    list.innerHTML = '<div data-exp-empty style="text-align:center;color:var(--muted);font-size:13px;padding:24px">尚無申請記錄</div>';
-    return;
+  try {
+    const res = await fetch('/api/expense/my-claims');
+    if (!res.ok) throw new Error('api');
+    const claims = await res.json();
+    if (!Array.isArray(claims) || !claims.length) {
+      list.innerHTML = '<div data-exp-empty style="text-align:center;color:var(--muted);font-size:13px;padding:24px">尚無申請記錄</div>';
+      return;
+    }
+    list.innerHTML = claims.map(_renderExpenseItem).join('');
+    const pending = claims.filter(c => c.status === 'approved').length;
+    const badge = document.getElementById('expense-badge');
+    if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;color:var(--red);font-size:13px;padding:24px">載入失敗，請重新整理</div>';
   }
-  list.innerHTML = claims.map(_renderExpenseItem).join('');
-  // Update badge
-  const pending = claims.filter(c => c.status === 'approved').length;
-  const badge = document.getElementById('expense-badge');
-  if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
-  else badge.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════════════

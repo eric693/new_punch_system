@@ -597,13 +597,15 @@ function showMain(){
   document.getElementById('user-role').textContent=me.role||'員工';
   switchTab('punch');
 }
+let _punchPollInterval=null;
 function switchTab(tab){
+  if(_punchPollInterval){clearInterval(_punchPollInterval);_punchPollInterval=null;}
   ['ann','punch','sched','leave','schedule-view','overtime','attendance','payslip','expense','worklog','myperf','biodev'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('panel-'+t).style.display=t===tab?'':'none';
   });
   if(tab==='ann')initAnnStaff();
-  if(tab==='punch'){startGPS();loadTodayLog();}
+  if(tab==='punch'){startGPS();loadTodayLog();_punchPollInterval=setInterval(loadTodayLog,30000);}
   if(tab==='sched')initSchedTab();
   if(tab==='leave')initLeaveTab();
   if(tab==='schedule-view')initScheduleViewTab();
@@ -655,6 +657,15 @@ function hav(a,b,c,d){
 }
 
 /* Punch */
+function renderLogItem(r){
+  const t=r.punched_at?r.punched_at.slice(11,16):'';
+  const dist=r.gps_distance!=null?r.gps_distance+'m':'';
+  return '<div class="log-item"><span class="lb '+(PLCLS[r.punch_type]||'')+'">'+
+    (PLABEL[r.punch_type]||r.punch_type)+'</span><div><div class="log-time">'+t+'</div>'+
+    (dist?'<div class="log-sub">'+dist+'</div>':'')+
+    (r.is_manual?'<div class="log-sub">補打卡</div>':'')+
+  '</div></div>';
+}
 async function doPunch(type){
   if(punchLocked)return;
   punchLocked=true;setTimeout(()=>punchLocked=false,2000);
@@ -667,7 +678,12 @@ async function doPunch(type){
     const n=new Date();
     const ts=[n.getHours(),n.getMinutes()].map(x=>String(x).padStart(2,'0')).join(':');
     showSuccess(me.name,PLABEL[type],ts,d.gps_distance!=null?'距離打卡地點 '+d.gps_distance+' 公尺':'');
-    await loadTodayLog();
+    // 立即插入新記錄（樂觀更新），不等第二次 fetch
+    const wrap=document.getElementById('today-log');
+    document.getElementById('today-log-wrap').style.display='';
+    if(wrap.querySelector('.log-empty'))wrap.innerHTML='';
+    wrap.insertAdjacentHTML('beforeend',renderLogItem(d));
+    loadTodayLog(); // 背景刷新確保完整性，不 await
   }catch(e){showToast('網路錯誤，請重試','err');punchLocked=false;}
 }
 async function loadTodayLog(){
@@ -675,11 +691,7 @@ async function loadTodayLog(){
   const wrap=document.getElementById('today-log');
   document.getElementById('today-log-wrap').style.display='';
   if(!list.length){wrap.innerHTML='<div class="log-empty">尚無打卡記錄</div>';return;}
-  wrap.innerHTML=list.map(r=>{
-    const t=r.punched_at?r.punched_at.slice(11,16):'';
-    const dist=r.gps_distance!=null?r.gps_distance+'m':'';
-    return '<div class="log-item"><span class="lb '+(PLCLS[r.punch_type]||'')+'">'+( PLABEL[r.punch_type]||r.punch_type)+'</span><div><div class="log-time">'+t+'</div>'+(dist?'<div class="log-sub">'+dist+'</div>':'')+(r.is_manual?'<div class="log-sub">補打卡</div>':'')+'</div></div>';
-  }).join('');
+  wrap.innerHTML=list.map(renderLogItem).join('');
 }
 
 /* 補打卡申請 */

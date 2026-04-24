@@ -4391,6 +4391,7 @@ function closeSidebar() {
 
 function showPage(page, e) {
   if (e) e.preventDefault();
+  _currentPage = page;
   // 權限檢查（儀表板和帳號管理不受模組限制）
   const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation', worklog:'worklog' };
   if (moduleGuard[page] && !hasModule(moduleGuard[page])) {
@@ -4438,6 +4439,8 @@ let punchStaffList = [];
 let punchRecords   = [];
 let punchEditRecId = null;
 let punchEditStaffId = null;
+let _currentPage = 'dash';
+let _currentPunchTab = '';
 
 const PUNCH_LABEL = { in:'上班打卡', out:'下班打卡', break_out:'休息開始', break_in:'休息結束' };
 const PUNCH_COLOR = { in:'var(--green)', out:'var(--red)', break_out:'#e07b2a', break_in:'var(--accent)' };
@@ -4453,6 +4456,7 @@ function initPunch() {
 }
 
 function switchPunchTab(tab) {
+  _currentPunchTab = tab;
   ['summary','records','manual','requests','overtime','staff','gps','line','anomaly','mstats'].forEach(t => {
     document.getElementById('punchtab-' + t).classList.toggle('active', t === tab);
     document.getElementById('punch-panel-' + t).style.display = t === tab ? '' : 'none';
@@ -7297,6 +7301,13 @@ function setTabDot(id, count) {
 
 document.addEventListener('DOMContentLoaded', () => {
   refreshBadges(); setInterval(refreshBadges, 30000);
+  setInterval(() => {
+    if (_currentPage !== 'punch') return;
+    const modal = document.getElementById('punch-rec-modal');
+    if (modal && modal.style.display === 'flex') return;
+    if (_currentPunchTab === 'records')  loadPunchRecords();
+    if (_currentPunchTab === 'requests') loadPunchRequests();
+  }, 30000);
   document.addEventListener('click', e => {
     const box = document.getElementById('glm-search-results');
     if (box && !box.contains(e.target) && e.target.id !== 'glm-search') box.style.display = 'none';

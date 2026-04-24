@@ -3022,8 +3022,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div><label class="form-label">結束日期 *</label><input class="form-input" type="date" id="lam-end"></div>
       </div>
       <div class="form-row" style="margin-bottom:8px">
-        <div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lam-start-half"> <span class="form-label" style="margin:0">開始日半天</span></label></div>
-        <div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lam-end-half"> <span class="form-label" style="margin:0">結束日半天</span></label></div>
+        <div><label class="form-label">開始時間</label><input class="form-input" type="time" id="lam-lv-start" step="1800" placeholder="09:00" style="width:100%"></div>
+        <div><label class="form-label">結束時間</label><input class="form-input" type="time" id="lam-lv-end" step="1800" placeholder="18:00" style="width:100%"></div>
       </div>
       <div id="lam-days-preview" style="font-size:13px;color:var(--accent);margin-bottom:12px;min-height:18px"></div>
       <div style="margin-bottom:12px"><label class="form-label">狀態</label><select class="form-input" id="lam-status" style="width:auto"><option value="approved">直接核准</option><option value="pending">待審核</option></select></div>
@@ -5879,7 +5879,7 @@ function renderLeaveRequests() {
     const sc = LEAVE_STATUS_COLOR[r.status]||'var(--muted)';
     const sl = LEAVE_STATUS_LABEL[r.status]||r.status;
     const canReview = r.status==='pending';
-    const sHalf = r.start_half?' (下午)':''; const eHalf = r.end_half?' (上午)':'';
+    const timeNote = r.lv_start_time && r.lv_end_time ? `　${r.lv_start_time}～${r.lv_end_time}` : '';
     return `<div class="card" style="margin-bottom:10px">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
         <div style="display:flex;align-items:flex-start;gap:10px">
@@ -5897,7 +5897,7 @@ function renderLeaveRequests() {
             return `<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:11px;background:#f0f2f8;color:var(--muted)">餘額 ${bal.remain.toFixed(1)} 天</span>`;
           })()}
           <div style="font-size:12px;color:var(--muted);margin-top:3px">
-            ${r.start_date}${sHalf} ~ ${r.end_date}${eHalf}
+            ${r.start_date} ~ ${r.end_date}${timeNote}
             &nbsp;|&nbsp; <strong>${r.total_days} 天</strong>
             &nbsp;|&nbsp; 薪資倍率：${r.pay_rate===1?'全薪':r.pay_rate===0?'無薪':r.pay_rate+'倍'}
           </div>
@@ -5925,8 +5925,8 @@ async function openLeaveAdminModal(id=null) {
   }
   document.getElementById('lam-staff').innerHTML = leaveStaffList.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
   document.getElementById('lam-type').innerHTML  = leaveTypesList.filter(t=>t.active).map(t=>`<option value="${t.id}">${escHtml(t.name)}</option>`).join('');
-  document.getElementById('lam-start-half').checked = false;
-  document.getElementById('lam-end-half').checked   = false;
+  document.getElementById('lam-lv-start').value = '';
+  document.getElementById('lam-lv-end').value   = '';
   document.getElementById('lam-reason').value = '';
   document.getElementById('lam-status').value = 'approved';
   document.getElementById('lam-days-preview').textContent = '';
@@ -5938,8 +5938,8 @@ async function openLeaveAdminModal(id=null) {
     document.getElementById('lam-type').value  = r.leave_type_id;
     document.getElementById('lam-start').value = r.start_date;
     document.getElementById('lam-end').value   = r.end_date;
-    document.getElementById('lam-start-half').checked = r.start_half||false;
-    document.getElementById('lam-end-half').checked   = r.end_half||false;
+    document.getElementById('lam-lv-start').value = r.lv_start_time||'';
+    document.getElementById('lam-lv-end').value   = r.lv_end_time||'';
     document.getElementById('lam-reason').value = r.reason||'';
     document.getElementById('lam-status').value = r.status;
   } else {
@@ -5950,7 +5950,7 @@ async function openLeaveAdminModal(id=null) {
     document.getElementById('lam-start').value = today;
     document.getElementById('lam-end').value   = today;
   }
-  ['lam-start','lam-end','lam-start-half','lam-end-half','lam-staff','lam-type'].forEach(id2 =>
+  ['lam-start','lam-end','lam-lv-start','lam-lv-end','lam-staff','lam-type'].forEach(id2 =>
     document.getElementById(id2).addEventListener('change', previewLeaveDays)
   );
   previewLeaveDays();
@@ -5961,22 +5961,26 @@ function closeLeaveAdminModal() { document.getElementById('leave-admin-modal').s
 function previewLeaveDays() {
   const s = document.getElementById('lam-start').value;
   const e = document.getElementById('lam-end').value;
-  const sh = document.getElementById('lam-start-half').checked;
-  const eh = document.getElementById('lam-end-half').checked;
+  const lvStart = document.getElementById('lam-lv-start').value;
+  const lvEnd   = document.getElementById('lam-lv-end').value;
   if (!s||!e) return;
   const start = new Date(s), end = new Date(e);
   if (end < start) { document.getElementById('lam-days-preview').textContent='結束日不能早於開始日'; return; }
-  let days = 0;
+  let workingDays = 0;
   let cur = new Date(start);
   while (cur <= end) {
-    if (cur.getDay() !== 0) {
-      const isFirst = cur.getTime()===start.getTime();
-      const isLast  = cur.getTime()===end.getTime();
-      if (isFirst && sh) days += 0.5;
-      else if (isLast && eh) days += 0.5;
-      else days += 1;
-    }
+    if (cur.getDay() !== 0) workingDays += 1;
     cur.setDate(cur.getDate()+1);
+  }
+  let days;
+  if (lvStart && lvEnd) {
+    const [sh, sm] = lvStart.split(':').map(Number);
+    const [eh, em] = lvEnd.split(':').map(Number);
+    const dailyHours = (eh * 60 + em - sh * 60 - sm) / 60;
+    const raw = workingDays * dailyHours / 8;
+    days = Math.round(raw * 2) / 2;
+  } else {
+    days = workingDays;
   }
   const staffId  = document.getElementById('lam-staff').value;
   const typeId   = document.getElementById('lam-type').value;
@@ -5998,18 +6002,18 @@ async function saveLeaveAdmin() {
   const id       = document.getElementById('lam-id').value;
   const staff_id = document.getElementById('lam-staff').value;
   const leave_type_id = document.getElementById('lam-type').value;
-  const start_date = document.getElementById('lam-start').value;
-  const end_date   = document.getElementById('lam-end').value;
-  const start_half = document.getElementById('lam-start-half').checked;
-  const end_half   = document.getElementById('lam-end-half').checked;
-  const reason     = document.getElementById('lam-reason').value.trim();
-  const status     = document.getElementById('lam-status').value;
+  const start_date    = document.getElementById('lam-start').value;
+  const end_date      = document.getElementById('lam-end').value;
+  const lv_start_time = document.getElementById('lam-lv-start').value || null;
+  const lv_end_time   = document.getElementById('lam-lv-end').value   || null;
+  const reason        = document.getElementById('lam-reason').value.trim();
+  const status        = document.getElementById('lam-status').value;
   if (!staff_id||!leave_type_id||!start_date||!end_date) { showToast('請填寫完整資料','error'); return; }
   if (id) {
     // Delete and recreate (simplest approach)
     await api(`/api/leave/requests/${id}`,{method:'DELETE'});
   }
-  const {ok} = await api('/api/leave/requests', apiJSON({staff_id:parseInt(staff_id),leave_type_id:parseInt(leave_type_id),start_date,end_date,start_half,end_half,reason,status,reviewed_by:'管理員'}));
+  const {ok} = await api('/api/leave/requests', apiJSON({staff_id:parseInt(staff_id),leave_type_id:parseInt(leave_type_id),start_date,end_date,lv_start_time,lv_end_time,reason,status,reviewed_by:'管理員'}));
   if (!ok) return;
   closeLeaveAdminModal(); showToast(id?'已更新':'請假記錄已建立','success'); await loadLeaveRequests();
 }
@@ -6021,7 +6025,7 @@ function openLeaveReview(id) {
   document.getElementById('lrm-by').value  = '';
   document.getElementById('lrm-note').value= '';
   document.getElementById('lrm-title').textContent = `審核 ${r.staff_name} 的請假申請`;
-  const sh = r.start_half?' (下午)':''; const eh = r.end_half?' (上午)':'';
+  const timeNote = r.lv_start_time && r.lv_end_time ? `　${r.lv_start_time}～${r.lv_end_time}` : '';
   const bal = _leaveBalCache[`${r.staff_id}_${r.leave_type_id}`];
   let balHtml = '';
   if (bal && bal.max_days !== null) {
@@ -6036,7 +6040,7 @@ function openLeaveReview(id) {
   document.getElementById('lrm-info').innerHTML = `
     <strong>${escHtml(r.staff_name)}</strong>
     <span style="margin-left:8px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${r.leave_color||'#4a7bda'}22;color:${r.leave_color||'#4a7bda'}">${escHtml(r.leave_type_name)}</span><br>
-    ${r.start_date}${sh} ~ ${r.end_date}${eh}　<strong>${r.total_days} 天</strong><br>
+    ${r.start_date} ~ ${r.end_date}${timeNote}　<strong>${r.total_days} 天</strong><br>
     <span style="color:var(--muted)">${escHtml(r.reason||'（無說明）')}</span>${balHtml}`;
   document.getElementById('leave-review-modal').style.display='flex';
 }

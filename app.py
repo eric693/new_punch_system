@@ -1784,6 +1784,42 @@ def _flex_ask(title, color, question, hint=''):
 
 # ── Leave interactive flow ────────────────────────────────────────────
 
+# Hourly time slots for leave start/end selection (fits all on one page within LINE's 13-item limit)
+_LV_TIMES = [
+    '08:00','09:00','10:00','11:00','12:00',
+    '13:00','14:00','15:00','16:00','17:00','18:00','19:00',
+]
+_LV_TIME_PAGE = 12  # 12 hourly slots + cancel = 13, fits on one page
+
+
+def _lv_parse_time(s):
+    """Parse 'HH:MM' (full-width colon accepted), return (h, m) or raise ValueError."""
+    s = (s or '').strip().replace('：', ':')
+    parts = s.split(':')
+    if len(parts) != 2:
+        raise ValueError
+    h, m = int(parts[0]), int(parts[1])
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError
+    return h, m
+
+
+def _line_lv_time_qr(user_id, title_text, prompt_text, val_prefix, pg_prefix, times, page=0):
+    """Send a paginated quick-reply time picker (30-min slots)."""
+    chunk = times[page * _LV_TIME_PAGE:(page + 1) * _LV_TIME_PAGE]
+    has_prev = page > 0
+    has_next = len(times) > (page + 1) * _LV_TIME_PAGE
+    qr = [(t, f'{val_prefix}{t}', t) for t in chunk]
+    if has_prev:
+        qr.append(('⬅️ 上頁', f'{pg_prefix}{page - 1}', '上一頁'))
+    if has_next:
+        qr.append(('➡️ 下頁', f'{pg_prefix}{page + 1}', '下一頁'))
+    qr.append(('❌ 取消', 'cancel', '取消'))
+    msg = _flex_ask('📝 請假申請', '#27AE60', title_text, prompt_text)
+    msg['quickReply'] = _qr_pb(*qr)
+    _push_line_msg(user_id, msg)
+
+
 def _line_leave_start(staff, user_id):
     with get_db() as conn:
         types = conn.execute(
@@ -1887,45 +1923,85 @@ def _handle_conv_leave(staff, user_id, state, text=None, pb_data=None):
             return
         data['end_date'] = raw
         state['step'] = 4
-        # Ask half-day / time of day
-        msg = _flex_ask('📝 請假申請', '#27AE60',
-                        f'假別：{data["leave_type"]}\n'
-                        f'日期：{data["start_date"]}' +
-                        (f' ～ {raw}' if raw != data['start_date'] else '') +
-                        '\n\n請選擇請假時段',
-                        '整天 / 上午 / 下午')
-        msg['quickReply'] = _qr_pb(
-            ('整天', 'lv_half=full',      '整天請假'),
-            ('上午', 'lv_half=morning',   '上午請假'),
-            ('下午', 'lv_half=afternoon', '下午請假'),
-            ('❌ 取消', 'cancel', '取消'),
-        )
-        _push_line_msg(user_id, msg)
+        date_range = data['start_date'] + (f' ～ {raw}' if raw != data['start_date'] else '')
+        _line_lv_time_qr(user_id,
+            f'假別：{data["leave_type"]}\n日期：{date_range}\n\n請選擇開始時間',
+            '點選按鈕或輸入 HH:MM（如 09:00）',
+            'lv_st=', 'lv_st_p=', _LV_TIMES, 0)
 
     elif step == 4:
-        half = None
-        if pb_data == 'lv_half=full':      half = 'full'
-        elif pb_data == 'lv_half=morning': half = 'morning'
-        elif pb_data == 'lv_half=afternoon': half = 'afternoon'
-        elif text in ('整天', '全天'):     half = 'full'
-        elif text in ('上午', '早上'):     half = 'morning'
-        elif text in ('下午', '午後'):     half = 'afternoon'
-        if half is None:
-            _send_line_punch(user_id, '請選擇：整天 / 上午 / 下午')
+        # Start-time picker (30-min slots)
+        if pb_data and pb_data.startswith('lv_st_p='):
+            try:
+                page = int(pb_data[8:])
+            except ValueError:
+                page = 0
+            date_range = data['start_date'] + (f' ～ {data["end_date"]}' if data['end_date'] != data['start_date'] else '')
+            _line_lv_time_qr(user_id,
+                f'假別：{data["leave_type"]}\n日期：{date_range}\n\n請選擇開始時間',
+                '點選按鈕或輸入 HH:MM（如 09:30）',
+                'lv_st=', 'lv_st_p=', _LV_TIMES, page)
             return
-        data['half'] = half
-        # start_half: True = 上午請假 (only morning); end_half: True = 下午請假 (only afternoon)
-        # For "morning": start_half=True means first(=only) day is half-day from morning
-        # For "afternoon": end_half=True
+        raw = (pb_data[6:] if pb_data and pb_data.startswith('lv_st=')
+               else (text.strip() if text else None))
+        if not raw:
+            return
+        try:
+            sh, sm = _lv_parse_time(raw)
+        except ValueError:
+            _send_line_punch(user_id, '時間格式錯誤，請輸入 HH:MM，例：09:00')
+            return
+        start_time = f'{sh:02d}:{sm:02d}'
+        data['start_time'] = start_time
         state['step'] = 5
-        half_label = {'full': '整天', 'morning': '上午', 'afternoon': '下午'}[half]
-        time_note = {'full': '09:00 ～ 18:00', 'morning': '09:00 ～ 12:00', 'afternoon': '13:00 ～ 18:00'}[half]
-        date_range = (f'{data["start_date"]}' +
-                      (f' ～ {data["end_date"]}' if data["end_date"] != data["start_date"] else ''))
+        # Only offer end times after the chosen start time
+        st_mins = sh * 60 + sm
+        et_times = [t for t in _LV_TIMES if int(t[:2]) * 60 + int(t[3:]) > st_mins]
+        state['et_times'] = et_times
+        date_range = data['start_date'] + (f' ～ {data["end_date"]}' if data['end_date'] != data['start_date'] else '')
+        _line_lv_time_qr(user_id,
+            f'假別：{data["leave_type"]}\n日期：{date_range}\n開始：{start_time}\n\n請選擇結束時間',
+            '點選按鈕或輸入 HH:MM（如 18:00）',
+            'lv_et=', 'lv_et_p=', et_times, 0)
+
+    elif step == 5:
+        # End-time picker (30-min slots)
+        if pb_data and pb_data.startswith('lv_et_p='):
+            try:
+                page = int(pb_data[8:])
+            except ValueError:
+                page = 0
+            et_times = state.get('et_times', _LV_TIMES)
+            date_range = data['start_date'] + (f' ～ {data["end_date"]}' if data['end_date'] != data['start_date'] else '')
+            _line_lv_time_qr(user_id,
+                f'假別：{data["leave_type"]}\n日期：{date_range}\n開始：{data["start_time"]}\n\n請選擇結束時間',
+                '點選按鈕或輸入 HH:MM（如 18:00）',
+                'lv_et=', 'lv_et_p=', et_times, page)
+            return
+        raw = (pb_data[6:] if pb_data and pb_data.startswith('lv_et=')
+               else (text.strip() if text else None))
+        if not raw:
+            return
+        try:
+            eh, em = _lv_parse_time(raw)
+        except ValueError:
+            _send_line_punch(user_id, '時間格式錯誤，請輸入 HH:MM，例：17:30')
+            return
+        sh, sm = _lv_parse_time(data['start_time'])
+        if eh * 60 + em <= sh * 60 + sm:
+            _send_line_punch(user_id, '⚠️ 結束時間必須晚於開始時間，請重新選擇。')
+            return
+        end_time = f'{eh:02d}:{em:02d}'
+        data['end_time'] = end_time
+        state['step'] = 6
+        total_mins = (eh * 60 + em) - (sh * 60 + sm)
+        hrs = total_mins / 60
+        date_range = data['start_date'] + (f' ～ {data["end_date"]}' if data['end_date'] != data['start_date'] else '')
         msg = _flex_ask('📝 請假申請', '#27AE60',
                         f'假別：{data["leave_type"]}\n'
                         f'日期：{date_range}\n'
-                        f'時段：{half_label}（{time_note}）\n\n請輸入請假原因',
+                        f'時間：{data["start_time"]} ～ {end_time}（{hrs:.1f} 小時）\n\n'
+                        f'請輸入請假原因',
                         '或點「跳過」')
         msg['quickReply'] = _qr_pb(
             ('跳過', 'lv_skip_reason', '（未填原因）'),
@@ -1933,24 +2009,20 @@ def _handle_conv_leave(staff, user_id, state, text=None, pb_data=None):
         )
         _push_line_msg(user_id, msg)
 
-    elif step == 5:
+    elif step == 6:
         reason = ('' if pb_data == 'lv_skip_reason'
                   else (text.strip() if text else None))
         if reason is None:
             return
         _line_conv_state.pop(user_id, None)
-        half = data.get('half', 'full')
-        start_half = half == 'morning'
-        end_half   = half == 'afternoon'
         _do_line_leave_submit(staff, user_id,
                               data['leave_type'], data['start_date'], data['end_date'],
-                              start_half, end_half, reason)
+                              data['start_time'], data['end_time'], reason)
 
 
 def _do_line_leave_submit(staff, user_id, leave_type_name, start_date, end_date,
-                           start_half, end_half, reason):
-    """Insert leave request directly, with balance check."""
-    import re as _re_lv
+                           start_time, end_time, reason):
+    """Insert leave request with time-based hours (hours ÷ 8 = days)."""
     from datetime import date as _dlv
     try:
         _dlv.fromisoformat(start_date); _dlv.fromisoformat(end_date)
@@ -1971,7 +2043,7 @@ def _do_line_leave_submit(staff, user_id, leave_type_name, start_date, end_date,
             _send_line_punch(user_id, f'找不到假別「{leave_type_name}」\n可用：{"、".join(r["name"] for r in avail)}')
             return
 
-        days = _calc_leave_days(start_date, end_date, start_half=start_half, end_half=end_half)
+        days = _calc_leave_days(start_date, end_date, start_time=start_time, end_time=end_time)
         year = int(start_date[:4])
         bal = conn.execute("""
             SELECT total_days, used_days FROM leave_balances
@@ -1986,33 +2058,22 @@ def _do_line_leave_submit(staff, user_id, leave_type_name, start_date, end_date,
                     f'⚠️ {lt["name"]} 餘額不足\n剩餘 {remain:.1f} 天，申請 {days} 天\n\n請至員工系統調整後再申請。')
                 return
 
-        # Try inserting with total_days first, fall back to days column name
-        try:
-            row = conn.execute("""
-                INSERT INTO leave_requests
-                  (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
-                   total_days, reason, status, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id
-            """, (staff['id'], lt['id'], start_date, end_date,
-                  start_half, end_half, days, reason or '（LINE 請假）')).fetchone()
-        except Exception:
-            row = conn.execute("""
-                INSERT INTO leave_requests
-                  (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
-                   days, reason, status, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id
-            """, (staff['id'], lt['id'], start_date, end_date,
-                  start_half, end_half, days, reason or '（LINE 請假）')).fetchone()
+        row = conn.execute("""
+            INSERT INTO leave_requests
+              (staff_id, leave_type_id, start_date, end_date,
+               lv_start_time, lv_end_time,
+               total_days, reason, status, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id
+        """, (staff['id'], lt['id'], start_date, end_date,
+              start_time, end_time, days, reason or '（LINE 請假）')).fetchone()
 
-    half_label = {(True, False): '上午', (False, True): '下午', (False, False): '整天'}.get((start_half, end_half), '整天')
-    time_note  = {(True, False): '09:00～12:00', (False, True): '13:00～18:00', (False, False): '09:00～18:00'}.get((start_half, end_half), '')
     bal_str = f'（剩餘 {remain:.1f} 天）' if remain is not None else ''
     _send_line_punch(user_id,
         f'✅ 請假申請已送出\n\n'
         f'假別：{lt["name"]} {bal_str}\n'
         f'日期：{start_date}' + (f' ～ {end_date}' if end_date != start_date else '') + '\n'
-        f'時段：{half_label}（{time_note}）\n'
-        f'天數：{days} 天\n'
+        f'時間：{start_time}～{end_time}\n'
+        f'天數：{days:.1f} 天\n'
         + (f'原因：{reason}\n' if reason else '')
         + f'申請號：#{row["id"]}，等待管理員審核。')
 
@@ -3903,6 +3964,8 @@ def init_leave_db():
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS attachment BYTEA",
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS attachment_name TEXT DEFAULT ''",
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS attachment_type TEXT DEFAULT ''",
+        "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS lv_start_time TIME",
+        "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS lv_end_time TIME",
         """CREATE TABLE IF NOT EXISTS leave_balances (
             id          SERIAL PRIMARY KEY,
             staff_id    INT REFERENCES punch_staff(id) ON DELETE CASCADE,
@@ -3964,6 +4027,8 @@ def leave_req_row(row):
     if d.get('start_date'): d['start_date'] = d['start_date'].isoformat()
     if d.get('end_date'):   d['end_date']   = d['end_date'].isoformat()
     if d.get('total_days'): d['total_days'] = float(d['total_days'])
+    if d.get('lv_start_time'): d['lv_start_time'] = str(d['lv_start_time'])[:5]
+    if d.get('lv_end_time'):   d['lv_end_time']   = str(d['lv_end_time'])[:5]
     if d.get('reviewed_at'): d['reviewed_at'] = d['reviewed_at'].isoformat()
     if d.get('created_at'):  d['created_at']  = d['created_at'].isoformat()
     if d.get('updated_at'):  d['updated_at']  = d['updated_at'].isoformat()
@@ -4105,8 +4170,12 @@ def _calc_annual_leave_schedule(hire_date_str):
 
     return result
 
-def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=False):
-    """計算請假天數（含半天選項），排除週日"""
+def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=False,
+                     start_time=None, end_time=None):
+    """計算請假天數（排除週日）。
+    若提供 start_time/end_time（HH:MM），以 每日小時數 ÷ 8 計算，四捨五入至 0.5。
+    否則沿用 start_half/end_half 半天旗標邏輯。
+    """
     from datetime import date as _date, timedelta as _tdd
     try:
         s = _date.fromisoformat(start_date_str)
@@ -4114,12 +4183,29 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
     except Exception:
         return 0.0
     if e < s: return 0.0
+
+    # Time-based: hours ÷ 8 per working day
+    if start_time and end_time:
+        try:
+            sh, sm = _lv_parse_time(start_time)
+            eh, em = _lv_parse_time(end_time)
+            daily_hours = (eh * 60 + em - sh * 60 - sm) / 60.0
+        except (ValueError, Exception):
+            daily_hours = 0.0
+        if daily_hours > 0:
+            working_days = sum(
+                1 for i in range((e - s).days + 1)
+                if (s + _tdd(days=i)).weekday() != 6
+            )
+            raw = working_days * daily_hours / 8.0
+            return round(raw * 2) / 2  # round to nearest 0.5
+
+    # Half-day flag logic
     days = 0.0
     cur  = s
     while cur <= e:
-        if cur.weekday() != 6:  # exclude Sunday (勞基法最低標準)
+        if cur.weekday() != 6:
             if cur == s and cur == e:
-                # 同一天：兩個半天旗標都為 True 代表整天（上午＋下午）
                 if start_half and end_half: days += 1.0
                 elif start_half or end_half: days += 0.5
                 else: days += 1.0
@@ -4223,27 +4309,30 @@ def api_leave_request_admin_create():
     leave_type_id = b.get('leave_type_id')
     start_date    = b.get('start_date', '').strip()
     end_date      = b.get('end_date', '').strip()
-    start_half    = bool(b.get('start_half', False))
-    end_half      = bool(b.get('end_half', False))
+    lv_start_time = (b.get('lv_start_time') or '').strip() or None
+    lv_end_time   = (b.get('lv_end_time')   or '').strip() or None
     reason        = b.get('reason', '').strip()
     status        = b.get('status', 'approved')
 
     if not all([sid, leave_type_id, start_date, end_date]):
         return jsonify({'error': '缺少必要欄位'}), 400
 
-    total_days = _calc_leave_days(start_date, end_date, start_half, end_half)
+    total_days = _calc_leave_days(start_date, end_date,
+                                  start_time=lv_start_time, end_time=lv_end_time)
     if total_days <= 0:
         return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
 
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO leave_requests
-              (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
+              (staff_id, leave_type_id, start_date, end_date,
+               lv_start_time, lv_end_time,
                total_days, reason, status, reviewed_by, reviewed_at)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
               CASE WHEN %s='approved' THEN NOW() ELSE NULL END)
             RETURNING *
-        """, (sid, leave_type_id, start_date, end_date, start_half, end_half,
+        """, (sid, leave_type_id, start_date, end_date,
+              lv_start_time, lv_end_time,
               total_days, reason, status, b.get('reviewed_by','管理員'), status)).fetchone()
         if status == 'approved':
             _update_leave_balance(conn, sid, leave_type_id, start_date[:4], total_days)
@@ -4327,15 +4416,16 @@ def api_leave_submit():
     leave_type_id = b.get('leave_type_id')
     start_date    = b.get('start_date', '').strip()
     end_date      = b.get('end_date',   '').strip()
-    start_half    = bool(b.get('start_half', False))
-    end_half      = bool(b.get('end_half',   False))
+    lv_start_time = (b.get('lv_start_time') or '').strip() or None
+    lv_end_time   = (b.get('lv_end_time')   or '').strip() or None
     reason        = b.get('reason', '').strip()
     substitute    = b.get('substitute_name', '').strip()
 
     if not all([leave_type_id, start_date, end_date]):
         return jsonify({'error': '缺少必要欄位'}), 400
 
-    total_days = _calc_leave_days(start_date, end_date, start_half, end_half)
+    total_days = _calc_leave_days(start_date, end_date,
+                                  start_time=lv_start_time, end_time=lv_end_time)
     if total_days <= 0:
         return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
 
@@ -4356,10 +4446,12 @@ def api_leave_submit():
 
         row = conn.execute("""
             INSERT INTO leave_requests
-              (staff_id, leave_type_id, start_date, end_date, start_half, end_half,
+              (staff_id, leave_type_id, start_date, end_date,
+               lv_start_time, lv_end_time,
                total_days, reason, substitute_name)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (sid, leave_type_id, start_date, end_date, start_half, end_half,
+        """, (sid, leave_type_id, start_date, end_date,
+              lv_start_time, lv_end_time,
               total_days, reason, substitute)).fetchone()
     return jsonify(leave_req_row(row)), 201
 

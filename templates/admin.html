@@ -4487,25 +4487,25 @@ function showPage(page, e) {
   );
   const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  // 儀表板每次都刷新（顯示今日即時數據），其他模組只在首次進入時初始化
-  if (page === 'dash') { initDash(); return; }
+  // 儀表板每次刷新；expense-review 每次進入都更新（動態篩選，且失敗後需能重試）
+  if (page === 'dash')           { initDash(); return; }
+  if (page === 'expense-review') { loadExpenseReview(); return; }
+  // 其他模組只在首次進入時初始化，切換回來直接顯示已有資料
   if (_initedModules.has(page)) return;
   _initedModules.add(page);
-
-  if (page === 'punch')           initPunch();
-  if (page === 'sched')           initSched();
-  if (page === 'leave')           initLeave();
-  if (page === 'salary')          initSalary();
-  if (page === 'ann')             initAnn();
-  if (page === 'holiday')         initHoliday();
-  if (page === 'finance')         initFinance();
-  if (page === 'adminmgr')        loadAdminAccounts();
-  if (page === 'expense-review')  loadExpenseReview();
-  if (page === 'worklog')         initAdminWorklog();
-  if (page === 'perf')            initPerf();
-  if (page === 'stores')          loadStores();
-  if (page === 'training')        initTraining();
-  if (page === 'quotation')       initQuotation();
+  if (page === 'punch')      initPunch();
+  if (page === 'sched')      initSched();
+  if (page === 'leave')      initLeave();
+  if (page === 'salary')     initSalary();
+  if (page === 'ann')        initAnn();
+  if (page === 'holiday')    initHoliday();
+  if (page === 'finance')    initFinance();
+  if (page === 'adminmgr')   loadAdminAccounts();
+  if (page === 'worklog')    initAdminWorklog();
+  if (page === 'perf')       initPerf();
+  if (page === 'stores')     loadStores();
+  if (page === 'training')   initTraining();
+  if (page === 'quotation')  initQuotation();
 }
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -9491,7 +9491,10 @@ async function loadExpenseReview() {
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  // 已有真實資料時保留現有內容（不閃「載入中...」），首次或無資料時才顯示 loading
+  if (!tbody.querySelector('tr[data-exp-id]')) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  }
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (ym)     params.set('ym', ym);

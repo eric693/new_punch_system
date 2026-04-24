@@ -10656,6 +10656,45 @@ def api_expense_review(cid):
     return ('', 404)
 
 
+@app.route('/api/expense/claims/<int:cid>', methods=['PATCH'])
+@login_required
+def api_expense_claim_edit(cid):
+    b = request.get_json(force=True)
+    allowed = ['expense_date', 'expense_type', 'category', 'vendor', 'amount',
+               'note', 'reimbursement_method', 'bank_name', 'bank_account',
+               'account_holder', 'title']
+    sets, vals = [], []
+    for key in allowed:
+        if key in b:
+            sets.append(f"{key}=%s")
+            vals.append(b[key])
+    if not sets:
+        return jsonify({'error': 'nothing to update'}), 400
+    vals.append(cid)
+    with get_db() as conn:
+        row = conn.execute(
+            f"UPDATE expense_claims SET {', '.join(sets)} WHERE id=%s RETURNING *", vals
+        ).fetchone()
+        if not row:
+            return ('', 404)
+        staff = conn.execute(
+            "SELECT name, employee_code FROM punch_staff WHERE id=%s", (row['staff_id'],)
+        ).fetchone()
+    d = _expense_row(row)
+    if staff:
+        d['staff_name']    = staff['name']
+        d['employee_code'] = staff['employee_code'] or ''
+    return jsonify(d)
+
+
+@app.route('/api/expense/claims/<int:cid>', methods=['DELETE'])
+@login_required
+def api_expense_claim_delete(cid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM expense_claims WHERE id=%s", (cid,))
+    return jsonify({'deleted': cid})
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 績效考核模組
 # ═══════════════════════════════════════════════════════════════════════════

@@ -2133,6 +2133,86 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div>
 
+  <!-- ── 編輯費用申請 Modal ── -->
+  <div id="modal-edit-expense" class="exp-modal-wrap">
+    <div class="exp-modal">
+      <div class="exp-modal-header">
+        <div>
+          <div class="exp-modal-title">編輯費用申請</div>
+          <div class="exp-modal-sub" id="edit-exp-staff-label"></div>
+        </div>
+        <button class="exp-modal-close" onclick="closeExpEditModal()">✕</button>
+      </div>
+      <div class="exp-modal-body">
+        <input type="hidden" id="edit-exp-id">
+        <div class="exp-row col2">
+          <div class="exp-field">
+            <label>費用日期</label>
+            <input class="fi" type="date" id="edit-exp-date">
+          </div>
+          <div class="exp-field">
+            <label>費用金額（元）</label>
+            <input class="fi" type="number" id="edit-exp-amount" min="0">
+          </div>
+        </div>
+        <div class="exp-field" style="margin-bottom:14px">
+          <label>費用性質</label>
+          <div style="display:flex;gap:0;border:1px solid #dde3ef;border-radius:8px;overflow:hidden;width:fit-content">
+            <button type="button" id="edit-exp-type-btn-支出" onclick="switchEditExpType('支出')"
+              style="padding:7px 22px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s">支出</button>
+            <button type="button" id="edit-exp-type-btn-收入" onclick="switchEditExpType('收入')"
+              style="padding:7px 22px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s">收入</button>
+          </div>
+          <input type="hidden" id="edit-exp-type" value="支出">
+        </div>
+        <div class="exp-row col2">
+          <div class="exp-field">
+            <label>費用類別</label>
+            <input class="fi" type="text" id="edit-exp-category">
+          </div>
+          <div class="exp-field">
+            <label>廠商名稱</label>
+            <input class="fi" type="text" id="edit-exp-vendor">
+          </div>
+        </div>
+        <div class="exp-field" style="margin-bottom:14px">
+          <label>備註</label>
+          <input class="fi" type="text" id="edit-exp-note">
+        </div>
+        <div class="exp-divider"></div>
+        <div class="exp-section-label indigo" style="margin-bottom:14px">報帳資訊</div>
+        <div class="exp-row col2">
+          <div class="exp-field">
+            <label>報帳方式</label>
+            <select class="fi" id="edit-exp-reimburse-method">
+              <option value="匯款">匯款</option>
+              <option value="現金">現金</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="exp-field">
+            <label>銀行名稱</label>
+            <input class="fi" type="text" id="edit-exp-bank-name">
+          </div>
+        </div>
+        <div class="exp-row col2">
+          <div class="exp-field">
+            <label>戶名</label>
+            <input class="fi" type="text" id="edit-exp-account-holder">
+          </div>
+          <div class="exp-field">
+            <label>帳號</label>
+            <input class="fi" type="text" id="edit-exp-bank-account">
+          </div>
+        </div>
+      </div>
+      <div class="exp-modal-footer">
+        <button class="btn btn-outline" onclick="closeExpEditModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveExpEdit()">儲存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 工作日誌 ── -->
   <div class="page" id="page-worklog" style="display:none">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
@@ -9399,6 +9479,8 @@ async function submitAdminExpense() {
   }
 }
 
+let _expClaimsMap = {};
+
 async function loadExpenseReview() {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
@@ -9416,11 +9498,8 @@ async function loadExpenseReview() {
     setBadge('badge-expense-review', 0);
     return;
   }
-  const statusMap   = { pending:'待審核', approved:'已核准', rejected:'已拒絕' };
-  const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
-  const expTypeColor = { '支出':'var(--red)', '收入':'var(--green)' };
+  _expClaimsMap = Object.fromEntries(claims.map(c => [c.id, c]));
   tbody.innerHTML = claims.map(_renderAdminExpenseRows).join('');
-  // Badge: count pending
   const pendingCnt = status === '' ? claims.filter(c=>c.status==='pending').length : (status==='pending' ? claims.length : 0);
   setBadge('badge-expense-review', pendingCnt);
 }
@@ -9457,11 +9536,13 @@ function _renderAdminExpenseRows(c) {
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
     <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
-    <td>
+    <td style="white-space:nowrap">
       ${c.status === 'pending' ? `
         <button class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
         <button class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
-      ` : '—'}
+      ` : ''}
+      <button class="btn btn-sm btn-outline" style="margin-left:4px" onclick="openExpEditModal(${c.id})">編輯</button>
+      <button class="btn btn-sm" style="background:#6b7280;color:#fff;margin-left:4px" onclick="deleteExpenseClaim(${c.id})">刪除</button>
     </td>
   </tr>
   ${bankRow}${reviewerNoteRow}`;
@@ -9504,6 +9585,88 @@ function promptRejectExpense(id) {
   const note = prompt('拒絕原因（選填）', '');
   if (note === null) return; // cancelled
   reviewExpense(id, 'reject', note);
+}
+
+function switchEditExpType(type) {
+  document.getElementById('edit-exp-type').value = type;
+  ['支出','收入'].forEach(t => {
+    const btn = document.getElementById('edit-exp-type-btn-' + t);
+    if (!btn) return;
+    btn.style.background = t === type ? '#1e2a45' : '#fff';
+    btn.style.color = t === type ? '#fff' : '#8892a4';
+  });
+}
+
+function openExpEditModal(id) {
+  const c = _expClaimsMap[id];
+  if (!c) return;
+  document.getElementById('edit-exp-id').value = id;
+  document.getElementById('edit-exp-staff-label').textContent = c.staff_name || '';
+  document.getElementById('edit-exp-date').value = c.expense_date || '';
+  document.getElementById('edit-exp-amount').value = c.amount ?? 0;
+  document.getElementById('edit-exp-category').value = c.category || '';
+  document.getElementById('edit-exp-vendor').value = c.vendor || '';
+  document.getElementById('edit-exp-note').value = c.note || '';
+  document.getElementById('edit-exp-reimburse-method').value = c.reimbursement_method || '匯款';
+  document.getElementById('edit-exp-bank-name').value = c.bank_name || '';
+  document.getElementById('edit-exp-account-holder').value = c.account_holder || '';
+  document.getElementById('edit-exp-bank-account').value = c.bank_account || '';
+  switchEditExpType(c.expense_type || '支出');
+  document.getElementById('modal-edit-expense').style.display = 'flex';
+}
+
+function closeExpEditModal() {
+  document.getElementById('modal-edit-expense').style.display = 'none';
+}
+
+async function saveExpEdit() {
+  const id = document.getElementById('edit-exp-id').value;
+  const body = {
+    expense_date:         document.getElementById('edit-exp-date').value,
+    amount:               parseFloat(document.getElementById('edit-exp-amount').value) || 0,
+    expense_type:         document.getElementById('edit-exp-type').value,
+    category:             document.getElementById('edit-exp-category').value.trim(),
+    vendor:               document.getElementById('edit-exp-vendor').value.trim(),
+    note:                 document.getElementById('edit-exp-note').value.trim(),
+    reimbursement_method: document.getElementById('edit-exp-reimburse-method').value,
+    bank_name:            document.getElementById('edit-exp-bank-name').value.trim(),
+    account_holder:       document.getElementById('edit-exp-account-holder').value.trim(),
+    bank_account:         document.getElementById('edit-exp-bank-account').value.trim(),
+  };
+  const { ok, data } = await api(`/api/expense/claims/${id}`, { method:'PATCH', body: JSON.stringify(body) });
+  if (!ok) return;
+  closeExpEditModal();
+  showToast('已更新', 'success');
+  if (data) {
+    _expClaimsMap[data.id] = data;
+    const tbody = document.getElementById('exp-review-tbody');
+    const oldRow = tbody?.querySelector(`tr[data-exp-id="${id}"]`);
+    if (oldRow) {
+      let next = oldRow.nextElementSibling;
+      while (next && !next.getAttribute('data-exp-id')) { const t = next.nextElementSibling; next.remove(); next = t; }
+      oldRow.insertAdjacentHTML('afterend', _renderAdminExpenseRows(data));
+      oldRow.remove();
+      return;
+    }
+  }
+  loadExpenseReview();
+}
+
+async function deleteExpenseClaim(id) {
+  if (!confirm('確定刪除此費用申請？此操作無法復原。')) return;
+  const { ok } = await api(`/api/expense/claims/${id}`, { method:'DELETE' });
+  if (!ok) return;
+  showToast('已刪除', 'success');
+  delete _expClaimsMap[id];
+  const tbody = document.getElementById('exp-review-tbody');
+  const row = tbody?.querySelector(`tr[data-exp-id="${id}"]`);
+  if (row) {
+    let next = row.nextElementSibling;
+    while (next && !next.getAttribute('data-exp-id')) { const t = next.nextElementSibling; next.remove(); next = t; }
+    row.remove();
+  } else {
+    loadExpenseReview();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

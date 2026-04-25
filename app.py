@@ -1,7 +1,6 @@
 import hashlib
 import math
 import os
-import secrets
 import threading
 import time
 import traceback
@@ -28,21 +27,35 @@ from linebot.models import (
     PostbackEvent, LocationMessage
 )
 
-app = Flask(__name__)
-Compress(app)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-app.config['PERMANENT_SESSION_LIFETIME'] = __import__('datetime').timedelta(days=30)
-app.config['SESSION_COOKIE_HTTPONLY']    = True
-app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
-app.config['SESSION_COOKIE_SECURE']     = True
-
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '')
 LINE_CHANNEL_SECRET       = os.environ.get('LINE_CHANNEL_SECRET', '')
 ADMIN_PASSWORD            = os.environ.get('ADMIN_PASSWORD', 'admin123')
 _raw_db_url               = os.environ.get('DATABASE_URL', '')
 DATABASE_URL              = _raw_db_url.replace('postgres://', 'postgresql://', 1) if _raw_db_url.startswith('postgres://') else _raw_db_url
 RENDER_EXTERNAL_URL       = os.environ.get('RENDER_EXTERNAL_URL', '')
+
+app = Flask(__name__)
+Compress(app)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# SECRET_KEY 必須穩定，否則每次重啟都會讓所有 session 失效
+_secret_key = os.environ.get('SECRET_KEY')
+if not _secret_key:
+    _seed = DATABASE_URL or 'punch-system-stable-fallback-key'
+    _secret_key = hashlib.sha256(_seed.encode()).hexdigest()
+    print("[WARNING] SECRET_KEY env var not set — using derived key. Please set SECRET_KEY for security.")
+app.secret_key = _secret_key
+
+app.config['PERMANENT_SESSION_LIFETIME'] = __import__('datetime').timedelta(hours=12)
+app.config['SESSION_COOKIE_HTTPONLY']    = True
+app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
+app.config['SESSION_COOKIE_SECURE']     = True
+
+@app.before_request
+def _refresh_session():
+    """每次請求刷新 session 存活時間，避免使用中途登出。"""
+    if session.get('logged_in'):
+        session.modified = True
 
 print(f"[startup] DATABASE_URL prefix: {DATABASE_URL[:20] if DATABASE_URL else 'NOT SET'}")
 

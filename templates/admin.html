@@ -3694,6 +3694,11 @@ async function api(url, opts = {}, silent = false, timeoutMs = 20000) {
 function apiJSON(body) { return { method: 'POST', body: JSON.stringify(body) }; }
 function apiPUT(body)  { return { method: 'PUT',  body: JSON.stringify(body) }; }
 
+// Session keep-alive：每 8 分鐘 ping 一次，避免閒置逾時
+setInterval(async () => {
+  try { await fetch('/api/admin/me', { headers: {'Content-Type':'application/json'} }); }
+  catch(e) {}
+}, 8 * 60 * 1000);
 
 
 // ══════════════════════════════════════════════════════════════
@@ -4072,22 +4077,24 @@ async function initDash() {
   const badge = document.getElementById('ds-month-badge');
   if (badge) badge.style.display = isCurrentMonth ? 'none' : '';
 
-  // 與主 API 同步發出、互不依賴的次要圖表請求
-  renderLaborCostChart();
-  renderAttendanceHeatmap(month);
-  renderAnnualLeavePie();
-
-  // 與 dashboard 同步並行發出，不需要等待 dashboard 回來
-  const anomaliesPromise = loadAnomalies();
+  // 先等主要統計資料（立即顯示主畫面）
   const { ok, data } = await api(`/api/dashboard?month=${month}`, {}, true);
   if (!ok) return;
   renderDashStats(data, isCurrentMonth);
   renderDashTodayDetail(data.today_detail || [], isCurrentMonth);
   renderDashPending(data.pending);
-  renderDashDailyChart(data.daily_attendance || [], data.month); // 不 await，背景補色
   renderDashTodayPie(data.today_summary, isCurrentMonth);
   renderDashLeavePie(data.leave_distribution || []);
   renderDashOTBar(data.ot_ranking || []);
+  renderDashDailyChart(data.daily_attendance || [], data.month);
+
+  // 次要圖表並行載入，不阻塞主畫面
+  Promise.all([
+    loadAnomalies(),
+    renderLaborCostChart(),
+    renderAttendanceHeatmap(month),
+    renderAnnualLeavePie(),
+  ]);
 }
 
 function resetDashMonth() {

@@ -998,6 +998,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <button class="inv-tab active" id="salarytab-calc"        onclick="switchSalaryTab('calc')">月薪計算</button>
       <button class="inv-tab"        id="salarytab-settings"    onclick="switchSalaryTab('settings')">薪資設定</button>
       <button class="inv-tab"        id="salarytab-items"       onclick="switchSalaryTab('items')">薪資項目</button>
+      <button class="inv-tab"        id="salarytab-advances"    onclick="switchSalaryTab('advances')">預支扣帳</button>
       <button class="inv-tab"        id="salarytab-withholding" onclick="switchSalaryTab('withholding')">扣繳憑單</button>
       <button class="inv-tab"        id="salarytab-edi"         onclick="switchSalaryTab('edi')">勞健保 EDI</button>
     </div>
@@ -1130,6 +1131,35 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <button class="btn btn-outline btn-sm" onclick="downloadEdi('health-enroll','out')">健保 退保申報 (.edi)</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">※ EDI 為 Big5 固定寬度格式，產出後請以勞保局網路申報系統驗證後再送出。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 預支扣帳 -->
+    <div id="salary-panel-advances" style="display:none">
+      <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <span class="filter-label">月份</span>
+        <input class="filter-input" type="month" id="adv-month" onchange="loadAdvances()">
+        <select class="filter-input" id="adv-status-filter" onchange="loadAdvances()" style="min-width:100px">
+          <option value="">全部狀態</option>
+          <option value="pending">待扣</option>
+          <option value="deducted">已扣</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="openAdvanceModal()">新增預支</button>
+        <span style="flex:1"></span>
+        <span id="adv-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>員工</th><th>部門</th><th>預支日期</th><th>金額</th><th>扣款月份</th><th>備註</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="adv-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          ℹ️ 預支記錄在「自動產生薪資」時會自動列入當月扣除項目。薪資確認後，對應的預支記錄會自動標記為「已扣」。
         </div>
       </div>
     </div>
@@ -3196,6 +3226,34 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeSalStaffModal()">取消</button><button class="btn btn-primary" onclick="saveSalStaff()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Salary Advance Modal (新增/編輯預支扣帳) -->
+<div class="modal-overlay" id="adv-modal" style="display:none">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><span class="modal-title" id="adv-modal-title">新增薪資預支</span><button class="modal-close" onclick="closeAdvanceModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="adv-modal-id">
+      <div class="form-group">
+        <label class="form-label">員工 *</label>
+        <select class="form-input" id="adv-modal-staff"></select>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">預支金額 (NT$) *</label><input class="form-input" type="number" id="adv-modal-amount" min="1" step="1" placeholder="例：5000"></div>
+        <div><label class="form-label">預支日期 *</label><input class="form-input" type="date" id="adv-modal-date"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">扣款月份 *</label>
+        <input class="form-input" type="month" id="adv-modal-month">
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">自動產生該月薪資時會列入扣除項目</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input class="form-input" id="adv-modal-note" placeholder="選填">
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeAdvanceModal()">取消</button><button class="btn btn-primary" onclick="saveAdvance()">儲存</button></div>
   </div>
 </div>
 
@@ -6506,17 +6564,19 @@ function initSalary() {
   const now=new Date();
   const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   if (!document.getElementById('sal-month').value) document.getElementById('sal-month').value=ym;
+  if (!document.getElementById('adv-month').value)  document.getElementById('adv-month').value=ym;
   switchSalaryTab('calc');
 }
 
 function switchSalaryTab(tab) {
-  ['calc','settings','items','withholding','edi'].forEach(t=>{
+  ['calc','settings','items','advances','withholding','edi'].forEach(t=>{
     document.getElementById('salarytab-'+t).classList.toggle('active',t===tab);
     document.getElementById('salary-panel-'+t).style.display=t===tab?'':'none';
   });
   if (tab==='calc')        loadSalaryRecords();
   if (tab==='settings')    { loadSalaryStaff(); loadSalaryItems(); }
   if (tab==='items')       loadSalaryItems();
+  if (tab==='advances')    loadAdvances();
   if (tab==='withholding') initWithholdingTab();
   if (tab==='edi')         initEdiTab();
 }
@@ -7045,6 +7105,102 @@ async function saveSalStaff() {
   const {ok} = await api(`/api/salary/staff/${id}`, apiPUT(body));
   if (!ok) return;
   closeSalStaffModal(); showToast('薪資設定已儲存','success'); await loadSalaryStaff();
+}
+
+// ── 薪資預支扣帳 ─────────────────────────────────────────────
+let _advStaffList = [];
+
+async function loadAdvances() {
+  const month  = document.getElementById('adv-month').value;
+  const status = document.getElementById('adv-status-filter').value;
+  let url = '/api/salary/advances?';
+  if (month)  url += `month=${month}&`;
+  if (status) url += `status=${status}&`;
+  const {ok, data} = await api(url, {}, true);
+  const rows = ok ? data : [];
+  document.getElementById('adv-count').textContent = `共 ${rows.length} 筆`;
+  const tb = document.getElementById('adv-tbody');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無預支記錄</div></td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(r => {
+    const isPending  = r.status === 'pending';
+    const statusBadge = isPending
+      ? `<span style="font-size:12px;font-weight:700;color:var(--red)">待扣</span>`
+      : `<span style="font-size:12px;font-weight:700;color:var(--green)">已扣</span>`;
+    return `<tr>
+      <td style="font-weight:600">${escHtml(r.staff_name)}</td>
+      <td style="color:var(--muted)">${escHtml(r.department||'')}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:13px">${escHtml(r.advance_date)}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:700;color:var(--red)">$${fmtNum(r.amount)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:13px">${escHtml(r.deduct_month)}</td>
+      <td style="color:var(--muted);font-size:12px">${escHtml(r.note||'')}</td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap">
+        ${isPending ? `<button class="btn btn-outline btn-sm" onclick="markAdvanceDeducted(${r.id})">標記已扣</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="deleteAdvance(${r.id})" style="margin-left:4px">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openAdvanceModal() {
+  document.getElementById('adv-modal-id').value = '';
+  document.getElementById('adv-modal-title').textContent = '新增薪資預支';
+  document.getElementById('adv-modal-amount').value = '';
+  document.getElementById('adv-modal-note').value = '';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('adv-modal-date').value = today;
+  const ym = document.getElementById('adv-month').value || new Date().toISOString().slice(0,7);
+  document.getElementById('adv-modal-month').value = ym;
+  _populateAdvStaff();
+  document.getElementById('adv-modal').style.display = '';
+}
+
+async function _populateAdvStaff() {
+  if (!_advStaffList.length) {
+    const {ok, data} = await api('/api/salary/staff', {}, true);
+    _advStaffList = ok ? data.filter(s => s.active) : [];
+  }
+  const sel = document.getElementById('adv-modal-staff');
+  sel.innerHTML = _advStaffList.map(s => `<option value="${s.id}">${escHtml(s.name)}${s.department?' ('+escHtml(s.department)+')':''}</option>`).join('');
+}
+
+function closeAdvanceModal() {
+  document.getElementById('adv-modal').style.display = 'none';
+}
+
+async function saveAdvance() {
+  const staff_id     = parseInt(document.getElementById('adv-modal-staff').value);
+  const amount       = parseFloat(document.getElementById('adv-modal-amount').value);
+  const advance_date = document.getElementById('adv-modal-date').value;
+  const deduct_month = document.getElementById('adv-modal-month').value;
+  const note         = document.getElementById('adv-modal-note').value.trim();
+  if (!staff_id || !amount || !advance_date || !deduct_month) {
+    showToast('請填寫員工、金額、日期、扣款月份', 'error'); return;
+  }
+  const {ok} = await api('/api/salary/advances', apiJSON({staff_id, amount, advance_date, deduct_month, note}));
+  if (!ok) return;
+  showToast('預支記錄已新增', 'success');
+  closeAdvanceModal();
+  await loadAdvances();
+}
+
+async function markAdvanceDeducted(id) {
+  if (!confirm('確定標記此筆預支為「已扣」？')) return;
+  const {ok} = await api(`/api/salary/advances/${id}`, {method:'PATCH', body: JSON.stringify({status:'deducted'})});
+  if (!ok) return;
+  showToast('已標記為已扣', 'success');
+  await loadAdvances();
+}
+
+async function deleteAdvance(id) {
+  if (!confirm('確定刪除此筆預支記錄？')) return;
+  const {ok} = await api(`/api/salary/advances/${id}`, {method:'DELETE'});
+  if (!ok) return;
+  showToast('已刪除', 'success');
+  await loadAdvances();
 }
 
 // ── 薪資項目 ─────────────────────────────────────────────────

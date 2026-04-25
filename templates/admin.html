@@ -4431,6 +4431,36 @@ function _cachedQProductsPromise() {
 }
 function _invalidateQProductCache() { _qProdCacheP = null; }
 
+// 班別快取（TTL 60s）
+let _shiftTypesCacheP = null, _shiftTypesCacheAt = 0;
+function _cachedShiftTypesPromise() {
+  if (_shiftTypesCacheP && Date.now() - _shiftTypesCacheAt < 60000) return _shiftTypesCacheP;
+  _shiftTypesCacheAt = Date.now();
+  _shiftTypesCacheP = api('/api/shifts/types', {}, true).then(r => r.ok ? r.data : []);
+  return _shiftTypesCacheP;
+}
+function _invalidateShiftTypesCache() { _shiftTypesCacheP = null; }
+
+// 假別快取（TTL 60s）
+let _leaveTypesCacheP = null, _leaveTypesCacheAt = 0;
+function _cachedLeaveTypesPromise() {
+  if (_leaveTypesCacheP && Date.now() - _leaveTypesCacheAt < 60000) return _leaveTypesCacheP;
+  _leaveTypesCacheAt = Date.now();
+  _leaveTypesCacheP = api('/api/leave/types', {}, true).then(r => r.ok ? r.data : []);
+  return _leaveTypesCacheP;
+}
+function _invalidateLeaveTypesCache() { _leaveTypesCacheP = null; }
+
+// 薪資項目快取（TTL 60s）
+let _salaryItemsCacheP = null, _salaryItemsCacheAt = 0;
+function _cachedSalaryItemsPromise() {
+  if (_salaryItemsCacheP && Date.now() - _salaryItemsCacheAt < 60000) return _salaryItemsCacheP;
+  _salaryItemsCacheAt = Date.now();
+  _salaryItemsCacheP = api('/api/salary/items', {}, true).then(r => r.ok ? r.data : []);
+  return _salaryItemsCacheP;
+}
+function _invalidateSalaryItemsCache() { _salaryItemsCacheP = null; }
+
 // ══════════════════════════════════════════════════════════════
 // 員工快速搜尋
 // ══════════════════════════════════════════════════════════════
@@ -5743,9 +5773,9 @@ async function deleteShiftAssign() {
 
 // ── 班別設定 ─────────────────────────────────────────────────
 async function loadShiftTypes() {
-  const { ok, data } = await api('/api/shifts/types', {}, true);
-  shiftTypes = ok ? data : [];
-  const tb   = document.getElementById('shift-types-tbody');
+  const tb = document.getElementById('shift-types-tbody');
+  if (tb) tb.innerHTML = skeletonRows(7, 3);
+  shiftTypes = await _cachedShiftTypesPromise();
   if (!shiftTypes.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無班別</div></td></tr>'; return; }
   tb.innerHTML = shiftTypes.map(t => `<tr style="opacity:${t.active?1:.5}">
     <td style="font-weight:600"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t.color};margin-right:6px;vertical-align:middle"></span>${escHtml(t.name)}</td>
@@ -5779,11 +5809,13 @@ async function saveShiftType() {
   if (!body.name) { showToast('請填寫班別名稱','error'); return; }
   const { ok } = await api(id?`/api/shifts/types/${id}`:'/api/shifts/types', { method:id?'PUT':'POST', body: JSON.stringify(body) });
   if (!ok) return;
+  _invalidateShiftTypesCache();
   closeShiftTypeModal(); showToast(id?'已更新':'已新增','success'); await loadShiftTypes();
 }
 async function deleteShiftType(id) {
   if (!confirm('確定刪除此班別？相關排班指派也會一併刪除。')) return;
   await api(`/api/shifts/types/${id}`,{ method:'DELETE' });
+  _invalidateShiftTypesCache();
   showToast('已刪除','success'); await loadShiftTypes();
 }
 
@@ -6404,9 +6436,9 @@ async function editLeaveBalance(id, total, used) {
 
 // ── 假別設定 ─────────────────────────────────────────────────
 async function loadLeaveTypes() {
-  const {ok,data} = await api('/api/leave/types',{},true);
-  leaveTypesList = ok?data:[];
   const tb = document.getElementById('leave-types-tbody');
+  if (tb) tb.innerHTML = skeletonRows(7, 3);
+  leaveTypesList = await _cachedLeaveTypesPromise();
   if (!leaveTypesList.length) { tb.innerHTML='<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無假別</div></td></tr>'; return; }
   const PAY_LABEL = {0:'無薪（事假）',0.5:'半薪（病假）',1:'全薪'};
   tb.innerHTML = leaveTypesList.map(t=>`<tr style="opacity:${t.active?1:.5}">
@@ -6453,11 +6485,13 @@ async function saveLeaveType() {
   if (!body.name||!body.code) { showToast('請填寫假別名稱和代碼','error'); return; }
   const {ok} = await api(id?`/api/leave/types/${id}`:'/api/leave/types',{method:id?'PUT':'POST',body:JSON.stringify(body)});
   if (!ok) return;
+  _invalidateLeaveTypesCache();
   closeLeaveTypeModal(); showToast(id?'已更新':'已新增','success'); await loadLeaveTypes();
 }
 async function deleteLeaveType(id) {
   if (!confirm('確定刪除此假別？')) return;
   await api(`/api/leave/types/${id}`,{method:'DELETE'});
+  _invalidateLeaveTypesCache();
   showToast('已刪除','success'); await loadLeaveTypes();
 }
 
@@ -6857,10 +6891,11 @@ function fmtNum(n) {
 
 // ── 薪資設定 ─────────────────────────────────────────────────
 async function loadSalaryStaff() {
+  const tb = document.getElementById('sal-staff-tbody');
+  if (tb) tb.innerHTML = skeletonRows(10);
   const {ok,data} = await api('/api/salary/staff',{},true);
   salaryStaffList = ok?data:[];
   document.getElementById('sal-staff-count').textContent = `共 ${salaryStaffList.length} 位員工（來自打卡系統）`;
-  const tb = document.getElementById('sal-staff-tbody');
   if (!salaryStaffList.length) { tb.innerHTML='<tr><td colspan="10" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
   tb.innerHTML = salaryStaffList.map(s=>`<tr>
     <td style="font-weight:600">${escHtml(s.name)}</td>
@@ -7013,8 +7048,7 @@ async function saveSalStaff() {
 
 // ── 薪資項目 ─────────────────────────────────────────────────
 async function loadSalaryItems() {
-  const {ok,data} = await api('/api/salary/items',{},true);
-  salaryItemsList = ok?data:[];
+  salaryItemsList = await _cachedSalaryItemsPromise();
   const allowDiv  = document.getElementById('sal-items-allow');
   const deductDiv = document.getElementById('sal-items-deduct');
   const card = (it) => `<div class="card" style="margin-bottom:10px">
@@ -7072,11 +7106,13 @@ async function saveSalaryItem() {
   if (!body.name) { showToast('請填寫項目名稱','error'); return; }
   const {ok} = await api(id?`/api/salary/items/${id}`:'/api/salary/items',{method:id?'PUT':'POST',body:JSON.stringify(body)});
   if (!ok) return;
+  _invalidateSalaryItemsCache();
   closeSalaryItemModal(); showToast(id?'已更新':'已新增','success'); await loadSalaryItems();
 }
 async function deleteSalaryItem(id) {
   if (!confirm('確定刪除此薪資項目？')) return;
   await api(`/api/salary/items/${id}`,{method:'DELETE'});
+  _invalidateSalaryItemsCache();
   showToast('已刪除','success'); await loadSalaryItems();
 }
 

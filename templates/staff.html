@@ -1078,13 +1078,10 @@ async function _autoDetectOTDayType(dateStr) {
   if (dt.getDay() === 0) { sel.value = 'special'; updateOTHoursPreview(); return; }
   if (dt.getDay() === 6) { sel.value = 'rest_day'; updateOTHoursPreview(); return; }
 
-  // Check public holiday
+  // Check public holiday (uses shared _holidayMap / _holidayMonthsFetched cache)
   try {
     const month = dateStr.slice(0, 7);
-    if (!_holidayMap[dateStr]) {
-      const res = await fetch('/api/holidays/public?month=' + month);
-      if (res.ok) { const d = await res.json(); Object.assign(_holidayMap, d); }
-    }
+    await _loadHolidaysForMonth(month);
     if (_holidayMap[dateStr]) {
       sel.value = 'holiday'; updateOTHoursPreview();
       showToast('已自動偵測為國定假日：' + _holidayMap[dateStr], 'ok');
@@ -1167,14 +1164,16 @@ function initAttendanceTab(){
 }
 let _attRecords = {};  // cache for day detail popup
 let _holidayMap  = {};  // cache: date -> holiday name
+let _holidayMonthsFetched = new Set();  // 已抓過的月份，避免重複 fetch
 
 async function _loadHolidaysForMonth(month) {
-  if (!month) return;
+  if (!month || _holidayMonthsFetched.has(month)) return;
   try {
-    const res = await fetch('/api/holidays/public?month=' + month + '&_=' + Date.now());
+    const res = await fetch('/api/holidays/public?month=' + month);
     if (res.ok) {
       const data = await res.json();
       Object.assign(_holidayMap, data);
+      _holidayMonthsFetched.add(month);
     }
   } catch(e) {}
 }
@@ -1190,7 +1189,7 @@ async function loadAttendance(){
   try {
     const [, res] = await Promise.all([
       _loadHolidaysForMonth(month),
-      fetch('/api/punch/my-records?month=' + month + '&_=' + Date.now())
+      fetch('/api/punch/my-records?month=' + month)
     ]);
     const data = await res.json();
     if (!res.ok) {

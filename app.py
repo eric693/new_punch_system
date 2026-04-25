@@ -126,6 +126,18 @@ _qproducts_cache:  dict = {}   # key: company_unit str → {data, at}
 _stores_cache:     dict = {'data': None, 'at': 0.0}
 _STATIC_TTL = 30.0             # 30 秒
 
+# 更靜態的查詢表快取（假別、班別、薪資項目、公告）—— 60 秒 TTL
+_leave_types_all_cache:    dict = {'data': None, 'at': 0.0}
+_leave_types_pub_cache:    dict = {'data': None, 'at': 0.0}
+_shift_types_all_cache:    dict = {'data': None, 'at': 0.0}
+_shift_types_pub_cache:    dict = {'data': None, 'at': 0.0}
+_salary_items_cache:       dict = {'data': None, 'at': 0.0}
+_ann_public_cache:         dict = {'data': None, 'at': 0.0}
+_holidays_pub_cache:       dict = {}   # key: "YYYY-MM" or "YYYY" → {data, at}
+_SEMISTATIC_TTL = 60.0           # 60 秒
+_HOLIDAY_TTL    = 600.0          # 10 分鐘（國定假日幾乎不動）
+_ANN_TTL        = 30.0           # 30 秒（公告較常更新）
+
 
 def _get_cfg_cached(conn):
     now = time.time()
@@ -3088,18 +3100,28 @@ def api_sched_admin_summary(month):
 @app.route('/api/shifts/types', methods=['GET'])
 @require_module('sched')
 def api_shift_types_list():
+    now = time.time()
+    if _shift_types_all_cache['data'] is not None and now - _shift_types_all_cache['at'] < _SEMISTATIC_TTL:
+        return jsonify(_shift_types_all_cache['data'])
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM shift_types ORDER BY sort_order, id").fetchall()
-    return jsonify([shift_type_row(r) for r in rows])
+    result = [shift_type_row(r) for r in rows]
+    _shift_types_all_cache['data'] = result; _shift_types_all_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/shifts/types/public', methods=['GET'])
 def api_shift_types_public():
     """Public endpoint for employee page."""
+    now = time.time()
+    if _shift_types_pub_cache['data'] is not None and now - _shift_types_pub_cache['at'] < _SEMISTATIC_TTL:
+        return jsonify(_shift_types_pub_cache['data'])
     with get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM shift_types WHERE active=TRUE ORDER BY sort_order, id"
         ).fetchall()
-    return jsonify([shift_type_row(r) for r in rows])
+    result = [shift_type_row(r) for r in rows]
+    _shift_types_pub_cache['data'] = result; _shift_types_pub_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/shifts/types', methods=['POST'])
 @require_module('sched')
@@ -3112,6 +3134,7 @@ def api_shift_type_create():
         """, (b['name'], b['start_time'], b['end_time'],
               b.get('color', '#4a7bda'), b.get('departments', ''),
               int(b.get('sort_order', 0)))).fetchone()
+    _shift_types_all_cache['data'] = None; _shift_types_pub_cache['data'] = None
     return jsonify(shift_type_row(row)), 201
 
 @app.route('/api/shifts/types/<int:sid>', methods=['PUT'])
@@ -3128,6 +3151,7 @@ def api_shift_type_update(sid):
               b.get('color', '#4a7bda'), b.get('departments', ''),
               int(b.get('sort_order', 0)), bool(b.get('active', True)),
               sid)).fetchone()
+    _shift_types_all_cache['data'] = None; _shift_types_pub_cache['data'] = None
     return jsonify(shift_type_row(row)) if row else ('', 404)
 
 @app.route('/api/shifts/types/<int:sid>', methods=['DELETE'])
@@ -3135,6 +3159,7 @@ def api_shift_type_update(sid):
 def api_shift_type_delete(sid):
     with get_db() as conn:
         conn.execute("DELETE FROM shift_types WHERE id=%s", (sid,))
+    _shift_types_all_cache['data'] = None; _shift_types_pub_cache['data'] = None
     return jsonify({'deleted': sid})
 
 # ── Shift Assignments ─────────────────────────────────────────────
@@ -4224,15 +4249,25 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
 @app.route('/api/leave/types', methods=['GET'])
 @require_module('leave')
 def api_leave_types_list():
+    now = time.time()
+    if _leave_types_all_cache['data'] is not None and now - _leave_types_all_cache['at'] < _SEMISTATIC_TTL:
+        return jsonify(_leave_types_all_cache['data'])
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM leave_types ORDER BY sort_order, id").fetchall()
-    return jsonify([leave_type_row(r) for r in rows])
+    result = [leave_type_row(r) for r in rows]
+    _leave_types_all_cache['data'] = result; _leave_types_all_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/leave/types/public', methods=['GET'])
 def api_leave_types_public():
+    now = time.time()
+    if _leave_types_pub_cache['data'] is not None and now - _leave_types_pub_cache['at'] < _SEMISTATIC_TTL:
+        return jsonify(_leave_types_pub_cache['data'])
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM leave_types WHERE active=TRUE ORDER BY sort_order, id").fetchall()
-    return jsonify([leave_type_row(r) for r in rows])
+    result = [leave_type_row(r) for r in rows]
+    _leave_types_pub_cache['data'] = result; _leave_types_pub_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/leave/types', methods=['POST'])
 @require_module('leave')
@@ -4245,6 +4280,7 @@ def api_leave_type_create():
         """, (b['name'], b['code'], float(b.get('pay_rate',1.0)),
               b.get('max_days') or None, b.get('description',''),
               b.get('color','#4a7bda'), int(b.get('sort_order',0)))).fetchone()
+    _leave_types_all_cache['data'] = None; _leave_types_pub_cache['data'] = None
     return jsonify(leave_type_row(row)), 201
 
 @app.route('/api/leave/types/<int:tid>', methods=['PUT'])
@@ -4260,6 +4296,7 @@ def api_leave_type_update(tid):
               b.get('max_days') or None, b.get('description',''),
               b.get('color','#4a7bda'), int(b.get('sort_order',0)),
               bool(b.get('active',True)), tid)).fetchone()
+    _leave_types_all_cache['data'] = None; _leave_types_pub_cache['data'] = None
     return jsonify(leave_type_row(row)) if row else ('', 404)
 
 @app.route('/api/leave/types/<int:tid>', methods=['DELETE'])
@@ -4267,6 +4304,7 @@ def api_leave_type_update(tid):
 def api_leave_type_delete(tid):
     with get_db() as conn:
         conn.execute("DELETE FROM leave_types WHERE id=%s", (tid,))
+    _leave_types_all_cache['data'] = None; _leave_types_pub_cache['data'] = None
     return jsonify({'deleted': tid})
 
 # ── Leave Requests ────────────────────────────────────────────────
@@ -5265,9 +5303,14 @@ def api_my_payslip():
 @app.route('/api/salary/items', methods=['GET'])
 @require_module('salary')
 def api_salary_items_list():
+    now = time.time()
+    if _salary_items_cache['data'] is not None and now - _salary_items_cache['at'] < _SEMISTATIC_TTL:
+        return jsonify(_salary_items_cache['data'])
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM salary_items ORDER BY sort_order, id").fetchall()
-    return jsonify([salary_item_row(r) for r in rows])
+    result = [salary_item_row(r) for r in rows]
+    _salary_items_cache['data'] = result; _salary_items_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/salary/items', methods=['POST'])
 @require_module('salary')
@@ -5280,6 +5323,7 @@ def api_salary_item_create():
         """, (b['name'], b.get('item_type','allowance'), b.get('formula',''),
               float(b.get('amount',0)), b.get('description',''),
               b.get('color','#4a7bda'), int(b.get('sort_order',0)))).fetchone()
+    _salary_items_cache['data'] = None
     return jsonify(salary_item_row(row)), 201
 
 @app.route('/api/salary/items/<int:iid>', methods=['PUT'])
@@ -5295,6 +5339,7 @@ def api_salary_item_update(iid):
               float(b.get('amount',0)), b.get('description',''),
               b.get('color','#4a7bda'), int(b.get('sort_order',0)),
               bool(b.get('active',True)), iid)).fetchone()
+    _salary_items_cache['data'] = None
     return jsonify(salary_item_row(row)) if row else ('', 404)
 
 @app.route('/api/salary/items/<int:iid>', methods=['DELETE'])
@@ -5302,6 +5347,7 @@ def api_salary_item_update(iid):
 def api_salary_item_delete(iid):
     with get_db() as conn:
         conn.execute("DELETE FROM salary_items WHERE id=%s", (iid,))
+    _salary_items_cache['data'] = None
     return jsonify({'deleted': iid})
 
 # ── Salary Records ─────────────────────────────────────────────────
@@ -5595,6 +5641,7 @@ def api_ann_create():
               bool(b.get('is_pinned', False)), b.get('visible_to','all'),
               expires, b.get('author','管理員').strip(),
               bool(b.get('active', True)))).fetchone()
+    _ann_public_cache['data'] = None
     if row and row['active']:
         _broadcast_announcement_line(row['title'], row['content'])
     return jsonify(ann_row(row)), 201
@@ -5618,6 +5665,7 @@ def api_ann_update(aid):
               bool(b.get('is_pinned', False)), b.get('visible_to','all'),
               expires, b.get('author','管理員').strip(),
               bool(b.get('active', True)), aid)).fetchone()
+    _ann_public_cache['data'] = None
     return jsonify(ann_row(row)) if row else ('', 404)
 
 @app.route('/api/announcements/<int:aid>', methods=['DELETE'])
@@ -5625,6 +5673,7 @@ def api_ann_update(aid):
 def api_ann_delete(aid):
     with get_db() as conn:
         conn.execute("DELETE FROM announcements WHERE id=%s", (aid,))
+    _ann_public_cache['data'] = None
     return jsonify({'deleted': aid})
 
 @app.route('/api/announcements/<int:aid>/pin', methods=['POST'])
@@ -5635,6 +5684,7 @@ def api_ann_toggle_pin(aid):
             "UPDATE announcements SET is_pinned=NOT is_pinned, updated_at=NOW() WHERE id=%s RETURNING *",
             (aid,)
         ).fetchone()
+    _ann_public_cache['data'] = None
     return jsonify(ann_row(row)) if row else ('', 404)
 
 # ── Public: employee reads ────────────────────────────────────────
@@ -5642,7 +5692,9 @@ def api_ann_toggle_pin(aid):
 @app.route('/api/announcements/public', methods=['GET'])
 def api_ann_public():
     """員工端讀取有效公告"""
-    from datetime import datetime as _dta
+    now = time.time()
+    if _ann_public_cache['data'] is not None and now - _ann_public_cache['at'] < _ANN_TTL:
+        return jsonify(_ann_public_cache['data'])
     with get_db() as conn:
         rows = conn.execute("""
             SELECT * FROM announcements
@@ -5651,8 +5703,9 @@ def api_ann_public():
             ORDER BY is_pinned DESC, published_at DESC
             LIMIT 50
         """).fetchall()
-        # 增加閱讀計數（批次）
-    return jsonify([ann_row(r) for r in rows])
+    result = [ann_row(r) for r in rows]
+    _ann_public_cache['data'] = result; _ann_public_cache['at'] = now
+    return jsonify(result)
 
 @app.route('/api/announcements/<int:aid>/view', methods=['POST'])
 def api_ann_view(aid):
@@ -5774,8 +5827,14 @@ def api_holidays_list():
 @app.route('/api/holidays/public', methods=['GET'])
 def api_holidays_public():
     """Public endpoint for staff page"""
-    year = request.args.get('year', '')
+    year  = request.args.get('year', '')
     month = request.args.get('month', '')
+    # strip cache-busting param added by old client code
+    cache_key = f"{year}:{month}" if (year or month) else '__all__'
+    now = time.time()
+    cached = _holidays_pub_cache.get(cache_key)
+    if cached and now - cached['at'] < _HOLIDAY_TTL:
+        return jsonify(cached['data'])
     conds, params = ['TRUE'], []
     if year:
         conds.append("EXTRACT(YEAR FROM date)=%s"); params.append(int(year))
@@ -5786,7 +5845,9 @@ def api_holidays_public():
             f"SELECT date, name FROM public_holidays WHERE {' AND '.join(conds)} ORDER BY date",
             params
         ).fetchall()
-    return jsonify({r['date'].isoformat(): r['name'] for r in rows})
+    result = {r['date'].isoformat(): r['name'] for r in rows}
+    _holidays_pub_cache[cache_key] = {'data': result, 'at': now}
+    return jsonify(result)
 
 @app.route('/api/holidays', methods=['POST'])
 @require_module('holiday')
@@ -5803,6 +5864,7 @@ def api_holiday_create():
             RETURNING *
         """, (b['date'], b['name'].strip(),
               b.get('holiday_type','national'), b.get('note',''))).fetchone()
+    _holidays_pub_cache.clear()
     return jsonify(holiday_row(row)), 201
 
 @app.route('/api/holidays/<int:hid>', methods=['DELETE'])
@@ -5810,6 +5872,7 @@ def api_holiday_create():
 def api_holiday_delete(hid):
     with get_db() as conn:
         conn.execute("DELETE FROM public_holidays WHERE id=%s", (hid,))
+    _holidays_pub_cache.clear()
     return jsonify({'deleted': hid})
 
 @app.route('/api/holidays/batch', methods=['POST'])
@@ -5831,6 +5894,7 @@ def api_holiday_batch():
                 count += 1
             except Exception:
                 pass
+    _holidays_pub_cache.clear()
     return jsonify({'imported': count})
 
 

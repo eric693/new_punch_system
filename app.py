@@ -120,6 +120,12 @@ _punch_locs_cache: dict = {'data': None, 'at': 0.0}
 _PUNCH_CFG_TTL  = 300   # 5 分鐘
 _PUNCH_LOCS_TTL = 60    # 1 分鐘
 
+# 靜態查詢表快取（財務類別、常用品項、門市）—— 30 秒 TTL
+_fin_cats_cache:   dict = {}   # key: company_unit str → {data, at}
+_qproducts_cache:  dict = {}   # key: company_unit str → {data, at}
+_stores_cache:     dict = {'data': None, 'at': 0.0}
+_STATIC_TTL = 30.0             # 30 秒
+
 
 def _get_cfg_cached(conn):
     now = time.time()
@@ -7491,9 +7497,16 @@ def api_edi_health_enroll():
 @app.route('/api/stores', methods=['GET'])
 @login_required
 def api_stores_list():
+    now    = time.time()
+    cached = _stores_cache.get('data')
+    if cached is not None and now - _stores_cache['at'] < _STATIC_TTL:
+        return jsonify(cached)
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM stores ORDER BY id").fetchall()
-    return jsonify([dict(r) for r in rows])
+    result = [dict(r) for r in rows]
+    _stores_cache['data'] = result
+    _stores_cache['at']   = now
+    return jsonify(result)
 
 @app.route('/api/stores', methods=['POST'])
 @login_required
@@ -7507,6 +7520,7 @@ def api_stores_create():
             "INSERT INTO stores (name, code, address) VALUES (%s,%s,%s) RETURNING *",
             (name, code, (b.get('address') or '').strip())
         ).fetchone()
+    _stores_cache['data'] = None
     return jsonify(dict(row)), 201
 
 @app.route('/api/stores/<int:sid>', methods=['PUT'])
@@ -7518,6 +7532,7 @@ def api_stores_update(sid):
             UPDATE stores SET name=%s, code=%s, address=%s, active=%s WHERE id=%s RETURNING *
         """, ((b.get('name') or '').strip(), (b.get('code') or None),
               (b.get('address') or '').strip(), bool(b.get('active', True)), sid)).fetchone()
+    _stores_cache['data'] = None
     return jsonify(dict(row)) if row else ('', 404)
 
 @app.route('/api/stores/<int:sid>', methods=['DELETE'])
@@ -7527,6 +7542,7 @@ def api_stores_delete(sid):
         conn.execute("UPDATE punch_staff     SET store_id=NULL WHERE store_id=%s", (sid,))
         conn.execute("UPDATE punch_locations SET store_id=NULL WHERE store_id=%s", (sid,))
         conn.execute("DELETE FROM stores WHERE id=%s", (sid,))
+    _stores_cache['data'] = None
     return jsonify({'deleted': sid})
 
 @app.route('/api/stores/<int:sid>/staff', methods=['GET'])
@@ -8552,6 +8568,11 @@ def _finance_rec_row(r):
 @require_module('finance')
 def api_finance_categories_list():
     company = request.args.get('company', '')
+    key     = company or '__all__'
+    now     = time.time()
+    cached  = _fin_cats_cache.get(key)
+    if cached and now - cached['at'] < _STATIC_TTL:
+        return jsonify(cached['data'])
     with get_db() as conn:
         if company:
             rows = conn.execute(
@@ -8559,7 +8580,9 @@ def api_finance_categories_list():
             ).fetchall()
         else:
             rows = conn.execute("SELECT * FROM finance_categories ORDER BY sort_order, id").fetchall()
-    return jsonify([_finance_cat_row(r) for r in rows])
+    result = [_finance_cat_row(r) for r in rows]
+    _fin_cats_cache[key] = {'data': result, 'at': now}
+    return jsonify(result)
 
 @app.route('/api/finance/categories', methods=['POST'])
 @require_module('finance')
@@ -8574,6 +8597,7 @@ def api_finance_category_create():
               int(b.get('sort_order',0)), bool(b.get('active',True)),
               b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense')
              )).fetchone()
+    _fin_cats_cache.clear()
     return jsonify(_finance_cat_row(row)), 201
 
 @app.route('/api/finance/categories/<int:cid>', methods=['PUT'])
@@ -8588,6 +8612,7 @@ def api_finance_category_update(cid):
               int(b.get('sort_order',0)), bool(b.get('active',True)),
               b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense'),
               cid)).fetchone()
+    _fin_cats_cache.clear()
     return jsonify(_finance_cat_row(row)) if row else ('', 404)
 
 @app.route('/api/finance/categories/<int:cid>', methods=['DELETE'])
@@ -8595,6 +8620,7 @@ def api_finance_category_update(cid):
 def api_finance_category_delete(cid):
     with get_db() as conn:
         conn.execute("DELETE FROM finance_categories WHERE id=%s", (cid,))
+    _fin_cats_cache.clear()
     return jsonify({'deleted': cid})
 
 # ── Finance Records ────────────────────────────────────────────
@@ -12560,6 +12586,11 @@ def api_quotation_settings_put():
 @login_required
 def api_qproducts_list():
     company = request.args.get('company', '')
+    key     = company or '__all__'
+    now     = time.time()
+    cached  = _qproducts_cache.get(key)
+    if cached and now - cached['at'] < _STATIC_TTL:
+        return jsonify(cached['data'])
     with get_db() as conn:
         if company:
             rows = conn.execute(
@@ -12569,7 +12600,9 @@ def api_qproducts_list():
             rows = conn.execute(
                 "SELECT * FROM quotation_products ORDER BY sort_order, id"
             ).fetchall()
-    return jsonify([dict(r) for r in rows])
+    result = [dict(r) for r in rows]
+    _qproducts_cache[key] = {'data': result, 'at': now}
+    return jsonify(result)
 
 @app.route('/api/quotation/products', methods=['POST'])
 @login_required
@@ -12582,6 +12615,7 @@ def api_qproducts_create():
             (b.get('name','').strip(), b.get('unit','次'),
              float(b.get('default_price',0)), int(b.get('sort_order',0)), True, company)
         ).fetchone()
+    _qproducts_cache.clear()
     return jsonify(dict(row)), 201
 
 @app.route('/api/quotation/products/<int:pid>', methods=['PUT'])
@@ -12595,6 +12629,7 @@ def api_qproducts_update(pid):
              float(b.get('default_price',0)), int(b.get('sort_order',0)),
              bool(b.get('active', True)), pid)
         )
+    _qproducts_cache.clear()
     return jsonify({'ok': True})
 
 @app.route('/api/quotation/products/<int:pid>', methods=['DELETE'])
@@ -12602,6 +12637,7 @@ def api_qproducts_update(pid):
 def api_qproducts_delete(pid):
     with get_db() as conn:
         conn.execute("DELETE FROM quotation_products WHERE id=%s", (pid,))
+    _qproducts_cache.clear()
     return jsonify({'ok': True})
 
 

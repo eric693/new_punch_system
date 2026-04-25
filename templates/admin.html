@@ -146,6 +146,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
 .empty-state-text { font-size: 14px; margin-top: 8px; }
 
+/* Skeleton loading */
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease infinite; display: inline-block; width: 100%; }
+.skel-sm { width: 60%; }
+.skel-xs { width: 35%; }
+
 /* Confirm */
 .confirm-overlay { position: fixed; inset: 0; background: rgba(10,20,45,0.55); backdrop-filter: blur(2px); z-index: 300; display: none; align-items: center; justify-content: center; }
 .confirm-overlay.open { display: flex; }
@@ -4394,6 +4403,34 @@ function _cachedAllStaff() {
 }
 function _invalidateStaffCache() { _allStaffPromise = null; }
 
+// 財務類別快取（TTL 60s，company 切換時自動失效）
+let _finCatCacheP = null, _finCatCacheAt = 0, _finCatCacheKey = '';
+function _cachedFinCatsPromise() {
+  const key = window._finCompany || '';
+  const now = Date.now();
+  if (_finCatCacheP && now - _finCatCacheAt < 60000 && _finCatCacheKey === key) return _finCatCacheP;
+  _finCatCacheAt  = now;
+  _finCatCacheKey = key;
+  const qs = key ? `?company=${encodeURIComponent(key)}` : '';
+  _finCatCacheP = api('/api/finance/categories' + qs, {}, true).then(r => r.ok ? r.data : []);
+  return _finCatCacheP;
+}
+function _invalidateFinCatCache() { _finCatCacheP = null; }
+
+// 常用品項快取（TTL 60s，company 切換時自動失效）
+let _qProdCacheP = null, _qProdCacheAt = 0, _qProdCacheKey = '';
+function _cachedQProductsPromise() {
+  const key = window._qCompany || '';
+  const now = Date.now();
+  if (_qProdCacheP && now - _qProdCacheAt < 60000 && _qProdCacheKey === key) return _qProdCacheP;
+  _qProdCacheAt  = now;
+  _qProdCacheKey = key;
+  const qs = key ? `?company=${encodeURIComponent(key)}` : '';
+  _qProdCacheP = api('/api/quotation/products' + qs, {}, true).then(r => r.ok ? r.data : []);
+  return _qProdCacheP;
+}
+function _invalidateQProductCache() { _qProdCacheP = null; }
+
 // ══════════════════════════════════════════════════════════════
 // 員工快速搜尋
 // ══════════════════════════════════════════════════════════════
@@ -4545,6 +4582,13 @@ function showToast(msg, type = 'success') {
   setTimeout(() => el.remove(), 3000);
 }
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function skeletonRows(cols, rows=4) {
+  const cell = `<td><span class="skel"></span></td>`;
+  const lastCell = `<td><span class="skel skel-xs"></span></td>`;
+  return Array(rows).fill(null).map(() =>
+    `<tr style="pointer-events:none">${Array(cols-1).fill(cell).join('')}${lastCell}</tr>`
+  ).join('');
+}
 
 // ══════════════════════════════════════════════════════════════
 // 打卡管理模組
@@ -4593,7 +4637,7 @@ let _mstatsData = [];
 
 async function loadPunchAnomalies() {
   const tb = document.getElementById('anomaly-tbody');
-  tb.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  tb.innerHTML = skeletonRows(6);
   const { ok, data } = await api('/api/attendance/anomalies', {}, true);
   if (!ok || !data.anomalies || !data.anomalies.length) {
     tb.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">近 7 天無異常記錄</div></td></tr>';
@@ -4622,7 +4666,7 @@ async function loadMonthlyStats() {
   const tb = document.getElementById('mstats-tbody');
   const footer = document.getElementById('mstats-footer');
   if (!month) { tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">請選擇月份</div></td></tr>'; return; }
-  tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  tb.innerHTML = skeletonRows(9);
   const { ok, data } = await api(`/api/attendance/monthly-stats?month=${month}`, {}, true);
   if (!ok || !data.stats || !data.stats.length) {
     tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">該月無出勤資料</div></td></tr>';
@@ -4718,6 +4762,7 @@ async function loadPunchRecords() {
   const to    = document.getElementById('rec-filter-to').value;
   const month = document.getElementById('rec-filter-month').value;
   _persistFilters('punch-rec', { rec_staff:'rec-filter-staff', rec_month:'rec-filter-month', rec_from:'rec-filter-from', rec_to:'rec-filter-to' });
+  document.getElementById('rec-tbody').innerHTML = skeletonRows(7);
   let url = '/api/punch/records?';
   if (staff) url += `staff_id=${staff}&`;
   if (month) url += `month=${month}&`;
@@ -4829,6 +4874,7 @@ function renderPunchStaff() {
   }).join('');
 }
 async function loadPunchStaff() {
+  document.getElementById('punch-staff-tbody').innerHTML = skeletonRows(7);
   const { ok, data } = await api('/api/punch/staff', {}, true);
   punchStaffList = ok ? data : [];
   renderPunchStaff();
@@ -5963,6 +6009,8 @@ async function loadLeaveRequests() {
   const status = document.getElementById('leave-req-status').value;
   const staffId = document.getElementById('leave-req-staff').value;
   _persistFilters('leave-req', { lr_month:'leave-req-month', lr_status:'leave-req-status', lr_staff:'leave-req-staff' });
+  const tb = document.getElementById('leave-req-tbody');
+  if (tb) tb.innerHTML = skeletonRows(8);
   let url = '/api/leave/requests?';
   if (month)  url += `month=${month}&`;
   if (status) url += `status=${status}&`;
@@ -6441,6 +6489,7 @@ function switchSalaryTab(tab) {
 // ── 月薪計算 ─────────────────────────────────────────────────
 async function loadSalaryRecords() {
   const month = document.getElementById('sal-month').value; if (!month) return;
+  document.getElementById('sal-tbody').innerHTML = skeletonRows(8);
   const {ok,data} = await api(`/api/salary/records?month=${month}`,{},true);
   salaryRecords = ok?data:[];
   document.getElementById('sal-count').textContent=`共 ${salaryRecords.length} 筆 | 已確認 ${salaryRecords.filter(r=>r.status==='confirmed').length} 筆`;
@@ -7447,8 +7496,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.style.display = '';
   }
 
-  // 提前預熱員工清單 cache，避免各模組首次開啟時再等待
+  // 提前預熱靜態快取，避免各模組首次開啟時再等待
   _cachedAllStaff();
+  if (hasModule('finance'))   _cachedFinCatsPromise();
+  if (hasModule('quotation')) _cachedQProductsPromise();
 
   // 導向第一個有權限的頁面
   const firstPage = ADMIN_IS_SUPER ? 'dash'
@@ -7584,6 +7635,7 @@ async function loadFinRecords() {
   const params = new URLSearchParams();
   if (month) params.set('month', month);
   if (type)  params.set('type', type);
+  document.getElementById('fin-rec-tbody').innerHTML = skeletonRows(9);
   const {ok, data} = await api('/api/finance/records?' + params, {}, true);
   const tb = document.getElementById('fin-rec-tbody');
   if (!ok || !data.length) {
@@ -7761,12 +7813,14 @@ async function saveFinCat() {
   const url = id ? `/api/finance/categories/${id}` : '/api/finance/categories';
   const {ok} = await api(url, {method:id?'PUT':'POST', body:JSON.stringify(body)});
   if (!ok) return;
+  _invalidateFinCatCache();
   closeFinCatModal(); showToast(id?'已更新':'已新增','success'); await loadFinCats();
 }
 async function deleteFinCat(id) {
   if (!confirm('確定刪除此類別？')) return;
   const {ok} = await api(`/api/finance/categories/${id}`, {method:'DELETE'});
   if (!ok) return;
+  _invalidateFinCatCache();
   showToast('已刪除','success'); await loadFinCats();
 }
 
@@ -10979,9 +11033,14 @@ initFinance = async function() {
   document.getElementById('fin-dash-month').value  = m;
   document.getElementById('fin-rec-month').value   = m;
   document.getElementById('fin-stmt-month').value  = m;
-  await loadFinCats();
-  await loadFinSummary();
-  switchFinTab('dash');
+  // 直接切換 tab UI，不觸發 loadFinSummary，再並行載入（避免舊版雙重請求）
+  ['dash','revenue','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings','deptcats'].forEach(t => {
+    const btn   = document.getElementById('fintab-'+t);
+    const panel = document.getElementById('fin-panel-'+t);
+    if (btn)   btn.classList.toggle('active', t==='dash');
+    if (panel) panel.style.display = t==='dash' ? '' : 'none';
+  });
+  await Promise.all([loadFinCats(), loadFinSummary()]);
 };
 
 // 覆寫 switchFinTab 以加入 revenue
@@ -11071,7 +11130,7 @@ loadFinRecords = async function() {
   if (ftype)   params.set('type', ftype);
   if (company) params.set('company', company);
   const tbody = document.getElementById('fin-rec-tbody');
-  tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  tbody.innerHTML = skeletonRows(9);
   const {ok, data} = await api('/api/finance/records?' + params, {}, true);
   if (!ok) { tbody.innerHTML = '<tr><td colspan="9" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
   window._finRecords = data;
@@ -11096,13 +11155,10 @@ loadFinRecords = async function() {
   if (footer) { footer.style.display=''; footer.innerHTML=`共 ${data.length} 筆　合計：<strong style="color:${total>=0?'var(--green)':'var(--red)'}">$${Math.abs(total).toLocaleString()}</strong>`; }
 };
 
-// 覆寫 loadFinCats 以帶公司參數
+// 覆寫 loadFinCats 以帶公司參數，並使用 TTL 快取
 const _origLoadFinCats = typeof loadFinCats === 'function' ? loadFinCats : null;
 loadFinCats = async function() {
-  const company = window._finCompany || '';
-  const qs = company ? `?company=${company}` : '';
-  const {ok, data} = await api('/api/finance/categories' + qs, {}, true);
-  if (!ok) return;
+  const data = await _cachedFinCatsPromise();
   finCatList = data;
   const incTbody = document.getElementById('fin-cat-income-tbody');
   const expTbody = document.getElementById('fin-cat-expense-tbody');
@@ -11358,7 +11414,7 @@ async function loadQuotations() {
   if (status)  params.set('status', status);
   if (company) params.set('company', company);
   const tbody = document.getElementById('q-list-tbody');
-  tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+  tbody.innerHTML = skeletonRows(8);
   const {ok, data} = await api('/api/quotations?' + params, {}, true);
   if (!ok) { tbody.innerHTML = '<tr><td colspan="8" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
   document.getElementById('q-list-count').textContent = `共 ${data.length} 筆`;
@@ -11620,14 +11676,8 @@ function printQuotation() {
 
 // ── 常用品項 ─────────────────────────────────────────────────
 async function loadQProducts() {
-  const company = window._qCompany || '';
-  const qs = company ? `?company=${company}` : '';
-  const {ok, data} = await api('/api/quotation/products' + qs, {}, true);
+  const data  = await _cachedQProductsPromise();
   const tbody = document.getElementById('qproducts-tbody');
-  if (!ok) {
-    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入失敗，請重新整理</div></td></tr>';
-    return;
-  }
   _qProductList = data;
   if (!tbody) return;
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">尚無常用品項</div></td></tr>'; return; }
@@ -11687,6 +11737,7 @@ async function saveQProduct() {
   const method = id ? 'PUT' : 'POST';
   const {ok} = await api(url, {method, body: JSON.stringify(body)});
   if (!ok) { showToast('儲存失敗', 'error'); return; }
+  _invalidateQProductCache();
   showToast(id ? '已更新' : '已新增', 'success');
   closeProductModal();
   loadQProducts();
@@ -11695,7 +11746,7 @@ async function saveQProduct() {
 async function deleteQProduct(id) {
   if (!confirm('確定刪除此品項？')) return;
   const {ok} = await api(`/api/quotation/products/${id}`, {method:'DELETE'});
-  if (ok) { showToast('已刪除', 'success'); loadQProducts(); }
+  if (ok) { _invalidateQProductCache(); showToast('已刪除', 'success'); loadQProducts(); }
   else showToast('刪除失敗', 'error');
 }
 

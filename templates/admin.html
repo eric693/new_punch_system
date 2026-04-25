@@ -3649,9 +3649,12 @@ function hasModule(m) { return ADMIN_IS_SUPER || ADMIN_PERMS.includes(m); }
 // Never throws; always shows toast on non-ok unless silent=true
 let _sessionExpired = false;   // 防止重複觸發 401 redirect
 
-async function api(url, opts = {}, silent = false) {
+async function api(url, opts = {}, silent = false, timeoutMs = 20000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res  = await fetch(url, { headers: {'Content-Type':'application/json'}, ...opts });
+    const res  = await fetch(url, { headers: {'Content-Type':'application/json'}, signal: ctrl.signal, ...opts });
+    clearTimeout(timer);
     let data;
     try { data = await res.json(); } catch(e) { data = {}; }
     if (!res.ok) {
@@ -3670,6 +3673,11 @@ async function api(url, opts = {}, silent = false) {
     }
     return { ok: true, data, status: res.status };
   } catch(e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      if (!silent) showToast('請求逾時，請稍後重試', 'error');
+      return { ok: false, data: { error: '請求逾時' }, status: 0 };
+    }
     if (!silent) showToast('網路錯誤，請重試', 'error');
     return { ok: false, data: { error: '網路錯誤' }, status: 0 };
   }
@@ -4060,13 +4068,14 @@ async function initDash() {
   renderAttendanceHeatmap(month);
   renderAnnualLeavePie();
 
+  // 與 dashboard 同步並行發出，不需要等待 dashboard 回來
+  const anomaliesPromise = loadAnomalies();
   const { ok, data } = await api(`/api/dashboard?month=${month}`, {}, true);
   if (!ok) return;
   renderDashStats(data, isCurrentMonth);
   renderDashTodayDetail(data.today_detail || [], isCurrentMonth);
   renderDashPending(data.pending);
   renderDashDailyChart(data.daily_attendance || [], data.month); // 不 await，背景補色
-  loadAnomalies();
   renderDashTodayPie(data.today_summary, isCurrentMonth);
   renderDashLeavePie(data.leave_distribution || []);
   renderDashOTBar(data.ot_ranking || []);
@@ -7438,6 +7447,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.style.display = '';
   }
 
+  // 提前預熱員工清單 cache，避免各模組首次開啟時再等待
+  _cachedAllStaff();
+
   // 導向第一個有權限的頁面
   const firstPage = ADMIN_IS_SUPER ? 'dash'
     : (ADMIN_PERMS.length ? ADMIN_PERMS[0] : 'dash');
@@ -10461,7 +10473,11 @@ function downloadEdi(type, eventType) {
    門市管理 (Store Management) functions
    ===================================================================== */
 async function loadStores() {
-  const r = await api('/api/stores');
+  // 並行發出兩個獨立請求，不互相等待
+  const [r, staffR] = await Promise.all([
+    api('/api/stores'),
+    api('/api/salary/staff', {}, true),
+  ]);
   const tbody = document.getElementById('stores-tbody');
   if (!r.ok) {
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">載入失敗，請重新整理</div></td></tr>';
@@ -10490,8 +10506,12 @@ async function loadStores() {
   if (storeSel)  storeSel.innerHTML  = opts;
   if (targetSel) targetSel.innerHTML = opts;
 
-  // Populate staff selector for assignment
-  await loadAllStaffForAssign();
+  // Populate staff selector from already-fetched result
+  const sel = document.getElementById('store-assign-staff');
+  if (sel && staffR.ok) {
+    sel.innerHTML = '<option value="">-- 選擇員工 --</option>' +
+      staffR.data.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+  }
 }
 
 function openStoreModal(store) {

@@ -4055,19 +4055,21 @@ async function initDash() {
   const badge = document.getElementById('ds-month-badge');
   if (badge) badge.style.display = isCurrentMonth ? 'none' : '';
 
+  // 與主 API 同步發出、互不依賴的次要圖表請求
+  renderLaborCostChart();
+  renderAttendanceHeatmap(month);
+  renderAnnualLeavePie();
+
   const { ok, data } = await api(`/api/dashboard?month=${month}`, {}, true);
   if (!ok) return;
   renderDashStats(data, isCurrentMonth);
   renderDashTodayDetail(data.today_detail || [], isCurrentMonth);
   renderDashPending(data.pending);
-  await renderDashDailyChart(data.daily_attendance || [], data.month);
+  renderDashDailyChart(data.daily_attendance || [], data.month); // 不 await，背景補色
   loadAnomalies();
   renderDashTodayPie(data.today_summary, isCurrentMonth);
   renderDashLeavePie(data.leave_distribution || []);
   renderDashOTBar(data.ot_ranking || []);
-  renderLaborCostChart();
-  renderAttendanceHeatmap(month);
-  renderAnnualLeavePie();
 }
 
 function resetDashMonth() {
@@ -4373,14 +4375,25 @@ function renderDashOTBar(ranking) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// 全域員工列表快取（Promise 型，並行請求只發一次 fetch）
+// ══════════════════════════════════════════════════════════════
+let _allStaffPromise = null;
+function _cachedAllStaff() {
+  if (!_allStaffPromise)
+    _allStaffPromise = api('/api/punch/staff', {}, true).then(r => r.ok ? r.data : []);
+  return _allStaffPromise;
+}
+function _invalidateStaffCache() { _allStaffPromise = null; }
+
+// ══════════════════════════════════════════════════════════════
 // 員工快速搜尋
 // ══════════════════════════════════════════════════════════════
 let _staffSearchCache = null;
 
 async function _getStaffList() {
   if (!_staffSearchCache) {
-    const { ok, data } = await api('/api/punch/staff', {}, true);
-    _staffSearchCache = ok ? data.filter(s => s.active) : [];
+    const data = await _cachedAllStaff();
+    _staffSearchCache = data.filter(s => s.active);
   }
   return _staffSearchCache;
 }
@@ -4678,8 +4691,7 @@ async function loadPunchSummary() {
 // ── 打卡記錄 ──────────────────────────────────────────────────
 async function loadPunchStaffOptions(selId='rec-filter-staff') {
   if (!punchStaffList.length) {
-    const { ok, data } = await api('/api/punch/staff', {}, true);
-    if (ok) punchStaffList = data;
+    punchStaffList = await _cachedAllStaff();
   }
   const sel = document.getElementById(selId);
   const cur = sel.value;
@@ -4756,8 +4768,7 @@ async function deletePunchRec(id) {
 // ── 補打卡 ────────────────────────────────────────────────────
 async function loadManualStaffOptions() {
   if (!punchStaffList.length) {
-    const { ok, data } = await api('/api/punch/staff', {}, true);
-    if (ok) punchStaffList = data;
+    punchStaffList = await _cachedAllStaff();
   }
   const sel = document.getElementById('man-staff');
   sel.innerHTML = punchStaffList.filter(s => s.active).map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
@@ -4893,6 +4904,7 @@ async function savePunchStaff() {
       punchStaffList.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
     }
   }
+  _invalidateStaffCache(); _staffSearchCache = null;
   closePunchStaffModal(); showToast(id ? '已更新' : '員工已新增', 'success'); renderPunchStaff();
 }
 async function deletePunchStaff(id) {
@@ -4900,6 +4912,7 @@ async function deletePunchStaff(id) {
   const { ok } = await api(`/api/punch/staff/${id}`, { method: 'DELETE' });
   if (!ok) return;
   punchStaffList = punchStaffList.filter(x => x.id !== id);
+  _invalidateStaffCache(); _staffSearchCache = null;
   showToast('已刪除', 'success'); renderPunchStaff();
 }
 
@@ -5928,8 +5941,7 @@ function switchLeaveTab(tab) {
 
 async function loadLeaveStaffOptions() {
   if (!leaveStaffList.length) {
-    const {ok,data} = await api('/api/punch/staff',{},true);
-    leaveStaffList = ok?data:[];
+    leaveStaffList = await _cachedAllStaff();
   }
   const sel = document.getElementById('leave-req-staff');
   const cur = sel.value;
@@ -6012,14 +6024,12 @@ function renderLeaveRequests() {
 }
 
 async function openLeaveAdminModal(id=null) {
-  if (!leaveTypesList.length) {
-    const {ok,data} = await api('/api/leave/types',{},true);
-    leaveTypesList = ok?data:[];
-  }
-  if (!leaveStaffList.length) {
-    const {ok,data} = await api('/api/punch/staff',{},true);
-    leaveStaffList = ok?data.filter(s=>s.active):[];
-  }
+  const [typesRes, staffList] = await Promise.all([
+    leaveTypesList.length ? null : api('/api/leave/types',{},true),
+    leaveStaffList.length ? null : _cachedAllStaff(),
+  ]);
+  if (typesRes) leaveTypesList = typesRes.ok ? typesRes.data : [];
+  if (staffList) leaveStaffList = staffList.filter(s=>s.active);
   document.getElementById('lam-staff').innerHTML = leaveStaffList.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
   document.getElementById('lam-type').innerHTML  = leaveTypesList.filter(t=>t.active).map(t=>`<option value="${t.id}">${escHtml(t.name)}</option>`).join('');
   document.getElementById('lam-lv-start').value = '';
@@ -7464,8 +7474,7 @@ async function initFinance() {
   document.getElementById('fin-dash-month').value  = m;
   document.getElementById('fin-rec-month').value   = m;
   document.getElementById('fin-stmt-month').value  = m;
-  await loadFinCats();
-  await loadFinSummary();
+  await Promise.all([loadFinCats(), loadFinSummary()]);
   switchFinTab('dash');
 }
 
@@ -9339,9 +9348,9 @@ async function _loadExpenseStaff() {
   }
   sel.innerHTML = '<option value="">載入中...</option>';
   try {
-    const { ok, data } = await api('/api/punch/staff', {}, false);
-    if (ok && Array.isArray(data) && data.length > 0) {
-      _expenseStaffCache = data.filter(s => s.active !== false);
+    const data = await _cachedAllStaff();
+    _expenseStaffCache = data.filter(s => s.active !== false);
+    if (_expenseStaffCache.length > 0) {
       _fillStaffSelect(_expenseStaffCache);
     } else {
       sel.innerHTML = '<option value="">— 選擇員工 —</option>';
@@ -9710,18 +9719,16 @@ function switchPerfTab(tab) {
 }
 
 async function initPerf() {
-  // Pre-populate staff filter dropdown
   const filterStaff = document.getElementById('perf-filter-staff');
-  if (filterStaff && filterStaff.options.length <= 1) {
-    const d = await api('/api/punch/staff');
-    if (d.ok) {
-      const list = Array.isArray(d.data) ? d.data : [];
-      filterStaff.innerHTML = '<option value="">全部員工</option>' +
-        list.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
-    }
+  const needsStaff = filterStaff && filterStaff.options.length <= 1;
+  const [staffList, cfgRes] = await Promise.all([
+    needsStaff ? _cachedAllStaff() : Promise.resolve(null),
+    api('/api/performance/config'),
+  ]);
+  if (needsStaff && staffList) {
+    filterStaff.innerHTML = '<option value="">全部員工</option>' +
+      staffList.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
   }
-  // 預先載入評級設定供評分計算使用
-  const cfgRes = await api('/api/performance/config');
   if (cfgRes.ok) _perfConfig = cfgRes.data;
   switchPerfTab('reviews');
 }
@@ -9759,36 +9766,28 @@ async function loadPerfReviews() {
 
 // ── 新增考核 ──────────────────────────────────────────────────
 async function initPerfNewForm() {
-  // 填充員工選單
-  const staffSel = document.getElementById('pf-staff');
-  if (staffSel && staffSel.options.length <= 1) {
-    const d = await api('/api/punch/staff');
-    if (d.ok) {
-      const list = Array.isArray(d.data) ? d.data : [];
-      staffSel.innerHTML = '<option value="">選擇員工</option>' +
-        list.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+  const staffSel   = document.getElementById('pf-staff');
+  const filterStaff = document.getElementById('perf-filter-staff');
+  const needsStaff  = (staffSel && staffSel.options.length <= 1) || (filterStaff && filterStaff.options.length <= 1);
+  const [staffList] = await Promise.all([
+    needsStaff ? _cachedAllStaff() : Promise.resolve(null),
+    (document.getElementById('pf-template')?.options.length <= 1 || !window._perfTemplates?.length)
+      ? _loadPerfTemplateOptions() : Promise.resolve(),
+  ]);
+  if (staffList) {
+    const opts = '<option value="">選擇員工</option>' +
+      staffList.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+    if (staffSel && staffSel.options.length <= 1)   staffSel.innerHTML = opts;
+    if (filterStaff && filterStaff.options.length <= 1) {
+      filterStaff.innerHTML = '<option value="">全部員工</option>' +
+        staffList.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
     }
-  }
-  // 填充範本選單（快取清空時強制重載）
-  const tmplSel = document.getElementById('pf-template');
-  if (tmplSel && (tmplSel.options.length <= 1 || _perfTemplates.length === 0)) {
-    await _loadPerfTemplateOptions();
   }
   // 預設本月
   const periodEl = document.getElementById('pf-period');
   if (periodEl && !periodEl.value) {
     const now = new Date();
     periodEl.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  }
-  // 也填充考核記錄頁面的員工篩選
-  const filterStaff = document.getElementById('perf-filter-staff');
-  if (filterStaff && filterStaff.options.length <= 1) {
-    const d2 = await api('/api/punch/staff');
-    if (d2.ok) {
-      const list2 = Array.isArray(d2.data) ? d2.data : [];
-      filterStaff.innerHTML = '<option value="">全部員工</option>' +
-        list2.filter(s=>s.active).map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
-    }
   }
 }
 
@@ -10597,7 +10596,7 @@ const TRAINING_CAT_LABELS = {
 };
 
 async function initTraining() {
-  await loadTrainingStaffFilter();
+  loadTrainingStaffFilter(); // 背景載入下拉，不阻擋 overview 渲染
   switchTrainingTab('overview');
 }
 
@@ -11310,7 +11309,7 @@ function switchQTab(tab) {
 }
 
 async function initQuotation() {
-  await loadQProducts();
+  loadQProducts(); // 背景載入，不阻擋報價列表
   switchQTab('list');
 }
 
@@ -11942,14 +11941,12 @@ async function initAdminWorklog() {
   const sel = document.getElementById('wla-staff');
   if (sel.options.length <= 1) {
     try {
-      const {ok, data} = await api('/api/punch/staff', {}, true);
-      if (ok && Array.isArray(data)) {
-        data.filter(s => s.active !== false).forEach(s => {
-          const o = document.createElement('option');
-          o.value = s.id; o.textContent = `${s.name}（${s.employee_code||''}）`;
-          sel.appendChild(o);
-        });
-      }
+      const data = await _cachedAllStaff();
+      data.filter(s => s.active !== false).forEach(s => {
+        const o = document.createElement('option');
+        o.value = s.id; o.textContent = `${s.name}（${s.employee_code||''}）`;
+        sel.appendChild(o);
+      });
     } catch(e) {}
   }
   const picker = document.getElementById('wla-month');

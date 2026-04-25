@@ -113,21 +113,54 @@
     </div>
   </div>
 
-  <form method="POST" id="login-form">
+  <form id="login-form">
     <label for="un">管理員帳號</label>
     <input type="text" id="un" name="username" placeholder="輸入帳號" autofocus autocomplete="username" autocapitalize="none">
     <label for="pw">密碼</label>
     <input type="password" id="pw" name="password" placeholder="輸入密碼" autocomplete="current-password">
-    {% if error %}
-    <div class="error-msg">{{ error }}</div>
-    {% endif %}
-    <button type="submit">登入</button>
+    <div class="error-msg" id="login-err" style="display:none">{% if error %}{{ error }}{% endif %}</div>
+    <button type="submit" id="login-btn">登入</button>
   </form>
   <div class="bio-msg" id="bio-msg"></div>
   <div class="footer-note">打卡 &amp; 排班管理系統</div>
 </div>
 
 <script>
+// ── AJAX 表單登入 ──────────────────────────────────���─────────────
+(function() {
+  // 若有伺服器端錯誤（表單 fallback），顯示錯誤訊息
+  const errEl = document.getElementById('login-err');
+  if (errEl && errEl.textContent.trim()) errEl.style.display = '';
+
+  document.getElementById('login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn  = document.getElementById('login-btn');
+    const user = document.getElementById('un').value.trim();
+    const pass = document.getElementById('pw').value;
+    errEl.style.display = 'none';
+    if (!user || !pass) { errEl.textContent = '請輸入帳號與密碼'; errEl.style.display = ''; return; }
+    btn.disabled = true; btn.textContent = '登入中...';
+    try {
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        errEl.textContent = d.error || '登入失敗'; errEl.style.display = '';
+        btn.disabled = false; btn.textContent = '登入';
+        return;
+      }
+      // 導向後台（若有快取，瀏覽器會傳 If-None-Match → 304 → 瞬間載入）
+      window.location.href = d.redirect || '/admin';
+    } catch(ex) {
+      errEl.textContent = '網路錯誤，請重試'; errEl.style.display = '';
+      btn.disabled = false; btn.textContent = '登入';
+    }
+  });
+})();
+
 // ── WebAuthn helpers ──────────────────────────────────────────────
 function b2b64url(buf){
   const b=new Uint8Array(buf);let s='';

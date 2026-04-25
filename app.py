@@ -16,7 +16,7 @@ from psycopg_pool import ConnectionPool
 from psycopg_pool.errors import PoolTimeout
 from flask import (
     Flask, request, jsonify, render_template,
-    session, redirect, url_for, abort
+    session, redirect, url_for, abort, make_response
 )
 from flask_compress import Compress
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -703,6 +703,27 @@ def api_admin_badges():
     _badges_cache[admin_id] = {'data': result, 'at': now}
     return jsonify(result)
 
+def _update_last_login(admin_id):
+    try:
+        with get_db() as conn:
+            conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (admin_id,))
+    except Exception:
+        pass
+
+def _set_admin_session(row):
+    perms = row['permissions']
+    if isinstance(perms, str):
+        try: perms = _json.loads(perms)
+        except (ValueError, TypeError): perms = []
+    session.permanent             = True
+    session['logged_in']          = True
+    session['admin_id']           = row['id']
+    session['admin_username']     = row['username']
+    session['admin_display_name'] = row['display_name'] or row['username']
+    session['admin_permissions']  = perms
+    session['admin_is_super']     = bool(row['is_super'])
+    threading.Thread(target=_update_last_login, args=(row['id'],), daemon=True).start()
+
 @app.route('/')
 def index():
     return redirect(url_for('admin_login'))
@@ -722,28 +743,36 @@ def admin_login():
                         "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
                         (username,)
                     ).fetchone()
-                    if row and row['password_hash'] == _hash_pw(password):
-                        perms = row['permissions']
-                        if isinstance(perms, str):
-                            try: perms = _json.loads(perms)
-                            except (ValueError, TypeError): perms = []
-                        session.permanent             = True
-                        session['logged_in']          = True
-                        session['admin_id']           = row['id']
-                        session['admin_username']     = row['username']
-                        session['admin_display_name'] = row['display_name'] or row['username']
-                        session['admin_permissions']  = perms
-                        session['admin_is_super']     = bool(row['is_super'])
-                        try:
-                            conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (row['id'],))
-                        except Exception:
-                            pass
-                        return redirect(url_for('admin_dashboard'))
+                if row and row['password_hash'] == _hash_pw(password):
+                    _set_admin_session(row)
+                    return redirect(url_for('admin_dashboard'))
                 error = '帳號或密碼錯誤'
             except Exception as e:
                 print(f"[ERROR] admin_login db error: {e}")
                 error = '系統錯誤，請稍後再試'
     return render_template('login.html', error=error)
+
+@app.route('/api/admin/login', methods=['POST'])
+def api_admin_login():
+    """AJAX admin login — returns JSON so the browser can navigate without a full page reload."""
+    b = request.get_json(force=True)
+    username = b.get('username', '').strip()
+    password = b.get('password', '').strip()
+    if not username or not password:
+        return jsonify({'error': '請輸入帳號與密碼'}), 400
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
+                (username,)
+            ).fetchone()
+        if not row or row['password_hash'] != _hash_pw(password):
+            return jsonify({'error': '帳號或密碼錯誤'}), 401
+        _set_admin_session(row)
+        return jsonify({'ok': True, 'redirect': '/admin'})
+    except Exception as e:
+        print(f"[ERROR] api_admin_login: {e}")
+        return jsonify({'error': '系統錯誤，請稍後再試'}), 500
 
 @app.route('/admin/logout')
 def admin_logout():
@@ -756,11 +785,25 @@ def admin_logout():
 def admin_dashboard():
     perms    = session.get('admin_permissions') or []
     is_super = bool(session.get('admin_is_super'))
-    return render_template('admin.html',
+    admin_id = session.get('admin_id', 0)
+    # ETag = template mtime + user identity，template 未改且權限未變時直接 304
+    template_path = os.path.join(app.template_folder or 'templates', 'admin.html')
+    try:
+        tmtime = int(os.path.getmtime(template_path))
+    except OSError:
+        tmtime = 0
+    etag_src = f"{tmtime}:{admin_id}:{sorted(perms)}:{is_super}"
+    etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:16] + '"'
+    if request.headers.get('If-None-Match') == etag:
+        return ('', 304)
+    resp = make_response(render_template('admin.html',
         admin_display_name=session.get('admin_display_name',''),
         admin_permissions=perms,
         admin_is_super=is_super,
-    )
+    ))
+    resp.headers['ETag']          = etag
+    resp.headers['Cache-Control'] = 'private, no-cache'
+    return resp
 
 # ── Admin Accounts API ────────────────────────────────────────────────────────
 
@@ -982,11 +1025,17 @@ def api_punch_login():
         staff = conn.execute(
             "SELECT * FROM punch_staff WHERE username=%s AND active=TRUE", (username,)
         ).fetchone()
-    if not staff or staff['password_hash'] != _hash_pw(password):
-        return jsonify({'error': '帳號或密碼錯誤'}), 401
+        if not staff or staff['password_hash'] != _hash_pw(password):
+            return jsonify({'error': '帳號或密碼錯誤'}), 401
+        today_log = _fetch_today_log(conn, staff['id'])
     session['punch_staff_id']   = staff['id']
     session['punch_staff_name'] = staff['name']
-    return jsonify({'id': staff['id'], 'name': staff['name'], 'role': staff['role']})
+    return jsonify({
+        'id':        staff['id'],
+        'name':      staff['name'],
+        'role':      staff['role'],
+        'today_log': today_log,
+    })
 
 @app.route('/api/punch/logout', methods=['POST'])
 def api_punch_logout():
@@ -1021,24 +1070,42 @@ def api_punch_settings_get():
         'locations': [loc_row(r) for r in locs]
     })
 
+def _fetch_today_log(conn, staff_id):
+    """Query today's punch records within an existing DB connection."""
+    now_tw = _dt.now(TW_TZ)
+    today_start    = _dt(now_tw.year, now_tw.month, now_tw.day, tzinfo=TW_TZ)
+    tomorrow_start = today_start + _td(days=1)
+    rows = conn.execute("""
+        SELECT pr.*, ps.name as staff_name
+        FROM punch_records pr JOIN punch_staff ps ON ps.id=pr.staff_id
+        WHERE pr.staff_id=%s
+          AND pr.punched_at >= %s AND pr.punched_at < %s
+        ORDER BY pr.punched_at ASC
+    """, (staff_id, today_start, tomorrow_start)).fetchall()
+    return [punch_record_row(r) for r in rows]
+
 @app.route('/api/punch/init', methods=['GET'])
 def api_punch_init():
-    """Combined init: returns me (if logged in) + gps settings in a single request."""
+    """Combined init: returns me (if logged in) + gps settings + today log in one request."""
     sid = session.get('punch_staff_id')
     with get_db() as conn:
         cfg  = _get_cfg_cached(conn)
         locs = _get_locs_cached(conn)
-        staff = None
+        staff     = None
+        today_log = []
         if sid:
             staff = conn.execute(
                 "SELECT id, name, role FROM punch_staff WHERE id=%s AND active=TRUE", (sid,)
             ).fetchone()
             if not staff:
                 session.pop('punch_staff_id', None)
+            else:
+                today_log = _fetch_today_log(conn, sid)
     return jsonify({
-        'me': dict(staff) if staff else None,
+        'me':          dict(staff) if staff else None,
         'gps_required': cfg['gps_required'] if cfg else False,
-        'locations': [loc_row(r) for r in locs],
+        'locations':   [loc_row(r) for r in locs],
+        'today_log':   today_log,
     })
 
 @app.route('/api/punch/config', methods=['PUT'])

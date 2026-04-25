@@ -547,6 +547,7 @@ const SLABEL={pending:'審核中',approved:'已核准',rejected:'已退回',modi
 const SCLS={pending:'sb-pending',approved:'sb-approved',rejected:'sb-rejected',modified_pending:'sb-modified'};
 
 let me=null,gpsSettings=null,gpsPos=null,gpsWatchId=null,punchLocked=false;
+let _preloadedTodayLog=null;
 let curSchedMonth=null,schedCfg=null,schedOffCounts={},schedSelectedDates=new Set(),schedExistingReq=null;
 
 function tick(){
@@ -561,7 +562,11 @@ setInterval(tick,1000);tick();
     const r=await fetch('/api/punch/init');
     const d=await r.json();
     gpsSettings={gps_required:d.gps_required,locations:d.locations||[]};
-    if(d.me){me=d.me;showMain();}
+    if(d.me){
+      me=d.me;
+      if(d.today_log)_preloadedTodayLog=d.today_log;
+      showMain();
+    }
     else showLogin();
   }catch(e){showLogin();}
 })();
@@ -582,7 +587,8 @@ async function doLogin(){
     const r=await fetch('/api/punch/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
     const d=await r.json();
     if(!r.ok){err.textContent=d.error||'登入失敗';return;}
-    me=d;document.getElementById('inp-pass').value='';showMain();loadAnnStaff();
+    me=d;if(d.today_log)_preloadedTodayLog=d.today_log;
+    document.getElementById('inp-pass').value='';showMain();loadAnnStaff();
   }catch(e){err.textContent='網路錯誤，請重試';}
   finally{btn.disabled=false;btn.textContent='登入';}
 }
@@ -689,7 +695,12 @@ async function doPunch(type){
   }catch(e){showToast('網路錯誤，請重試','err');punchLocked=false;}
 }
 async function loadTodayLog(){
-  const r=await fetch('/api/punch/today');const list=await r.json();
+  let list;
+  if(_preloadedTodayLog!==null){
+    list=_preloadedTodayLog;_preloadedTodayLog=null;
+  }else{
+    const r=await fetch('/api/punch/today');list=await r.json();
+  }
   const wrap=document.getElementById('today-log');
   document.getElementById('today-log-wrap').style.display='';
   if(!list.length){wrap.innerHTML='<div class="log-empty">尚無打卡記錄</div>';return;}

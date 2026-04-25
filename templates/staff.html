@@ -587,8 +587,7 @@ async function doLogin(){
     const r=await fetch('/api/punch/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
     const d=await r.json();
     if(!r.ok){err.textContent=d.error||'登入失敗';return;}
-    me=d;if(d.today_log)_preloadedTodayLog=d.today_log;
-    document.getElementById('inp-pass').value='';showMain();loadAnnStaff();
+    me=d;document.getElementById('inp-pass').value='';showMain();loadAnnStaff();
   }catch(e){err.textContent='網路錯誤，請重試';}
   finally{btn.disabled=false;btn.textContent='登入';}
 }

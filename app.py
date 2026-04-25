@@ -1049,17 +1049,11 @@ def api_punch_login():
         staff = conn.execute(
             "SELECT * FROM punch_staff WHERE username=%s AND active=TRUE", (username,)
         ).fetchone()
-        if not staff or staff['password_hash'] != _hash_pw(password):
-            return jsonify({'error': '帳號或密碼錯誤'}), 401
-        today_log = _fetch_today_log(conn, staff['id'])
+    if not staff or staff['password_hash'] != _hash_pw(password):
+        return jsonify({'error': '帳號或密碼錯誤'}), 401
     session['punch_staff_id']   = staff['id']
     session['punch_staff_name'] = staff['name']
-    return jsonify({
-        'id':        staff['id'],
-        'name':      staff['name'],
-        'role':      staff['role'],
-        'today_log': today_log,
-    })
+    return jsonify({'id': staff['id'], 'name': staff['name'], 'role': staff['role']})
 
 @app.route('/api/punch/logout', methods=['POST'])
 def api_punch_logout():

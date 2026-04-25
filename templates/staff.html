@@ -315,7 +315,7 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
             </select>
           </div>
           <div style="margin-bottom:14px"><div class="fl">加班原因 *</div><input class="fi" id="ot-reason" placeholder="例：客戶急件、備料作業" style="margin-bottom:0"></div>
-          <button class="btn btn-primary" style="width:100%" onclick="submitOTRequest()">送出加班申請</button>
+          <button class="btn btn-primary" style="width:100%" id="btn-submit-ot" onclick="submitOTRequest()">送出加班申請</button>
         </div>
         <div class="section-label" style="margin-bottom:10px">我的申請記錄</div>
         <div id="my-ot-list"><div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">載入中...</div></div>
@@ -373,7 +373,7 @@ html,body{min-height:100%;background:var(--navy);font-family:"Noto Sans TC",sans
             </label>
             <input type="file" id="leave-file-input" accept="image/*,application/pdf" style="display:none" onchange="leaveFileSelected(this)">
           </div>
-          <button class="btn btn-primary" style="width:100%" onclick="submitLeaveRequest()">送出請假申請</button>
+          <button class="btn btn-primary" style="width:100%" id="btn-submit-leave" onclick="submitLeaveRequest()">送出請假申請</button>
         </div>
 
         <!-- 我的請假記錄 -->
@@ -546,7 +546,7 @@ const PLCLS={in:'lb-in',out:'lb-out',break_out:'lb-bout',break_in:'lb-bin'};
 const SLABEL={pending:'審核中',approved:'已核准',rejected:'已退回',modified_pending:'修改待審'};
 const SCLS={pending:'sb-pending',approved:'sb-approved',rejected:'sb-rejected',modified_pending:'sb-modified'};
 
-let me=null,gpsSettings=null,gpsPos=null,gpsWatchId=null,punchLocked=false;
+let me=null,gpsSettings=null,gpsPos=null,gpsWatchId=null,punchLocked=false,companyName='';
 let _preloadedTodayLog=null;
 let curSchedMonth=null,schedCfg=null,schedOffCounts={},schedSelectedDates=new Set(),schedExistingReq=null;
 
@@ -562,6 +562,7 @@ setInterval(tick,1000);tick();
     const r=await fetch('/api/punch/init');
     const d=await r.json();
     gpsSettings={gps_required:d.gps_required,locations:d.locations||[]};
+    companyName=d.company_name||'';
     if(d.me){
       me=d.me;
       if(d.today_log)_preloadedTodayLog=d.today_log;
@@ -1139,6 +1140,8 @@ async function submitOTRequest(){
     showToast('時間格式錯誤，請重新選擇','err'); return;
   }
 
+  const btn = document.getElementById('btn-submit-ot');
+  if(btn){ btn.disabled=true; btn.textContent='送出中...'; }
   try{
     const res = await fetch('/api/overtime/my-requests', {
       method:'POST',
@@ -1152,6 +1155,8 @@ async function submitOTRequest(){
     await loadMyOTRequests();
   }catch(e){
     showToast('網路錯誤，請重試','err');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='送出加班申請'; }
   }
 }
 async function loadMyOTRequests(){
@@ -1850,6 +1855,8 @@ async function submitLeaveRequest() {
   if (!leave_type_id) { showToast('請選擇假別', 'err'); return; }
   if (!start_date || !end_date) { showToast('請選擇請假日期', 'err'); return; }
   if (!reason) { showToast('請填寫請假原因', 'err'); return; }
+  const btn = document.getElementById('btn-submit-leave');
+  if(btn){ btn.disabled=true; btn.textContent='送出中...'; }
   try {
     const res  = await fetch('/api/leave/my-requests', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1862,7 +1869,8 @@ async function submitLeaveRequest() {
     if (fileInput && fileInput.files[0]) {
       const fd = new FormData();
       fd.append('file', fileInput.files[0]);
-      await fetch(`/api/leave/my-requests/${data.id}/attachment`, { method: 'POST', body: fd });
+      const upRes = await fetch(`/api/leave/my-requests/${data.id}/attachment`, { method: 'POST', body: fd });
+      if (!upRes.ok) showToast('附件上傳失敗，申請已送出但無附件', 'err');
     }
     showToast('請假申請已送出，等待主管審核', 'ok');
     document.getElementById('leave-reason').value = '';
@@ -1871,6 +1879,7 @@ async function submitLeaveRequest() {
     await loadMyLeaveBalance();
     await loadMyLeaveHistory();
   } catch(e) { showToast('網路錯誤', 'err'); }
+  finally { if(btn){ btn.disabled=false; btn.textContent='送出請假申請'; } }
 }
 
 async function loadMyLeaveHistory() {
@@ -2051,7 +2060,7 @@ function renderPayslip(data, wrap) {
       <span>狀態：<strong style="color:${data.status==='confirmed'?'var(--green)':'var(--muted)'}">${data.status==='confirmed'?'✅ 已確認':'草稿（待確認）'}</strong></span>
       <div style="display:flex;gap:8px;align-items:center">
         ${data.confirmed_by ? `<span>確認人：${esc(data.confirmed_by)}</span>` : ''}
-        ${data.id ? `<button onclick="window.open('/api/salary/records/'+data.id+'/pdf','_blank')"
+        ${data.id ? `<button onclick="window.open('/api/salary/records/${data.id}/pdf','_blank')"
           style="padding:4px 12px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">列印 PDF</button>` : ''}
       </div>
     </div>
@@ -2207,7 +2216,7 @@ async function submitExpense() {
   }
   const expense_type = document.getElementById('exp-type')?.value || '支出';
   const body = { title: category, expense_date: date, category, amount, note, vendor,
-                 expense_type, company: '進光設計', document_id: _expDocumentId };
+                 expense_type, company: companyName, document_id: _expDocumentId };
   const res = await fetch('/api/expense/my-claims', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
   });
@@ -2245,7 +2254,7 @@ async function loadMyExpenses() {
       return;
     }
     list.innerHTML = claims.map(_renderExpenseItem).join('');
-    const pending = claims.filter(c => c.status === 'approved').length;
+    const pending = claims.filter(c => c.status === 'pending').length;
     const badge = document.getElementById('expense-badge');
     if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
     else badge.style.display = 'none';

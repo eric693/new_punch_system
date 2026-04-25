@@ -1119,11 +1119,21 @@ def api_punch_init():
                 session.pop('punch_staff_id', None)
             else:
                 today_log = _fetch_today_log(conn, sid)
+    company_name = ''
+    try:
+        with get_db() as conn2:
+            row = conn2.execute(
+                "SELECT setting_value FROM finance_settings WHERE setting_key='company_name'"
+            ).fetchone()
+            if row: company_name = row['setting_value'] or ''
+    except Exception:
+        pass
     return jsonify({
         'me':          dict(staff) if staff else None,
         'gps_required': cfg['gps_required'] if cfg else False,
         'locations':   [loc_row(r) for r in locs],
         'today_log':   today_log,
+        'company_name': company_name,
     })
 
 @app.route('/api/punch/config', methods=['PUT'])

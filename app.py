@@ -138,6 +138,10 @@ _SEMISTATIC_TTL = 60.0           # 60 秒
 _HOLIDAY_TTL    = 600.0          # 10 分鐘（國定假日幾乎不動）
 _ANN_TTL        = 30.0           # 30 秒（公告較常更新）
 
+# 待審 badge 計數快取（每位管理員各自一份）—— 8 秒 TTL
+_badges_cache:   dict = {}   # key: admin_id → {data, at}
+_BADGES_TTL = 8.0            # 8 秒（足夠吸收 setInterval+手動觸發的重複呼叫）
+
 
 def _get_cfg_cached(conn):
     now = time.time()
@@ -669,10 +673,15 @@ def require_super(f):
 @app.route('/api/admin/badges')
 @login_required
 def api_admin_badges():
-    perms    = session.get('admin_permissions') or []
-    is_super = session.get('admin_is_super', False)
+    perms     = session.get('admin_permissions') or []
+    is_super  = session.get('admin_is_super', False)
+    admin_id  = session.get('admin_id', 0)
     has_sched = is_super or 'sched' in perms
     has_leave = is_super or 'leave' in perms
+    now = time.time()
+    cached = _badges_cache.get(admin_id)
+    if cached and now - cached['at'] < _BADGES_TTL:
+        return jsonify(cached['data'])
     with get_db() as conn:
         row = conn.execute("""
             SELECT
@@ -683,14 +692,16 @@ def api_admin_badges():
                 (SELECT COUNT(*) FROM leave_requests    WHERE status='pending')          AS leave_cnt,
                 (SELECT COUNT(*) FROM expense_claims    WHERE status='pending')          AS expense_cnt
         """).fetchone()
-    return jsonify({
+    result = {
         'punch':          int(row['punch_cnt']),
         'overtime':       int(row['ot_cnt']),
         'sched_pending':  int(row['sched_pending_cnt'])  if has_sched else 0,
         'sched_modified': int(row['sched_modified_cnt']) if has_sched else 0,
         'leave':          int(row['leave_cnt'])          if has_leave else 0,
         'expense':        int(row['expense_cnt']),
-    })
+    }
+    _badges_cache[admin_id] = {'data': result, 'at': now}
+    return jsonify(result)
 
 @app.route('/')
 def index():
@@ -2989,6 +3000,7 @@ def api_sched_admin_review(rid):
                     reviewed_at=NULL, updated_at=NOW()
                 WHERE id=%s RETURNING *
             """, (review_note or '主管已撤銷核准', rid)).fetchone()
+        _badges_cache.clear()
         return jsonify(sched_req_row(row)) if row else ('', 404)
 
     new_status = 'approved' if action == 'approve' else 'rejected'
@@ -3004,6 +3016,7 @@ def api_sched_admin_review(rid):
         extra = f"{row['month']} 排休 {len(dates)} 天"
         if review_note: extra += f"\n審核意見：{review_note}"
         _notify_review_result(row['staff_id'], '排休申請', action, extra)
+    _badges_cache.clear()
     return jsonify(sched_req_row(row)) if row else ('', 404)
 
 
@@ -3853,6 +3866,7 @@ def api_ot_review(rid):
         extra += f"\n加班費：${float(row['ot_pay']):,.0f}"
     if review_note: extra += f"\n審核意見：{review_note}"
     _notify_review_result(req['staff_id'], '加班申請', action, extra)
+    _badges_cache.clear()
     return jsonify(result)
 
 
@@ -4406,6 +4420,7 @@ def api_leave_request_review(rid):
         extra = f"{str(old['start_date'])} ~ {str(old['end_date'])} 共 {float(old['total_days'])} 天"
         if review_note: extra += f"\n審核意見：{review_note}"
         _notify_review_result(old['staff_id'], '請假申請', action, extra)
+    _badges_cache.clear()
     return jsonify(leave_req_row(row)) if row else ('', 404)
 
 @app.route('/api/leave/requests/<int:rid>', methods=['DELETE'])
@@ -6956,6 +6971,7 @@ def api_punch_req_review_v2(rid):
     extra  = f"{LABEL.get(row['punch_type'],'')} {dt_str}"
     if review_note: extra += f"\n審核意見：{review_note}"
     _notify_review_result(row['staff_id'], '補打卡申請', action, extra)
+    _badges_cache.clear()
     return jsonify(punch_req_row(row))
 
 
@@ -8200,6 +8216,7 @@ def api_leave_batch():
                                           str(old['start_date'])[:4], float(old['total_days']))
                 _notify_review_result(old['staff_id'], '請假申請', action, '')
                 done += 1
+    _badges_cache.clear()
     return jsonify({'ok': True, 'done': done})
 
 
@@ -10741,6 +10758,7 @@ def api_expense_review(cid):
         if staff:
             d['staff_name']    = staff['name']
             d['employee_code'] = staff['employee_code'] or ''
+        _badges_cache.clear()
         return jsonify(d)
     return ('', 404)
 

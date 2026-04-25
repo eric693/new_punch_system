@@ -453,12 +453,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="punch-panel-records" style="display:none">
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">員工</span>
-        <select class="filter-input" id="rec-filter-staff" onchange="loadPunchRecords()" style="min-width:120px"><option value="">全部</option></select>
+        <select class="filter-input" id="rec-filter-staff" onchange="debouncedPunchRecords()" style="min-width:120px"><option value="">全部</option></select>
         <div class="filter-divider"></div>
         <span class="filter-label">日期</span>
-        <input class="filter-input" type="date" id="rec-filter-from" onchange="loadPunchRecords()">
+        <input class="filter-input" type="date" id="rec-filter-from" onchange="debouncedPunchRecords()">
         <span class="filter-sep">—</span>
-        <input class="filter-input" type="date" id="rec-filter-to" onchange="loadPunchRecords()">
+        <input class="filter-input" type="date" id="rec-filter-to" onchange="debouncedPunchRecords()">
         <div class="filter-divider"></div>
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="rec-filter-month" onchange="recMonthChange()">
@@ -813,10 +813,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="sched-panel-requests" style="display:none">
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
-        <input class="filter-input" type="month" id="sched-req-month" onchange="loadSchedRequests()">
+        <input class="filter-input" type="month" id="sched-req-month" onchange="debouncedSchedRequests()">
         <div class="filter-divider"></div>
         <span class="filter-label">狀態</span>
-        <select class="filter-input" id="sched-req-status" onchange="loadSchedRequests()" style="min-width:120px">
+        <select class="filter-input" id="sched-req-status" onchange="debouncedSchedRequests()" style="min-width:120px">
           <option value="">全部</option><option value="pending">審核中</option>
           <option value="approved">已核准</option><option value="rejected">已退回</option>
           <option value="modified_pending">修改待審</option>
@@ -921,16 +921,16 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="leave-panel-requests">
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
-        <input class="filter-input" type="month" id="leave-req-month" onchange="loadLeaveRequests()">
+        <input class="filter-input" type="month" id="leave-req-month" onchange="debouncedLeaveRequests()">
         <div class="filter-divider"></div>
         <span class="filter-label">狀態</span>
-        <select class="filter-input" id="leave-req-status" onchange="loadLeaveRequests()" style="min-width:110px">
+        <select class="filter-input" id="leave-req-status" onchange="debouncedLeaveRequests()" style="min-width:110px">
           <option value="pending">待審核</option><option value="">全部</option>
           <option value="approved">已核准</option><option value="rejected">已退回</option>
         </select>
         <div class="filter-divider"></div>
         <span class="filter-label">員工</span>
-        <select class="filter-input" id="leave-req-staff" onchange="loadLeaveRequests()" style="min-width:120px">
+        <select class="filter-input" id="leave-req-staff" onchange="debouncedLeaveRequests()" style="min-width:120px">
           <option value="">全部</option>
         </select>
         <span style="flex:1"></span>
@@ -3786,7 +3786,7 @@ async function batchReview(category, action) {
   if (category === 'ot')     loadOTRequests();
   if (category === 'sched')  loadSchedRequests();
   if (category === 'leave')  loadLeaveRequests();
-  setTimeout(refreshBadges, 500);
+  debouncedRefreshBadges();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4572,7 +4572,7 @@ function showPage(page, e) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const navEl = document.getElementById('nav-' + page);
   if (navEl) navEl.classList.add('active');
-  setTimeout(refreshBadges, 600);
+  debouncedRefreshBadges();
   ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','worklog','perf','stores','training','quotation'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
@@ -5555,7 +5555,7 @@ async function revokeSchedRequest(id) {
   const note = prompt('請輸入撤銷原因（選填）：',''); if (note === null) return;
   const { ok } = await api(`/api/schedule/admin/requests/${id}`, apiPUT({ action: 'revoke', reviewed_by: '', review_note: note }));
   if (!ok) return;
-  showToast('已撤銷核准', 'success'); await loadSchedRequests(); setTimeout(refreshBadges, 500);
+  showToast('已撤銷核准', 'success'); await loadSchedRequests(); debouncedRefreshBadges();
 }
 async function deleteSchedRequest(id) {
   if (!confirm('確定刪除此申請記錄？')) return;
@@ -7464,6 +7464,12 @@ async function toggleAnnPin(id) {
   await loadAnnList();
 }
 
+// ── Debounce utility ──────────────────────────────────────────
+function _debounce(fn, ms) {
+  let t = null;
+  return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+}
+
 // ── Badges ────────────────────────────────────────────────────
 async function refreshBadges() {
   const res = await api('/api/admin/badges', {}, true);
@@ -7499,6 +7505,11 @@ function setTabDot(id, count) {
   if (count > 0) { el.textContent = count > 99 ? '99+' : count; el.style.display = 'inline-flex'; }
   else el.style.display = 'none';
 }
+
+const debouncedRefreshBadges  = _debounce(refreshBadges, 800);
+const debouncedPunchRecords   = _debounce(() => loadPunchRecords(),   300);
+const debouncedLeaveRequests  = _debounce(() => loadLeaveRequests(),  300);
+const debouncedSchedRequests  = _debounce(() => loadSchedRequests(),  300);
 
 document.addEventListener('DOMContentLoaded', () => {
   refreshBadges(); setInterval(refreshBadges, 30000);

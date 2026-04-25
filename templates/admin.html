@@ -7547,10 +7547,10 @@ document.addEventListener('DOMContentLoaded', () => {
     : (ADMIN_PERMS.length ? ADMIN_PERMS[0] : 'dash');
   showPage(firstPage, null);
 
-  // 登入後在背景預載所有有權限的模組
-  // 讓使用者切換到任何頁面時資料都已經就緒，不需要等待
-  setTimeout(() => {
-    [
+  // 登入後在背景預載所有有權限的模組（分批執行，避免同時打爆 DB connection pool）
+  // 每批 2 個模組、批次間隔 600ms，最多同時 2 條背景 DB 連線
+  {
+    const _prefetchList = [
       ['punch',    () => initPunch()],
       ['sched',    () => initSched()],
       ['leave',    () => initLeave()],
@@ -7563,13 +7563,15 @@ document.addEventListener('DOMContentLoaded', () => {
       ['worklog',  () => initAdminWorklog()],
       ['perf',     () => initPerf()],
       ['training', () => initTraining()],
-    ].forEach(([mod, fn]) => {
-      if (mod !== firstPage && hasModule(mod) && !_initedModules.has(mod)) {
-        _initedModules.add(mod);
-        fn();
-      }
+    ].filter(([mod]) => mod !== firstPage && hasModule(mod) && !_initedModules.has(mod));
+
+    const BATCH = 2, GAP = 600;   // 每批 2 個，間隔 600ms
+    _prefetchList.forEach(([mod, fn], i) => {
+      setTimeout(() => {
+        if (!_initedModules.has(mod)) { _initedModules.add(mod); fn(); }
+      }, 800 + Math.floor(i / BATCH) * GAP);
     });
-  }, 100);
+  }
 })();
 
 // ══════════════════════════════════════════════════════════════

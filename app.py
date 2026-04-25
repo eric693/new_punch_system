@@ -84,7 +84,7 @@ def _init_db_pool():
 def get_db():
     if _db_pool is not None:
         try:
-            with _db_pool.connection(timeout=5.0) as conn:
+            with _db_pool.connection(timeout=10.0) as conn:
                 yield conn
             return
         except (psycopg.OperationalError, PoolTimeout) as exc:

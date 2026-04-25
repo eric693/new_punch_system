@@ -4581,14 +4581,8 @@ function showPage(page, e) {
   // 儀表板每次刷新；expense-review 每次進入都更新
   if (page === 'dash')           { initDash(); return; }
   if (page === 'expense-review') { loadExpenseReview(); return; }
-  // 已初始化且內容正常（不是卡在「載入中...」）→ 直接顯示，不重新 fetch
-  if (_initedModules.has(page)) {
-    const pageEl = document.getElementById('page-' + page);
-    const stuck  = pageEl && pageEl.querySelector('.empty-state-text');
-    if (!stuck || stuck.textContent.trim() !== '載入中...') return;
-    // 還卡在載入中 → 移除快取，重試
-    _initedModules.delete(page);
-  }
+  // 已初始化且內容正常 → 直接顯示，不重新 fetch
+  if (_initedModules.has(page)) return;
   _initedModules.add(page);
   if (page === 'punch')      initPunch();
   if (page === 'sched')      initSched();
@@ -7552,6 +7546,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const firstPage = ADMIN_IS_SUPER ? 'dash'
     : (ADMIN_PERMS.length ? ADMIN_PERMS[0] : 'dash');
   showPage(firstPage, null);
+
+  // 登入後在背景預載所有有權限的模組
+  // 讓使用者切換到任何頁面時資料都已經就緒，不需要等待
+  setTimeout(() => {
+    [
+      ['punch',    () => initPunch()],
+      ['sched',    () => initSched()],
+      ['leave',    () => initLeave()],
+      ['salary',   () => initSalary()],
+      ['finance',  () => initFinance()],
+      ['stores',   () => loadStores()],
+      ['quotation',() => initQuotation()],
+      ['ann',      () => initAnn()],
+      ['holiday',  () => initHoliday()],
+      ['worklog',  () => initAdminWorklog()],
+      ['perf',     () => initPerf()],
+      ['training', () => initTraining()],
+    ].forEach(([mod, fn]) => {
+      if (mod !== firstPage && hasModule(mod) && !_initedModules.has(mod)) {
+        _initedModules.add(mod);
+        fn();
+      }
+    });
+  }, 600);
 })();
 
 // ══════════════════════════════════════════════════════════════

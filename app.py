@@ -142,6 +142,17 @@ _ANN_TTL        = 30.0           # 30 秒（公告較常更新）
 _badges_cache:   dict = {}   # key: admin_id → {data, at}
 _BADGES_TTL = 8.0            # 8 秒（足夠吸收 setInterval+手動觸發的重複呼叫）
 
+# 重量級查詢快取 —— 避免每次切頁都重跑複雜 GROUP BY
+_dashboard_cache:    dict = {}   # key: "month" → {data, at}
+_punch_summary_cache: dict = {}  # key: "month" → {data, at}
+_anomalies_cache:    dict = {'data': None, 'at': 0.0}
+_labor_cost_cache:   dict = {'data': None, 'at': 0.0}
+_heatmap_cache:      dict = {}   # key: "month" → {data, at}
+_DASHBOARD_TTL  = 60.0   # 60 秒
+_SUMMARY_TTL    = 60.0   # 60 秒
+_ANOMALIES_TTL  = 120.0  # 2 分鐘（7天異常掃描，變化不頻繁）
+_LABOR_TTL      = 120.0  # 2 分鐘
+
 
 def _get_cfg_cached(conn):
     now = time.time()
@@ -1510,6 +1521,10 @@ def api_punch_record_delete(rid):
 @login_required
 def api_punch_summary():
     month = request.args.get('month') or _dt.now(TW_TZ).strftime('%Y-%m')
+    _ps_now = _time.time()
+    _ps_c = _punch_summary_cache.get(month)
+    if _ps_c and _ps_now - _ps_c['at'] < _SUMMARY_TTL:
+        return jsonify(_ps_c['data'])
     from datetime import date as _date2, timedelta as _td2, datetime as _dt2
     import calendar as _cal2
     _y2, _m2 = int(month[:4]), int(month[5:])
@@ -1573,6 +1588,7 @@ def api_punch_summary():
         result.append(d)
 
     result.sort(key=lambda x: (x['work_date'], x['staff_name']), reverse=True)
+    _punch_summary_cache[month] = {'data': result, 'at': _ps_now}
     return jsonify(result)
 
 @app.route('/api/attendance/monthly-stats', methods=['GET'])
@@ -7062,11 +7078,17 @@ def api_dashboard():
             import calendar as _cal_d
             last_day = _cal_d.monthrange(y, m)[1]
             from datetime import date as _dcheck
-            # 如果查詢的是未來月份，today 仍用實際今天
         except Exception:
             month = today.strftime('%Y-%m')
     else:
         month = today.strftime('%Y-%m')
+
+    # 快取 key 包含今天日期，確保今日出勤資料每天刷新
+    _cache_key = f"{month}:{today.isoformat()}"
+    now = time.time()
+    cached = _dashboard_cache.get(_cache_key)
+    if cached and now - cached['at'] < _DASHBOARD_TTL:
+        return jsonify(cached['data'])
 
     # Pre-compute today's UTC timestamp range for index-friendly queries
     from datetime import datetime as _ddt2
@@ -7208,11 +7230,10 @@ def api_dashboard():
 
     from datetime import date as _ddc
     cur_month = _ddc.today().strftime('%Y-%m')
-    return jsonify({
+    result = {
         'month':            month,
         'today':            str(today),
         'is_current_month': month == cur_month,
-        # 今日出勤
         'today_summary': {
             'total':       total_staff,
             'working':     clocked_in - clocked_out,
@@ -7222,7 +7243,6 @@ def api_dashboard():
             'absent':      total_staff - clocked_in - on_leave_today,
         },
         'today_detail': today_detail,
-        # 待審申請
         'pending': {
             'punch':  pending_punch,
             'ot':     pending_ot,
@@ -7230,7 +7250,6 @@ def api_dashboard():
             'leave':  pending_leave,
             'total':  pending_punch + pending_ot + pending_sched + pending_leave,
         },
-        # 本月薪資
         'salary_summary': {
             'total_count':     sal_rows['total_count'],
             'confirmed_count': sal_rows['confirmed_count'],
@@ -7238,11 +7257,12 @@ def api_dashboard():
             'total_allow':     float(sal_rows['total_allow']),
             'total_deduct':    float(sal_rows['total_deduct']),
         },
-        # 圖表資料
         'daily_attendance':    daily_attendance,
         'leave_distribution':  leave_distribution,
         'ot_ranking':          ot_ranking,
-    })
+    }
+    _dashboard_cache[_cache_key] = {'data': result, 'at': now}
+    return jsonify(result)
 
 
 # ── Dashboard 擴充 API ────────────────────────────────────────────────────────
@@ -7251,6 +7271,9 @@ def api_dashboard():
 @login_required
 def api_dashboard_labor_cost():
     """近 12 個月人事費用趨勢"""
+    now = _time.time()
+    if _labor_cost_cache.get('data') is not None and now - _labor_cost_cache['at'] < _LABOR_TTL:
+        return jsonify(_labor_cost_cache['data'])
     from datetime import date as _dlc
     today = _dlc.today()
     months = []
@@ -7267,10 +7290,13 @@ def api_dashboard_labor_cost():
             GROUP BY month
         """, (months,)).fetchall()
     cost_map = {r['month']: float(r['total']) for r in rows}
-    return jsonify({
+    result = {
         'months':     months,
         'labor_cost': [cost_map.get(m, 0) for m in months],
-    })
+    }
+    _labor_cost_cache['data'] = result
+    _labor_cost_cache['at']   = now
+    return jsonify(result)
 
 
 @app.route('/api/dashboard/attendance-heatmap', methods=['GET'])
@@ -7280,6 +7306,10 @@ def api_dashboard_attendance_heatmap():
     from datetime import date as _dah
     import calendar as _calh
     month = request.args.get('month', '') or _dah.today().strftime('%Y-%m')
+    now = _time.time()
+    _hc = _heatmap_cache.get(month)
+    if _hc and now - _hc['at'] < _DASHBOARD_TTL:
+        return jsonify(_hc['data'])
     y, mo = int(month[:4]), int(month[5:7])
     days_in = _calh.monthrange(y, mo)[1]
 
@@ -7332,7 +7362,9 @@ def api_dashboard_attendance_heatmap():
             'on_leave': leave_map.get(ds, 0),
         })
 
-    return jsonify({'month': month, 'total_staff': total_staff, 'days': days})
+    result = {'month': month, 'total_staff': total_staff, 'days': days}
+    _heatmap_cache[month] = {'data': result, 'at': now}
+    return jsonify(result)
 
 
 @app.route('/api/dashboard/leave-distribution', methods=['GET'])
@@ -8300,6 +8332,9 @@ def api_attendance_anomalies():
     - 只有下班無上班
     - 遲到（上班時間晚於班別開始時間）
     """
+    _an_now = _time.time()
+    if _anomalies_cache.get('data') is not None and _an_now - _anomalies_cache['at'] < _ANOMALIES_TTL:
+        return jsonify(_anomalies_cache['data'])
     from datetime import date as _da, datetime as _dta, timezone as _tz, timedelta as _td
     TW    = _tz(_td(hours=8))
     today = _dta.now(TW).date()
@@ -8445,7 +8480,10 @@ def api_attendance_anomalies():
     # Sort: error > warning > info, then by date desc
     sev_order = {'error': 0, 'warning': 1, 'info': 2}
     anomalies.sort(key=lambda x: (sev_order.get(x['severity'], 9), x['date']))
-    return jsonify({'anomalies': anomalies, 'count': len(anomalies), 'checked_from': str(date_from)})
+    result = {'anomalies': anomalies, 'count': len(anomalies), 'checked_from': str(date_from)}
+    _anomalies_cache['data'] = result
+    _anomalies_cache['at']   = _an_now
+    return jsonify(result)
 
 
 # ═══════════════════════════════════════════════════════════════════

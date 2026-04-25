@@ -2,7 +2,7 @@ import os
 
 workers     = 2          # 2 個進程，各自有 gthread 線程池
 worker_class = 'gthread'
-threads     = 2          # 每個 worker 2 條線程 = 共 4 個並發槽
+threads     = 6          # 每個 worker 6 條線程 = 共 12 個並發槽（I/O-bound 效果好）
 timeout     = 60
 keepalive   = 5
 

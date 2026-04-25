@@ -12689,6 +12689,12 @@ def init_quotation_db():
             payment_status TEXT DEFAULT '',
             note           TEXT DEFAULT ''
         )""",
+        # 確保欄位存在（建表後立即補齊，避免 init_db migrations 先跑時表尚未存在而被跳過）
+        "ALTER TABLE quotation_settings ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotation_products ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS deposit_rate NUMERIC DEFAULT 100",
+        "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS show_wedding_content BOOLEAN DEFAULT TRUE",
     ]
     for sql in migrations:
         try:

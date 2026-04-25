@@ -693,24 +693,23 @@ def admin_login():
                         "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
                         (username,)
                     ).fetchone()
-                if row and row['password_hash'] == _hash_pw(password):
-                    perms = row['permissions']
-                    if isinstance(perms, str):
-                        try: perms = _json.loads(perms)
-                        except (ValueError, TypeError): perms = []
-                    session.permanent             = True
-                    session['logged_in']          = True
-                    session['admin_id']           = row['id']
-                    session['admin_username']     = row['username']
-                    session['admin_display_name'] = row['display_name'] or row['username']
-                    session['admin_permissions']  = perms
-                    session['admin_is_super']     = bool(row['is_super'])
-                    try:
-                        with get_db() as conn:
+                    if row and row['password_hash'] == _hash_pw(password):
+                        perms = row['permissions']
+                        if isinstance(perms, str):
+                            try: perms = _json.loads(perms)
+                            except (ValueError, TypeError): perms = []
+                        session.permanent             = True
+                        session['logged_in']          = True
+                        session['admin_id']           = row['id']
+                        session['admin_username']     = row['username']
+                        session['admin_display_name'] = row['display_name'] or row['username']
+                        session['admin_permissions']  = perms
+                        session['admin_is_super']     = bool(row['is_super'])
+                        try:
                             conn.execute("UPDATE admin_accounts SET last_login_at=NOW() WHERE id=%s", (row['id'],))
-                    except Exception:
-                        pass
-                    return redirect(url_for('admin_dashboard'))
+                        except Exception:
+                            pass
+                        return redirect(url_for('admin_dashboard'))
                 error = '帳號或密碼錯誤'
             except Exception as e:
                 print(f"[ERROR] admin_login db error: {e}")

@@ -675,13 +675,14 @@ function renderLogItem(r){
 }
 async function doPunch(type){
   if(punchLocked)return;
-  punchLocked=true;setTimeout(()=>punchLocked=false,2000);
+  punchLocked=true;
+  setBtns(true);
   const body={punch_type:type};
   if(gpsPos){body.lat=gpsPos.lat;body.lng=gpsPos.lng;}
   try{
     const r=await fetch('/api/punch/clock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    if(!r.ok){showToast(d.error||'打卡失敗','err');punchLocked=false;return;}
+    if(!r.ok){showToast(d.error||'打卡失敗','err');return;}
     const n=new Date();
     const ts=[n.getHours(),n.getMinutes()].map(x=>String(x).padStart(2,'0')).join(':');
     showSuccess(me.name,PLABEL[type],ts,d.gps_distance!=null?'距離打卡地點 '+d.gps_distance+' 公尺':'');
@@ -691,7 +692,8 @@ async function doPunch(type){
     if(wrap.querySelector('.log-empty'))wrap.innerHTML='';
     wrap.insertAdjacentHTML('beforeend',renderLogItem(d));
     loadTodayLog(); // 背景刷新確保完整性，不 await
-  }catch(e){showToast('網路錯誤，請重試','err');punchLocked=false;}
+  }catch(e){showToast('網路錯誤，請重試','err');}
+  finally{punchLocked=false;setBtns(false);}
 }
 async function loadTodayLog(){
   let list;

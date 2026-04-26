@@ -4646,6 +4646,7 @@ function showPage(page, e) {
   // 儀表板每次刷新；expense-review 每次進入都更新
   if (page === 'dash')           { initDash(); return; }
   if (page === 'expense-review') { loadExpenseReview(); return; }
+  if (page === 'worklog')        { initAdminWorklog(); return; }
   // 已初始化且內容正常 → 直接顯示，不重新 fetch
   if (_initedModules.has(page)) return;
   _initedModules.add(page);
@@ -4657,7 +4658,6 @@ function showPage(page, e) {
   if (page === 'holiday')    initHoliday();
   if (page === 'finance')    initFinance();
   if (page === 'adminmgr')   loadAdminAccounts();
-  if (page === 'worklog')    initAdminWorklog();
   if (page === 'perf')       initPerf();
   if (page === 'stores')     loadStores();
   if (page === 'training')   initTraining();
@@ -9817,8 +9817,12 @@ async function loadExpenseReview() {
   if (ym)     params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, true);
+  if (!ok) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」</div></td></tr>';
+    return;
+  }
   const claims = Array.isArray(data) ? data : [];
-  if (!ok || !claims.length) {
+  if (!claims.length) {
     tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無資料</div></td></tr>';
     setBadge('badge-expense-review', 0);
     return;
@@ -12266,7 +12270,7 @@ async function loadAdminWorklog() {
   cal.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">載入中...</div>';
   const qs = '?month=' + month + (staffId ? '&staff_id=' + staffId : '') + '&_=' + Date.now();
   const {ok, data} = await api('/api/admin/work-logs' + qs, {}, true);
-  if (!ok) { cal.innerHTML = '<div style="color:var(--red);font-size:13px;padding:20px">載入失敗</div>'; return; }
+  if (!ok) { cal.innerHTML = '<div style="color:var(--red);font-size:13px;padding:20px">載入失敗，請點「重新整理」</div>'; return; }
   _wlaLogs = Array.isArray(data) ? data : [];
   renderAdminWlCalendar(month);
 }

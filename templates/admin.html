@@ -10922,7 +10922,7 @@ function switchTrainingTab(tab) {
 async function loadTrainingStaffFilter() {
   const sel = document.getElementById('training-filter-staff');
   if (!sel) return;
-  const r = await api('/api/salary/staff');
+  const r = await api('/api/punch/staff', {}, true);
   if (r.ok) {
     sel.innerHTML = '<option value="">全部員工</option>' +
       r.data.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');

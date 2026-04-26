@@ -1566,9 +1566,12 @@ async function loadAnnualLeaveCard() {
   if (!card) return;
   try {
     const res = await fetch('/api/leave/annual-schedule/public');
-    if (!res.ok) { card.innerHTML = ''; return; }
+    if (!res.ok) { card.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">特休排程載入失敗，請重新整理</div>'; return; }
     const data = await res.json();
-    if (!data.hire_date) { card.innerHTML = ''; return; }
+    if (!data.hire_date) {
+      card.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">尚未設定到職日，請聯絡管理員設定</div>';
+      return;
+    }
     const schedule   = data.schedule || [];
     const currentDays= data.current_days || 0;
 
@@ -1651,7 +1654,7 @@ async function loadAnnualLeaveCard() {
       </div>
     </div>`;
   } catch(e) {
-    document.getElementById('annual-leave-card').innerHTML = '';
+    document.getElementById('annual-leave-card').innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">特休排程載入失敗，請重新整理</div>';
   }
 }
 

@@ -520,6 +520,36 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_punch_records_tw_month ON punch_records(to_char(punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM'))",
         "CREATE INDEX IF NOT EXISTS idx_punch_staff_username ON punch_staff(username)",
         "CREATE INDEX IF NOT EXISTS idx_punch_staff_line_user ON punch_staff(line_user_id) WHERE line_user_id IS NOT NULL",
+        # ── 公告管理 ─────────────────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS announcements (
+            id          SERIAL PRIMARY KEY,
+            title       TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            category    TEXT DEFAULT 'general',
+            priority    TEXT DEFAULT 'normal',
+            is_pinned   BOOLEAN DEFAULT FALSE,
+            visible_to  TEXT DEFAULT 'all',
+            published_at TIMESTAMPTZ DEFAULT NOW(),
+            expires_at  TIMESTAMPTZ,
+            author      TEXT DEFAULT '管理員',
+            active      BOOLEAN DEFAULT TRUE,
+            view_count  INT DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        # ── 教育訓練 ─────────────────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS training_records (
+            id              SERIAL PRIMARY KEY,
+            staff_id        INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            course_name     TEXT NOT NULL,
+            category        TEXT NOT NULL DEFAULT 'general',
+            completed_date  DATE,
+            expiry_date     DATE,
+            certificate_no  TEXT DEFAULT '',
+            note            TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
     ]
     for sql in migrations:
         try:
@@ -9432,7 +9462,7 @@ def api_training_list():
         sql += " AND tr.category = %s"; params.append(category)
     if expiring:
         days = int(expiring)
-        sql += " AND tr.expiry_date IS NOT NULL AND tr.expiry_date <= CURRENT_DATE + INTERVAL '%s days' AND tr.expiry_date >= CURRENT_DATE"
+        sql += " AND tr.expiry_date IS NOT NULL AND tr.expiry_date <= CURRENT_DATE + (%s * INTERVAL '1 day') AND tr.expiry_date >= CURRENT_DATE"
         params.append(days)
     if expired == '1':
         sql += " AND tr.expiry_date IS NOT NULL AND tr.expiry_date < CURRENT_DATE"

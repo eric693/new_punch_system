@@ -166,6 +166,34 @@ _SUMMARY_TTL    = 60.0   # 60 秒
 _ANOMALIES_TTL  = 120.0  # 2 分鐘（7天異常掃描，變化不頻繁）
 _LABOR_TTL      = 120.0  # 2 分鐘
 
+# 管理員帳號快取 —— 登入時免 DB 查詢（帳號異動時立即清除）
+_admin_acct_cache: dict = {'by_username': None, 'by_id': None, 'at': 0.0}
+_ADMIN_ACCT_TTL = 30.0   # 30 秒
+
+def _invalidate_admin_cache():
+    _admin_acct_cache['by_username'] = None
+    _admin_acct_cache['by_id'] = None
+
+def _ensure_admin_cache():
+    now = time.time()
+    c = _admin_acct_cache
+    if c['by_username'] is not None and now - c['at'] < _ADMIN_ACCT_TTL:
+        return
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM admin_accounts WHERE active=TRUE").fetchall()
+    dicts = [dict(r) for r in rows]
+    c['by_username'] = {r['username']: r for r in dicts}
+    c['by_id']       = {r['id']:       r for r in dicts}
+    c['at'] = now
+
+def _get_admin_by_username(username: str):
+    _ensure_admin_cache()
+    return _admin_acct_cache['by_username'].get(username)
+
+def _get_admin_by_id(admin_id: int):
+    _ensure_admin_cache()
+    return _admin_acct_cache['by_id'].get(admin_id)
+
 
 def _get_cfg_cached(conn):
     now = time.time()
@@ -762,11 +790,7 @@ def admin_login():
             error = '請輸入帳號與密碼'
         else:
             try:
-                with get_db() as conn:
-                    row = conn.execute(
-                        "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
-                        (username,)
-                    ).fetchone()
+                row = _get_admin_by_username(username)
                 if row and row['password_hash'] == _hash_pw(password):
                     _set_admin_session(row)
                     return redirect(url_for('admin_dashboard'))
@@ -785,11 +809,7 @@ def api_admin_login():
     if not username or not password:
         return jsonify({'error': '請輸入帳號與密碼'}), 400
     try:
-        with get_db() as conn:
-            row = conn.execute(
-                "SELECT * FROM admin_accounts WHERE username=%s AND active=TRUE",
-                (username,)
-            ).fetchone()
+        row = _get_admin_by_username(username)
         if not row or row['password_hash'] != _hash_pw(password):
             return jsonify({'error': '帳號或密碼錯誤'}), 401
         _set_admin_session(row)
@@ -881,6 +901,7 @@ def api_admin_account_create():
         except Exception as e:
             if 'unique' in str(e).lower(): return jsonify({'error': '帳號已存在'}), 409
             return jsonify({'error': str(e)}), 500
+    _invalidate_admin_cache()
     return jsonify(_admin_row(row)), 201
 
 @app.route('/api/admin/accounts/<int:aid>', methods=['PUT'])
@@ -907,6 +928,7 @@ def api_admin_account_update(aid):
             """, (username, b.get('display_name','').strip(),
                   _json.dumps(perms), bool(b.get('is_super', False)),
                   bool(b.get('active', True)), aid)).fetchone()
+    _invalidate_admin_cache()
     return jsonify(_admin_row(row)) if row else ('', 404)
 
 @app.route('/api/admin/accounts/<int:aid>', methods=['DELETE'])
@@ -916,6 +938,7 @@ def api_admin_account_delete(aid):
         return jsonify({'error': '不能刪除自己的帳號'}), 400
     with get_db() as conn:
         conn.execute("DELETE FROM admin_accounts WHERE id=%s", (aid,))
+    _invalidate_admin_cache()
     return jsonify({'deleted': aid})
 
 # ─── Shared Helpers ───────────────────────────────────────────────────────────
@@ -12684,10 +12707,7 @@ def webauthn_auth_complete():
         user_key = cred['user_key']
         if user_key.startswith('admin_'):
             admin_id = int(user_key[6:])
-            with get_db() as conn:
-                admin = conn.execute(
-                    "SELECT * FROM admin_accounts WHERE id=%s AND active=TRUE", (admin_id,)
-                ).fetchone()
+            admin = _get_admin_by_id(admin_id)
             if not admin:
                 return jsonify({'error': '帳號不存在或已停用'}), 401
             perms = admin['permissions']

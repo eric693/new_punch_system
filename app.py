@@ -6250,27 +6250,30 @@ def _notify_staff_line(staff_id, message):
     """
     Send LINE notification to a staff member if they have LINE bound.
     Uses the line_punch_config token (same LINE OA).
+    Runs in a background thread to avoid blocking the request.
     """
-    if not DATABASE_URL:
-        return
-    try:
-        with get_db() as conn:
-            staff = conn.execute(
-                "SELECT line_user_id FROM punch_staff WHERE id=%s", (staff_id,)
-            ).fetchone()
-            if not staff or not staff['line_user_id']:
-                return
-            cfg = conn.execute(
-                "SELECT * FROM line_punch_config WHERE id=1"
-            ).fetchone()
-        if not cfg or not cfg.get('enabled') or not cfg.get('channel_access_token'):
+    def _send():
+        if not DATABASE_URL:
             return
-        LineBotApi(cfg['channel_access_token']).push_message(
-            staff['line_user_id'],
-            TextSendMessage(text=message)
-        )
-    except Exception as e:
-        print(f"[LINE notify] staff_id={staff_id}: {e}")
+        try:
+            with get_db() as conn:
+                staff = conn.execute(
+                    "SELECT line_user_id FROM punch_staff WHERE id=%s", (staff_id,)
+                ).fetchone()
+                if not staff or not staff['line_user_id']:
+                    return
+                cfg = conn.execute(
+                    "SELECT * FROM line_punch_config WHERE id=1"
+                ).fetchone()
+            if not cfg or not cfg.get('enabled') or not cfg.get('channel_access_token'):
+                return
+            LineBotApi(cfg['channel_access_token']).push_message(
+                staff['line_user_id'],
+                TextSendMessage(text=message)
+            )
+        except Exception as e:
+            print(f"[LINE notify] staff_id={staff_id}: {e}")
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def _notify_review_result(staff_id, category, action, extra_info=''):

@@ -9867,17 +9867,14 @@ function _renderAdminExpenseRows(c) {
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
     <td style="white-space:nowrap">
       ${c.status === 'pending' ? `
-        <button class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
-        <button class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
+        <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
+        <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
       ` : ''}
-      <button class="btn btn-sm btn-outline" style="margin-left:4px" onclick="openExpEditModal(${c.id})">編輯</button>
-      <button class="btn btn-sm" style="background:#6b7280;color:#fff;margin-left:4px" onclick="deleteExpenseClaim(${c.id})">刪除</button>
+      <button type="button" class="btn btn-sm btn-outline" style="margin-left:4px" onclick="openExpEditModal(${c.id})">編輯</button>
+      <button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff;margin-left:4px" onclick="deleteExpenseClaim(${c.id})">刪除</button>
     </td>
   </tr>
   ${bankRow}${reviewerNoteRow}`;
-  // Badge: count pending
-  const pendingCnt = status === '' ? claims.filter(c=>c.status==='pending').length : (status==='pending' ? claims.length : 0);
-  setBadge('badge-expense-review', pendingCnt);
 }
 
 async function reviewExpense(id, action, review_note='') {
@@ -9929,7 +9926,7 @@ function switchEditExpType(type) {
 
 function openExpEditModal(id) {
   const c = _expClaimsMap[id];
-  if (!c) return;
+  if (!c) { showToast('找不到申請記錄，請點「重新整理」後再試', 'error'); return; }
   document.getElementById('edit-exp-id').value = id;
   document.getElementById('edit-exp-staff-label').textContent = c.staff_name || '';
   document.getElementById('edit-exp-date').value = c.expense_date || '';

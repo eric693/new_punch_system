@@ -2199,7 +2199,7 @@ function _renderExpenseItem(c) {
     <div style="flex:1;min-width:0">
       <div style="font-weight:600;font-size:14px;margin-bottom:2px">${esc(c.category)} — NT$ ${fmtNum(c.amount)}</div>
       <div style="font-size:12px;color:var(--muted)">${c.expense_date}${c.vendor ? ' ・'+esc(c.vendor) : ''}${c.note ? ' ・'+esc(c.note) : ''}</div>
-      ${c.reviewer_note ? `<div style="font-size:11px;color:var(--red);margin-top:2px">備注：${esc(c.reviewer_note)}</div>` : ''}
+      ${c.review_note ? `<div style="font-size:11px;color:var(--red);margin-top:2px">備注：${esc(c.review_note)}</div>` : ''}
     </div>
     <div style="font-size:12px;font-weight:600;color:${statusColor[c.status]||'var(--muted)'}">
       ${statusMap[c.status]||c.status}

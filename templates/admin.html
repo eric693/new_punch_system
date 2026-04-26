@@ -6866,7 +6866,7 @@ async function addSalaryAdjustment() {
   const allowTotal = items.filter(i=>i.type==='allowance').reduce((s,i)=>s+i.amount,0);
   const deductTotal = items.filter(i=>i.type==='deduction').reduce((s,i)=>s+i.amount,0);
   const body = { items, allowance_total:allowTotal, deduction_total:deductTotal, net_pay:allowTotal-deductTotal };
-  const {ok:ok2} = await api(`/api/salary/records/${id}`, apiJSON(body, 'PUT'));
+  const {ok:ok2} = await api(`/api/salary/records/${id}`, apiPUT(body));
   if (!ok2) return;
   document.getElementById('adj-name').value='';
   document.getElementById('adj-amount').value='';
@@ -10382,7 +10382,7 @@ async function savePerfConfig() {
     method: 'PUT',
     body: JSON.stringify({ grades })
   });
-  if (!res.ok) { showToast(res.error || '儲存失敗', 'error'); return; }
+  if (!res.ok) { showToast(res.data?.error || '儲存失敗', 'error'); return; }
   _perfConfig = res.data;
   showToast('評級設定已儲存', 'success');
   renderPerfConfigGrades(_perfConfig.grades || []);
@@ -10633,7 +10633,7 @@ async function runAutoGenerate() {
   confEl.style.display = 'none';
 
   const res = await api('/api/schedule/auto-generate', apiJSON({ month, overwrite }));
-  if (!res.ok) { showToast('排班失敗：' + (res.error || ''), 'error'); return; }
+  if (!res.ok) { showToast('排班失敗：' + (res.data?.error || ''), 'error'); return; }
 
   const d = res.data;
   sumEl.style.display = '';
@@ -10691,7 +10691,7 @@ async function saveWhSettings() {
   const company_tax_id  = document.getElementById('wh-company-tax-id')?.value.trim();
   const company_address = document.getElementById('wh-company-address')?.value.trim();
   const r = await api('/api/finance/settings', apiJSON({ company_name, company_tax_id, company_address }));
-  showToast(r.ok ? '公司資訊已儲存' : ('儲存失敗：' + (r.error || '')), r.ok ? 'success' : 'error');
+  showToast(r.ok ? '公司資訊已儲存' : ('儲存失敗：' + (r.data?.error || '')), r.ok ? 'success' : 'error');
 }
 
 function openWithholdingReport(format) {
@@ -10740,7 +10740,7 @@ async function saveEdiSettings() {
     employer_id:         document.getElementById('edi-employer-id')?.value.trim(),
   };
   const r = await api('/api/insurance/settings', apiJSON(body));
-  showToast(r.ok ? '保險設定已儲存' : ('儲存失敗：' + (r.error || '')), r.ok ? 'success' : 'error');
+  showToast(r.ok ? '保險設定已儲存' : ('儲存失敗：' + (r.data?.error || '')), r.ok ? 'success' : 'error');
 }
 
 function downloadEdi(type, eventType) {
@@ -10824,14 +10824,14 @@ async function saveStoreModal() {
   };
   if (!body.name) { showToast('門市名稱不可空白', 'error'); return; }
   const r = id
-    ? await api(`/api/stores/${id}`, apiJSON(body, 'PUT'))
+    ? await api(`/api/stores/${id}`, apiPUT(body))
     : await api('/api/stores', apiJSON(body));
   if (r.ok) {
     document.getElementById('store-modal').style.display = 'none';
     showToast(id ? '門市已更新' : '門市已新增', 'success');
     loadStores();
   } else {
-    showToast('儲存失敗：' + (r.error || ''), 'error');
+    showToast('儲存失敗：' + (r.data?.error || ''), 'error');
   }
 }
 
@@ -10839,7 +10839,7 @@ async function deleteStore(id) {
   if (!confirm('確定要刪除此門市嗎？')) return;
   const r = await api(`/api/stores/${id}`, { method: 'DELETE' });
   if (r.ok) { showToast('已刪除', 'success'); loadStores(); }
-  else showToast('刪除失敗：' + (r.error || ''), 'error');
+  else showToast('刪除失敗：' + (r.data?.error || ''), 'error');
 }
 
 async function loadStoreStaff(storeId) {
@@ -10870,20 +10870,20 @@ async function assignStaffStore() {
   const storeId = document.getElementById('store-assign-target')?.value;
   const staffId = document.getElementById('store-assign-staff')?.value;
   if (!storeId || !staffId) { showToast('請選擇員工與目標門市', 'error'); return; }
-  const r = await api(`/api/staff/${staffId}/store`, apiJSON({ store_id: parseInt(storeId) }, 'PUT'));
+  const r = await api(`/api/staff/${staffId}/store`, apiPUT({ store_id: parseInt(storeId) }));
   if (r.ok) {
     showToast('已指派', 'success');
     // Refresh list if viewing the target store
     const viewStoreId = document.getElementById('store-assign-store')?.value;
     if (viewStoreId === storeId) loadStoreStaff(storeId);
-  } else showToast('指派失敗：' + (r.error || ''), 'error');
+  } else showToast('指派失敗：' + (r.data?.error || ''), 'error');
 }
 
 async function removeStaffFromStore(staffId) {
   const storeId = document.getElementById('store-assign-store')?.value;
-  const r = await api(`/api/staff/${staffId}/store`, apiJSON({ store_id: null }, 'PUT'));
+  const r = await api(`/api/staff/${staffId}/store`, apiPUT({ store_id: null }));
   if (r.ok) { showToast('已移出', 'success'); if (storeId) loadStoreStaff(storeId); }
-  else showToast('移出失敗：' + (r.error || ''), 'error');
+  else showToast('移出失敗：' + (r.data?.error || ''), 'error');
 }
 
 async function loadAllStaffForAssign() {
@@ -11070,7 +11070,7 @@ async function saveTrainingRecord() {
   };
   if (!body.staff_id || !body.course_name) { showToast('請填寫員工與課程名稱', 'error'); return; }
   const r = id
-    ? await api(`/api/training/records/${id}`, apiJSON(body, 'PUT'))
+    ? await api(`/api/training/records/${id}`, apiPUT(body))
     : await api('/api/training/records', apiJSON(body));
   if (r.ok) {
     document.getElementById('training-modal').style.display = 'none';
@@ -11078,7 +11078,7 @@ async function saveTrainingRecord() {
     loadTrainingSummary();
     loadTrainingRecords();
   } else {
-    showToast('儲存失敗：' + (r.error || ''), 'error');
+    showToast('儲存失敗：' + (r.data?.error || ''), 'error');
   }
 }
 
@@ -11086,7 +11086,7 @@ async function deleteTrainingRecord(id) {
   if (!confirm('確定刪除此訓練記錄？')) return;
   const r = await api(`/api/training/records/${id}`, { method: 'DELETE' });
   if (r.ok) { showToast('已刪除', 'success'); loadTrainingRecords(); loadTrainingSummary(); }
-  else showToast('刪除失敗：' + (r.error || ''), 'error');
+  else showToast('刪除失敗：' + (r.data?.error || ''), 'error');
 }
 
 /* =====================================================================
@@ -11109,7 +11109,7 @@ async function previewSalary() {
 
   const r = await api('/api/salary/records/preview', apiJSON({ month }));
   loading.style.display = 'none';
-  if (!r.ok) { content.style.display = ''; tbody.innerHTML = `<tr><td colspan="11" style="color:var(--red);padding:24px;text-align:center">計算失敗：${escHtml(r.error||'')}</td></tr>`; return; }
+  if (!r.ok) { content.style.display = ''; tbody.innerHTML = `<tr><td colspan="11" style="color:var(--red);padding:24px;text-align:center">計算失敗：${escHtml(r.data?.error||'')}</td></tr>`; return; }
 
   const recs = r.data.records || [];
   if (!recs.length) {

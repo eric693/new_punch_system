@@ -9886,6 +9886,7 @@ async function reviewExpense(id, action, review_note='') {
   });
   if (!ok) return;
   showToast(action==='approve' ? '已核准' : '已拒絕', 'success');
+  if (data) _expClaimsMap[data.id] = data;
   // 直接替換那一行，不重新 fetch 整個列表
   const tbody = document.getElementById('exp-review-tbody');
   const oldRow = tbody ? tbody.querySelector(`tr[data-exp-id="${id}"]`) : null;

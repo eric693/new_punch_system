@@ -550,6 +550,65 @@ def init_db():
             created_at      TIMESTAMPTZ DEFAULT NOW(),
             updated_at      TIMESTAMPTZ DEFAULT NOW()
         )""",
+        # ── 財務管理基礎表（expense_claims 依賴這三張表）─────────────────────────────
+        """CREATE TABLE IF NOT EXISTS finance_categories (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT NOT NULL,
+            type        TEXT NOT NULL DEFAULT 'expense',
+            color       TEXT DEFAULT '#4a7bda',
+            sort_order  INT DEFAULT 0,
+            active      BOOLEAN DEFAULT TRUE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS finance_documents (
+            id              SERIAL PRIMARY KEY,
+            filename        TEXT NOT NULL,
+            doc_type        TEXT DEFAULT '',
+            ocr_raw         JSONB DEFAULT '{}',
+            upload_date     DATE DEFAULT CURRENT_DATE,
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS finance_records (
+            id              SERIAL PRIMARY KEY,
+            record_date     DATE NOT NULL,
+            category_id     INT REFERENCES finance_categories(id) ON DELETE SET NULL,
+            type            TEXT NOT NULL DEFAULT 'expense',
+            title           TEXT NOT NULL,
+            amount          NUMERIC(14,2) NOT NULL DEFAULT 0,
+            tax_amount      NUMERIC(14,2) DEFAULT 0,
+            vendor          TEXT DEFAULT '',
+            invoice_no      TEXT DEFAULT '',
+            note            TEXT DEFAULT '',
+            document_id     INT,
+            created_by      TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        # ── 費用報帳申請 ─────────────────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS expense_claims (
+            id                   SERIAL PRIMARY KEY,
+            staff_id             INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            title                TEXT NOT NULL,
+            amount               NUMERIC(12,2) NOT NULL DEFAULT 0,
+            expense_date         DATE NOT NULL,
+            category             TEXT DEFAULT '',
+            note                 TEXT DEFAULT '',
+            status               TEXT NOT NULL DEFAULT 'pending',
+            document_id          INT REFERENCES finance_documents(id) ON DELETE SET NULL,
+            review_note          TEXT DEFAULT '',
+            reviewed_by          TEXT DEFAULT '',
+            reviewed_at          TIMESTAMPTZ,
+            finance_record_id    INT REFERENCES finance_records(id) ON DELETE SET NULL,
+            created_at           TIMESTAMPTZ DEFAULT NOW(),
+            document_id2         INT REFERENCES finance_documents(id) ON DELETE SET NULL,
+            reimbursement_method TEXT NOT NULL DEFAULT '匯款',
+            bank_name            TEXT NOT NULL DEFAULT '',
+            bank_account         TEXT NOT NULL DEFAULT '',
+            account_holder       TEXT NOT NULL DEFAULT '',
+            expense_type         TEXT NOT NULL DEFAULT '支出',
+            company              TEXT NOT NULL DEFAULT '進光設計',
+            vendor               TEXT NOT NULL DEFAULT ''
+        )""",
     ]
     for sql in migrations:
         try:

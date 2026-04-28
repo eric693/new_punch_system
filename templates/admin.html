@@ -10,6 +10,7 @@
 <link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -145,6 +146,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   animation: badge-pop .2s ease;
 }
 .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
+.sort-ghost { opacity: .4; background: var(--accent-light, #eff6ff) !important; }
 .empty-state-text { font-size: 14px; margin-top: 8px; }
 
 /* Skeleton loading */
@@ -509,13 +511,19 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- 員工管理 -->
     <div id="punch-panel-staff" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <span id="punch-staff-count" style="font-size:13px;color:var(--muted)"></span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="punch-staff-count" style="font-size:13px;color:var(--muted)"></span>
+          <button class="btn btn-ghost btn-sm" id="staff-sort-toggle" onclick="toggleStaffSortMode()" title="調整員工順序">⇅ 調整順序</button>
+          <button class="btn btn-primary btn-sm" id="staff-sort-save" style="display:none" onclick="saveStaffOrder()">儲存順序</button>
+          <button class="btn btn-outline btn-sm" id="staff-sort-cancel" style="display:none" onclick="cancelStaffSortMode()">取消</button>
+        </div>
         <button class="btn btn-primary" onclick="openPunchStaffModal()">新增員工</button>
       </div>
+      <div id="staff-sort-hint" style="display:none;margin-bottom:10px;padding:8px 12px;background:#eff6ff;border-radius:8px;font-size:12px;color:var(--accent)">拖曳列即可調整順序，完成後點「儲存順序」</div>
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>姓名</th><th>員工代碼</th><th>職稱</th><th>帳號</th><th>匯款帳號</th><th>狀態</th><th>操作</th></tr></thead>
+            <thead><tr><th id="staff-sort-grip-th" style="display:none;width:32px"></th><th>姓名</th><th>員工代碼</th><th>職稱</th><th>帳號</th><th>匯款帳號</th><th>狀態</th><th>操作</th></tr></thead>
             <tbody id="punch-staff-tbody"><tr><td colspan="7" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr></tbody>
           </table>
         </div>
@@ -4942,26 +4950,67 @@ async function submitManualPunch() {
 }
 
 // ── 員工管理 ──────────────────────────────────────────────────
+let _staffSortMode = false;
+let _staffSortable = null;
+
 function renderPunchStaff() {
   const tb = document.getElementById('punch-staff-tbody');
   document.getElementById('punch-staff-count').textContent = `共 ${punchStaffList.length} 位員工`;
-  if (!punchStaffList.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
+  if (!punchStaffList.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
   tb.innerHTML = punchStaffList.map(s => {
     const bankDisplay = s.bank_account ? (s.bank_name ? `${escHtml(s.bank_name)} ${escHtml(s.bank_account)}` : escHtml(s.bank_account)) : '<span style="color:var(--muted)">—</span>';
-    return `<tr>
+    const gripCell = `<td class="staff-grip-cell" style="display:none;cursor:grab;color:var(--muted);text-align:center;font-size:18px;user-select:none">⠿</td>`;
+    return `<tr data-staff-id="${s.id}">
+    ${gripCell}
     <td style="font-weight:600">${escHtml(s.name)}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(s.employee_code||'—')}</td>
     <td style="color:var(--muted)">${escHtml(s.role||'')}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px">${escHtml(s.username||'—')}${s.has_password ? '' : '<span style="color:var(--red);font-size:10px;margin-left:4px">未設密碼</span>'}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px">${bankDisplay}</td>
     <td>${s.active ? '<span class="badge badge-ok">在職</span>' : '<span class="badge badge-warn">停用</span>'}</td>
-    <td style="white-space:nowrap">
+    <td style="white-space:nowrap" class="staff-action-cell">
       <button class="btn btn-outline btn-sm" onclick="openPunchStaffModal(${s.id})">編輯</button>
       <button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="openTerminateModal(${s.id},'${escHtml(s.name)}')" title="辦理離職">離職</button>
       <button class="btn btn-danger btn-sm" onclick="deletePunchStaff(${s.id})" style="margin-left:4px">刪除</button>
     </td>
   </tr>`;
   }).join('');
+}
+
+function toggleStaffSortMode() {
+  _staffSortMode = true;
+  document.getElementById('staff-sort-toggle').style.display = 'none';
+  document.getElementById('staff-sort-save').style.display = '';
+  document.getElementById('staff-sort-cancel').style.display = '';
+  document.getElementById('staff-sort-hint').style.display = '';
+  document.getElementById('staff-sort-grip-th').style.display = '';
+  document.querySelectorAll('.staff-grip-cell').forEach(el => el.style.display = '');
+  document.querySelectorAll('.staff-action-cell').forEach(el => el.style.pointerEvents = 'none');
+  const tb = document.getElementById('punch-staff-tbody');
+  _staffSortable = Sortable.create(tb, { animation: 150, handle: '.staff-grip-cell', ghostClass: 'sort-ghost' });
+}
+
+function cancelStaffSortMode() {
+  _staffSortMode = false;
+  if (_staffSortable) { _staffSortable.destroy(); _staffSortable = null; }
+  document.getElementById('staff-sort-toggle').style.display = '';
+  document.getElementById('staff-sort-save').style.display = 'none';
+  document.getElementById('staff-sort-cancel').style.display = 'none';
+  document.getElementById('staff-sort-hint').style.display = 'none';
+  document.getElementById('staff-sort-grip-th').style.display = 'none';
+  renderPunchStaff();
+}
+
+async function saveStaffOrder() {
+  const rows = document.querySelectorAll('#punch-staff-tbody tr[data-staff-id]');
+  const ids = Array.from(rows).map(r => parseInt(r.dataset.staffId));
+  const { ok } = await api('/api/punch/staff/reorder', apiJSON(ids));
+  if (!ok) return;
+  // 更新本機清單順序
+  const ordered = ids.map(id => punchStaffList.find(s => s.id === id)).filter(Boolean);
+  punchStaffList = ordered;
+  cancelStaffSortMode();
+  showToast('員工順序已儲存', 'success');
 }
 async function loadPunchStaff() {
   document.getElementById('punch-staff-tbody').innerHTML = skeletonRows(7);
@@ -5051,7 +5100,6 @@ async function savePunchStaff() {
       else punchStaffList.push(data);
     } else {
       punchStaffList.push(data);
-      punchStaffList.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
     }
   }
   _invalidateStaffCache(); _staffSearchCache = null;

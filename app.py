@@ -492,6 +492,7 @@ def init_db():
         )""",
         "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS password_plain TEXT DEFAULT ''",
         "ALTER TABLE punch_staff    ADD COLUMN IF NOT EXISTS password_plain TEXT DEFAULT ''",
+        "ALTER TABLE punch_staff    ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0",
         # 財務 + 報價 二公司支援
         "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE finance_categories ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
@@ -1451,8 +1452,20 @@ def api_punch_my_records():
 @login_required
 def api_punch_staff_list():
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM punch_staff ORDER BY name").fetchall()
+        rows = conn.execute("SELECT * FROM punch_staff ORDER BY sort_order, name").fetchall()
     return jsonify([punch_staff_row(r) for r in rows])
+
+@app.route('/api/punch/staff/reorder', methods=['POST'])
+@login_required
+def api_punch_staff_reorder():
+    """儲存員工自訂排序順序"""
+    ids = request.get_json(force=True)
+    if not isinstance(ids, list):
+        return jsonify({'error': 'expected list of ids'}), 400
+    with get_db() as conn:
+        for idx, sid in enumerate(ids):
+            conn.execute("UPDATE punch_staff SET sort_order=%s WHERE id=%s", (idx, sid))
+    return jsonify({'ok': True})
 
 @app.route('/api/punch/staff', methods=['POST'])
 @login_required

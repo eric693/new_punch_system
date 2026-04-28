@@ -2821,16 +2821,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
         <div class="form-row">
           <div><label class="form-label">生日</label><input class="form-input" type="date" id="psm-birth-date"></div>
-          <div><label class="form-label">職稱（詳細）</label><input class="form-input" id="psm-position-title" placeholder="例：資深外場服務員"></div>
+          <div><label class="form-label">正式職稱（薪資單用）</label><input class="form-input" id="psm-position-title" placeholder="例：資深外場服務員"></div>
         </div>
         <div><label class="form-label">地址</label><input class="form-input" id="psm-address" placeholder="戶籍或通訊地址"></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">登入帳號 *</label><input class="form-input" id="psm-username" placeholder="英文或數字" autocapitalize="none"></div>
+        <div><label class="form-label">登入帳號 *</label><input class="form-input" id="psm-username" placeholder="英文或數字" autocapitalize="none" autocomplete="username"></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">密碼 *</label><input class="form-input" id="psm-password" placeholder="至少 4 個字元" type="text" autocomplete="off"><div style="font-size:11px;color:var(--muted);margin-top:4px" id="psm-pw-hint">新增員工請輸入密碼</div></div>
-        <div><label class="form-label">確認密碼</label><input class="form-input" id="psm-password2" placeholder="再輸入一次" type="text" autocomplete="off"></div>
+        <div><label class="form-label">密碼 *</label><input class="form-input" id="psm-password" placeholder="請設定密碼" type="text" autocomplete="new-password"><div style="font-size:11px;color:var(--muted);margin-top:4px" id="psm-pw-hint">新增員工請輸入密碼</div></div>
       </div>
       <div style="border-top:1.5px solid var(--border);margin:14px 0 10px;padding-top:12px">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">匯款帳號</div>
@@ -4706,7 +4705,7 @@ function initPunch() {
 
 function switchPunchTab(tab) {
   _currentPunchTab = tab;
-  ['summary','records','manual','requests','overtime','staff','gps','line','anomaly','mstats'].forEach(t => {
+  ['summary','records','manual','requests','overtime','staff','resigned','gps','line','anomaly','mstats'].forEach(t => {
     document.getElementById('punchtab-' + t).classList.toggle('active', t === tab);
     document.getElementById('punch-panel-' + t).style.display = t === tab ? '' : 'none';
   });
@@ -4714,6 +4713,7 @@ function switchPunchTab(tab) {
   if (tab === 'records')   { loadPunchStaffOptions(); loadPunchRecords(); }
   if (tab === 'manual')    { loadManualStaffOptions(); loadManualRecords(); }
   if (tab === 'staff')     loadPunchStaff();
+  if (tab === 'resigned')  loadResignedStaff();
   if (tab === 'requests')  { loadPunchRequests(); setTabDot('tabdot-punchrq', 0); }
   if (tab === 'overtime')  { otFilterChanged(); setTabDot('tabdot-overtime', 0); }
   if (tab === 'gps')       loadGpsSettings();
@@ -4973,7 +4973,6 @@ function openPunchStaffModal(id=null) {
   punchEditStaffId = id;
   document.getElementById('psm-title').textContent = id ? '編輯員工' : '新增員工';
   document.getElementById('psm-password').value = id ? (punchStaffList.find(x=>x.id===id)?.password_plain || '') : '';
-  document.getElementById('psm-password2').value = id ? (punchStaffList.find(x=>x.id===id)?.password_plain || '') : '';
   const allFields = ['psm-bank-code','psm-bank-name','psm-bank-branch','psm-bank-account','psm-account-holder',
                      'psm-department','psm-role','psm-position-title','psm-national-id','psm-address'];
   if (id) {
@@ -5003,6 +5002,14 @@ function openPunchStaffModal(id=null) {
     document.getElementById('psm-active').value  = '1';
     document.getElementById('psm-gender').value  = '';
     document.getElementById('psm-pw-hint').textContent = '新增員工請輸入密碼';
+    // 新增員工時，姓名自動填入帳號欄
+    setTimeout(() => {
+      const nameEl = document.getElementById('psm-name');
+      const userEl = document.getElementById('psm-username');
+      nameEl.oninput = () => { if (!userEl._touched) userEl.value = nameEl.value.trim(); };
+      userEl.oninput = () => { userEl._touched = !!userEl.value; };
+      userEl._touched = false;
+    }, 0);
   }
   document.getElementById('punch-staff-modal').style.display = 'flex';
 }
@@ -5010,8 +5017,6 @@ function closePunchStaffModal() { document.getElementById('punch-staff-modal').s
 async function savePunchStaff() {
   const id  = document.getElementById('psm-id').value;
   const pw  = document.getElementById('psm-password').value;
-  const pw2 = document.getElementById('psm-password2').value;
-  if (pw && pw !== pw2)  { showToast('兩次密碼不一致', 'error'); return; }
   if (!id && !pw)        { showToast('請設定密碼', 'error'); return; }
   const body = {
     name:           document.getElementById('psm-name').value.trim(),

@@ -1463,8 +1463,8 @@ def api_punch_staff_create():
     password = b.get('password', '').strip()
     if not name:     return jsonify({'error': '姓名為必填'}), 400
     if not username: return jsonify({'error': '帳號為必填'}), 400
-    if not password or len(password) < 4:
-        return jsonify({'error': '密碼至少 4 個字元'}), 400
+    if not password:
+        return jsonify({'error': '密碼為必填'}), 400
     employee_code  = (b.get('employee_code') or '').strip() or None
     department     = (b.get('department') or '').strip()
     role           = (b.get('role') or '').strip()
@@ -1532,8 +1532,6 @@ def api_punch_staff_update(sid):
         return jsonify({'error': '姓名和帳號為必填'}), 400
     with get_db() as conn:
         if password:
-            if len(password) < 4:
-                return jsonify({'error': '密碼至少 4 個字元'}), 400
             row = conn.execute("""
                 UPDATE punch_staff
                 SET name=%s,username=%s,password_hash=%s,password_plain=%s,role=%s,active=%s,employee_code=%s,
@@ -6505,9 +6503,11 @@ def api_anomaly_report_excel():
         shift_rows = conn.execute("""
             SELECT sa.staff_id, sa.shift_date,
                    st.start_time::text as start_time,
-                   st.end_time::text   as end_time
+                   st.end_time::text   as end_time,
+                   ps.name as staff_name, ps.department
             FROM shift_assignments sa
             JOIN shift_types st ON st.id=sa.shift_type_id
+            JOIN punch_staff ps ON ps.id=sa.staff_id AND ps.active=TRUE
             WHERE TO_CHAR(sa.shift_date,'YYYY-MM')=%s
         """, (month,)).fetchall()
 
@@ -6522,8 +6522,17 @@ def api_anomaly_report_excel():
               AND start_date <= %s AND end_date >= %s
         """, (last_day, first_day)).fetchall()
 
+        # 有打卡記錄的 (staff_id, date) 組合
+        punched_dates = conn.execute("""
+            SELECT DISTINCT pr.staff_id,
+                   (pr.punched_at AT TIME ZONE 'Asia/Taipei')::date as work_date
+            FROM punch_records pr
+            WHERE TO_CHAR(pr.punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM')=%s
+        """, (month,)).fetchall()
+
     # Build lookup maps
     shift_map = {(r['staff_id'], str(r['shift_date'])): r for r in shift_rows}
+    punched_set = {(r['staff_id'], str(r['work_date'])) for r in punched_dates}
     leave_set = set()
     from datetime import date as _dax, timedelta as _tdax
     for lr in leave_rows:
@@ -6587,6 +6596,26 @@ def api_anomaly_report_excel():
                 'detail':       detail,
             })
 
+    # 有排班但完全未打卡（且非假日）的記錄
+    for sr in shift_rows:
+        ds = str(sr['shift_date'])
+        sid = sr['staff_id']
+        if (sid, ds) not in punched_set and (sid, ds) not in leave_set:
+            shift_date_obj = _dax.fromisoformat(ds)
+            if shift_date_obj < today:
+                anomalies.append({
+                    'staff_name':   sr['staff_name'],
+                    'department':   sr['department'] or '',
+                    'date':         ds,
+                    'shift_start':  str(sr['start_time'])[:5],
+                    'shift_end':    str(sr['end_time'])[:5],
+                    'clock_in':     '—',
+                    'clock_out':    '—',
+                    'anomaly_type': '完全未打卡',
+                    'detail':       f"排班 {str(sr['start_time'])[:5]}～{str(sr['end_time'])[:5]}，當日無任何打卡記錄",
+                })
+    anomalies.sort(key=lambda x: (x['date'], x['staff_name']))
+
     # Build Excel
     wb   = openpyxl.Workbook()
     ws   = wb.active
@@ -6612,7 +6641,7 @@ def api_anomaly_report_excel():
         ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = w
 
     for ri, a in enumerate(anomalies, 2):
-        row_fill = err_fill if a['anomaly_type'] in ('缺上班打卡','缺下班打卡') else warn_fill
+        row_fill = err_fill if a['anomaly_type'] in ('缺上班打卡','缺下班打卡','完全未打卡') else warn_fill
         vals = [a['staff_name'], a['department'], a['date'],
                 a['shift_start'], a['shift_end'],
                 a['clock_in'], a['clock_out'],

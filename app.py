@@ -450,6 +450,8 @@ def init_db():
         "ALTER TABLE overtime_requests ADD COLUMN IF NOT EXISTS day_type TEXT DEFAULT 'weekday'",
         "ALTER TABLE overtime_requests ALTER COLUMN start_time DROP NOT NULL",
         "ALTER TABLE overtime_requests ALTER COLUMN end_time DROP NOT NULL",
+        "ALTER TABLE overtime_requests ADD COLUMN IF NOT EXISTS ot_date DATE",
+        "ALTER TABLE overtime_requests ALTER COLUMN request_date DROP NOT NULL",
         # 員工個人/保險欄位
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS national_id TEXT DEFAULT ''",
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT ''",
@@ -9698,7 +9700,7 @@ def api_salary_preview():
                 SELECT COUNT(*) AS n, COALESCE(SUM(ot_hours),0) AS hrs
                 FROM overtime_requests WHERE staff_id=%s
                   AND status='approved'
-                  AND to_char(COALESCE(ot_date, request_date),'YYYY-MM')=%s
+                  AND to_char(request_date,'YYYY-MM')=%s
             """, (staff['id'], month)).fetchone()
             result.append({
                 'staff_id':       data['staff_id'],
@@ -12375,9 +12377,9 @@ def mobile_overtime():
     with get_db() as conn:
         conn.execute(
             """INSERT INTO overtime_requests
-               (staff_id, ot_date, ot_hours, reason, status)
-               VALUES (%s, %s, %s, %s, 'pending')""",
-            (staff_id, ot_date, hours, reason)
+               (staff_id, ot_date, request_date, ot_hours, reason, status)
+               VALUES (%s, %s, %s, %s, %s, 'pending')""",
+            (staff_id, ot_date, ot_date, hours, reason)
         )
     return jsonify({'ok': True})
 

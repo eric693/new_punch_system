@@ -5238,12 +5238,12 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
     if total_work_days is None:
         # 1. 優先從排班取工作日
         shift_date_rows = conn.execute("""
-            SELECT DISTINCT date FROM shift_assignments
-            WHERE staff_id=%s AND TO_CHAR(date,'YYYY-MM')=%s
-            ORDER BY date
+            SELECT DISTINCT shift_date FROM shift_assignments
+            WHERE staff_id=%s AND TO_CHAR(shift_date,'YYYY-MM')=%s
+            ORDER BY shift_date
         """, (staff['id'], month)).fetchall()
         if shift_date_rows:
-            scheduled_dates = {r['date'].isoformat() if hasattr(r['date'], 'isoformat') else str(r['date']) for r in shift_date_rows}
+            scheduled_dates = {r['shift_date'].isoformat() if hasattr(r['shift_date'], 'isoformat') else str(r['shift_date']) for r in shift_date_rows}
             total_work_days = len(scheduled_dates)
         else:
             # 2. 備援：日曆扣除週日 + 國定假日

@@ -2619,7 +2619,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- ── 公司設定 ── -->
     <div id="qpanel-settings" style="display:none">
-      <div class="card" style="max-width:640px;padding:24px">
+      <div class="card" style="max-width:700px;padding:24px">
         <div class="card-title" style="padding:0;margin-bottom:18px">公司資訊設定</div>
         <div style="display:grid;gap:12px">
           <div><label class="form-label">公司名稱</label><input class="form-input" id="qs-company-name" style="width:100%"></div>
@@ -2627,7 +2627,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div><label class="form-label">聯絡電話</label><input class="form-input" id="qs-company-phone" style="width:100%"></div>
           <div><label class="form-label">電子郵件</label><input class="form-input" id="qs-company-email" style="width:100%"></div>
         </div>
-        <div class="card-title" style="padding:0;margin:18px 0 14px;font-size:13px">匯款資訊</div>
+
+        <!-- 常用收款帳戶 -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 12px">
+          <div class="card-title" style="padding:0;font-size:13px;margin:0">常用收款帳戶</div>
+          <button class="btn btn-outline btn-sm" onclick="addFreqAccount()">＋ 新增帳戶</button>
+        </div>
+        <div id="qs-freq-accounts" style="display:grid;gap:10px;margin-bottom:4px"></div>
+
+        <div class="card-title" style="padding:0;margin:20px 0 14px;font-size:13px">當前匯款資訊（列印於報價單）</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div><label class="form-label">銀行名稱</label><input class="form-input" id="qs-bank-name" style="width:100%"></div>
           <div><label class="form-label">分行</label><input class="form-input" id="qs-bank-branch" style="width:100%"></div>
@@ -11819,17 +11827,25 @@ async function initQCreateForm() {
   if (tbody && !tbody.children.length) addQuoteItem();
 }
 
+function _fmtMoney(v) {
+  const n = parseFloat(String(v).replace(/,/g,'')) || 0;
+  return n === 0 ? '' : n.toLocaleString('zh-TW', {minimumFractionDigits:0, maximumFractionDigits:2});
+}
+function _parseMoney(v) { return parseFloat(String(v).replace(/,/g,'')) || 0; }
+function _moneyFocus(el) { const n = _parseMoney(el.value); el.value = n === 0 ? '' : String(n); }
+function _moneyBlur(el)  { const n = _parseMoney(el.value); el.value = n === 0 ? '' : n.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2}); updateQTotals(); }
+
 function addQuoteItem(name='', unit='次', price=0) {
   const tbody = document.getElementById('qf-items-tbody');
-  const i = tbody.children.length;
   const row = document.createElement('tr');
+  const priceFmt = price > 0 ? price.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2}) : '';
   row.innerHTML = `
     <td><input class="form-input" style="width:100%;font-size:12px" value="${escHtml(name)}" oninput="updateQTotals()"></td>
     <td><input class="form-input" type="number" style="width:60px;font-size:12px" value="1" min="0" step="0.01" oninput="updateQTotals()"></td>
     <td><input class="form-input" style="width:50px;font-size:12px" value="${escHtml(unit)}"></td>
-    <td><input class="form-input" type="number" style="width:80px;font-size:12px" value="${price}" min="0" oninput="updateQTotals()"></td>
+    <td><input class="form-input q-price-input" style="width:90px;font-size:12px;text-align:right" value="${priceFmt}" placeholder="0" onfocus="_moneyFocus(this)" onblur="_moneyBlur(this)" oninput="updateQTotals()"></td>
     <td><span class="q-amt" style="font-family:'DM Mono',monospace;font-size:12px;padding:0 4px">0</span></td>
-    <td><input class="form-input" type="number" style="width:70px;font-size:12px" value="0" min="0" oninput="updateQTotals()"></td>
+    <td><input class="form-input q-price-input" style="width:80px;font-size:12px;text-align:right" value="" placeholder="0" onfocus="_moneyFocus(this)" onblur="_moneyBlur(this)" oninput="updateQTotals()"></td>
     <td><input class="form-input" type="number" style="width:50px;font-size:12px" value="0" min="0"></td>
     <td><span class="q-receivable" style="font-family:'DM Mono',monospace;font-size:12px;padding:0 4px;font-weight:600">0</span></td>
     <td><input class="form-input" style="width:80px;font-size:12px" placeholder="收款狀況"></td>
@@ -11853,18 +11869,18 @@ function updateQTotals() {
   document.querySelectorAll('#qf-items-tbody tr').forEach(row => {
     const inputs = row.querySelectorAll('input');
     const qty   = parseFloat(inputs[1]?.value) || 0;
-    const price = parseFloat(inputs[3]?.value) || 0;
-    const hand  = parseFloat(inputs[5]?.value) || 0;
+    const price = _parseMoney(inputs[3]?.value);
+    const hand  = _parseMoney(inputs[5]?.value);
     const amt   = Math.round(qty * price * 100) / 100;
     const recv  = amt + hand;
     const amtEl = row.querySelector('.q-amt');
     const recEl = row.querySelector('.q-receivable');
-    if (amtEl) amtEl.textContent = amt.toLocaleString();
-    if (recEl) recEl.textContent = recv.toLocaleString();
+    if (amtEl) amtEl.textContent = amt.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});
+    if (recEl) recEl.textContent = recv.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});
     subtotal += recv;
   });
   const el = document.getElementById('qf-subtotal');
-  if (el) el.textContent = 'NT$ ' + Math.round(subtotal).toLocaleString();
+  if (el) el.textContent = 'NT$ ' + Math.round(subtotal).toLocaleString('zh-TW');
 }
 
 function resetQuoteForm() {
@@ -11927,7 +11943,7 @@ async function editQuotation(id) {
     const row  = rows[rows.length-1];
     const inputs = row.querySelectorAll('input');
     if (inputs[1]) inputs[1].value = item.quantity || 1;
-    if (inputs[5]) inputs[5].value = item.handmade  || 0;
+    if (inputs[5]) { const h = parseFloat(item.handmade)||0; inputs[5].value = h > 0 ? h.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2}) : ''; }
     if (inputs[6]) inputs[6].value = item.people_count || 0;
     if (inputs[7]) inputs[7].value = item.payment_status || '';
     if (inputs[8]) inputs[8].value = item.note || '';
@@ -11954,9 +11970,9 @@ function _getQuoteItems() {
       product_name:   inputs[0]?.value?.trim() || '',
       quantity:       parseFloat(inputs[1]?.value) || 0,
       unit:           inputs[2]?.value?.trim() || '次',
-      unit_price:     parseFloat(inputs[3]?.value) || 0,
+      unit_price:     _parseMoney(inputs[3]?.value),
       amount:         parseFloat(amtEl?.textContent?.replace(/,/g,'')) || 0,
-      handmade:       parseFloat(inputs[5]?.value) || 0,
+      handmade:       _parseMoney(inputs[5]?.value),
       people_count:   parseInt(inputs[6]?.value) || 0,
       payment_status: inputs[7]?.value?.trim() || '',
       note:           inputs[8]?.value?.trim() || '',
@@ -12084,6 +12100,61 @@ async function deleteQProduct(id) {
 }
 
 // ── 公司設定 ─────────────────────────────────────────────────
+let _freqAccounts = [];
+
+function _renderFreqAccounts() {
+  const container = document.getElementById('qs-freq-accounts');
+  if (!container) return;
+  if (!_freqAccounts.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:4px 0">尚無常用帳戶，點右上角「新增帳戶」來建立。</div>';
+    return;
+  }
+  container.innerHTML = _freqAccounts.map((a, i) => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label class="form-label" style="font-size:11px">標籤名稱</label>
+          <input class="form-input" style="width:100%;font-size:12px" value="${escHtml(a.label||'')}" oninput="_freqAccounts[${i}].label=this.value">
+        </div>
+        <div><label class="form-label" style="font-size:11px">銀行名稱</label>
+          <input class="form-input" style="width:100%;font-size:12px" value="${escHtml(a.bank_name||'')}" oninput="_freqAccounts[${i}].bank_name=this.value">
+        </div>
+        <div><label class="form-label" style="font-size:11px">分行</label>
+          <input class="form-input" style="width:100%;font-size:12px" value="${escHtml(a.bank_branch||'')}" oninput="_freqAccounts[${i}].bank_branch=this.value">
+        </div>
+        <div><label class="form-label" style="font-size:11px">戶名</label>
+          <input class="form-input" style="width:100%;font-size:12px" value="${escHtml(a.account_name||'')}" oninput="_freqAccounts[${i}].account_name=this.value">
+        </div>
+        <div><label class="form-label" style="font-size:11px">帳號</label>
+          <input class="form-input" style="width:100%;font-size:12px" value="${escHtml(a.account_no||'')}" oninput="_freqAccounts[${i}].account_no=this.value">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding-top:18px">
+        <button class="btn btn-primary btn-sm" onclick="_applyFreqAccount(${i})" title="套用至當前匯款資訊">套用</button>
+        <button class="btn btn-danger btn-sm" onclick="_deleteFreqAccount(${i})">刪除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addFreqAccount() {
+  _freqAccounts.push({label:'', bank_name:'', bank_branch:'', account_name:'', account_no:''});
+  _renderFreqAccounts();
+}
+
+function _deleteFreqAccount(i) {
+  _freqAccounts.splice(i, 1);
+  _renderFreqAccounts();
+}
+
+function _applyFreqAccount(i) {
+  const a = _freqAccounts[i];
+  document.getElementById('qs-bank-name').value    = a.bank_name    || '';
+  document.getElementById('qs-bank-branch').value  = a.bank_branch  || '';
+  document.getElementById('qs-account-name').value = a.account_name || '';
+  document.getElementById('qs-account-no').value   = a.account_no   || '';
+  showToast(`已套用「${a.label||'帳戶'}」`, 'success');
+}
+
 async function loadQSettings() {
   const company = window._qCompany || 'ad';
   const {ok, data} = await api(`/api/quotation/settings?company=${company}`, {}, true);
@@ -12098,21 +12169,24 @@ async function loadQSettings() {
   document.getElementById('qs-account-no').value      = data.account_no      || '';
   document.getElementById('qs-tax-id').value          = data.tax_id          || '';
   document.getElementById('qs-payment-notes').value   = data.payment_notes   || '';
+  _freqAccounts = Array.isArray(data.frequent_accounts) ? data.frequent_accounts : [];
+  _renderFreqAccounts();
 }
 
 async function saveQSettings() {
   const body = {
-    company_unit:    window._qCompany || 'ad',
-    company_name:    document.getElementById('qs-company-name').value.trim(),
-    company_address: document.getElementById('qs-company-address').value.trim(),
-    company_phone:   document.getElementById('qs-company-phone').value.trim(),
-    company_email:   document.getElementById('qs-company-email').value.trim(),
-    bank_name:       document.getElementById('qs-bank-name').value.trim(),
-    bank_branch:     document.getElementById('qs-bank-branch').value.trim(),
-    account_name:    document.getElementById('qs-account-name').value.trim(),
-    account_no:      document.getElementById('qs-account-no').value.trim(),
-    tax_id:          document.getElementById('qs-tax-id').value.trim(),
-    payment_notes:   document.getElementById('qs-payment-notes').value.trim(),
+    company_unit:       window._qCompany || 'ad',
+    company_name:       document.getElementById('qs-company-name').value.trim(),
+    company_address:    document.getElementById('qs-company-address').value.trim(),
+    company_phone:      document.getElementById('qs-company-phone').value.trim(),
+    company_email:      document.getElementById('qs-company-email').value.trim(),
+    bank_name:          document.getElementById('qs-bank-name').value.trim(),
+    bank_branch:        document.getElementById('qs-bank-branch').value.trim(),
+    account_name:       document.getElementById('qs-account-name').value.trim(),
+    account_no:         document.getElementById('qs-account-no').value.trim(),
+    tax_id:             document.getElementById('qs-tax-id').value.trim(),
+    payment_notes:      document.getElementById('qs-payment-notes').value.trim(),
+    frequent_accounts:  _freqAccounts,
   };
   const {ok} = await api('/api/quotation/settings', {method:'PUT', body: JSON.stringify(body)});
   if (ok) showToast('設定已儲存', 'success');

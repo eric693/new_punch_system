@@ -12970,6 +12970,7 @@ def init_quotation_db():
         "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS deposit_rate NUMERIC DEFAULT 100",
         "ALTER TABLE quotations         ADD COLUMN IF NOT EXISTS show_wedding_content BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE quotation_settings ADD COLUMN IF NOT EXISTS frequent_accounts JSONB DEFAULT '[]'",
     ]
     for sql in migrations:
         try:
@@ -13046,19 +13047,26 @@ def api_quotation_settings_put():
     company = b.get('company_unit', 'ad')
     fields = ['company_name','company_address','company_phone','company_email',
               'bank_name','bank_branch','account_name','account_no','tax_id','payment_notes']
+    fa = b.get('frequent_accounts', None)
     with get_db() as conn:
         row = conn.execute(
             "SELECT id FROM quotation_settings WHERE company_unit=%s LIMIT 1", (company,)
         ).fetchone()
         if row:
             sets = ', '.join(f"{f}=%s" for f in fields)
-            vals = [b.get(f,'') for f in fields] + [row['id']]
+            vals = [b.get(f,'') for f in fields]
+            if fa is not None:
+                sets += ', frequent_accounts=%s'
+                vals.append(_json.dumps(fa, ensure_ascii=False))
+            vals.append(row['id'])
             conn.execute(f"UPDATE quotation_settings SET {sets} WHERE id=%s", vals)
         else:
-            cols = ', '.join(['company_unit'] + fields)
-            phs  = ', '.join(['%s']*(len(fields)+1))
-            conn.execute(f"INSERT INTO quotation_settings ({cols}) VALUES ({phs})",
-                         [company] + [b.get(f,'') for f in fields])
+            cols = ', '.join(['company_unit'] + fields + (['frequent_accounts'] if fa is not None else []))
+            phs  = ', '.join(['%s']*(len(fields)+1+(1 if fa is not None else 0)))
+            row_vals = [company] + [b.get(f,'') for f in fields]
+            if fa is not None:
+                row_vals.append(_json.dumps(fa, ensure_ascii=False))
+            conn.execute(f"INSERT INTO quotation_settings ({cols}) VALUES ({phs})", row_vals)
     return jsonify({'ok': True})
 
 

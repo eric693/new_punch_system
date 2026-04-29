@@ -10911,6 +10911,7 @@ def _init_expense_db():
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS document_id2 INT REFERENCES finance_documents(id) ON DELETE SET NULL",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS reimbursement_method TEXT NOT NULL DEFAULT '匯款'",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS bank_name TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS bank_branch TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS bank_account TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS account_holder TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS expense_type TEXT NOT NULL DEFAULT '支出'",
@@ -11171,9 +11172,9 @@ def api_expense_admin_create():
             INSERT INTO expense_claims
               (staff_id, title, amount, expense_date, category, note,
                document_id, document_id2,
-               reimbursement_method, bank_name, bank_account, account_holder,
+               reimbursement_method, bank_name, bank_branch, bank_account, account_holder,
                expense_type, company, vendor)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (staff_id, (b.get('title','').strip() or b.get('category','').strip() or '費用申請'), float(b.get('amount', 0)),
               b['expense_date'], b.get('category','').strip(),
               b.get('note','').strip(),
@@ -11181,6 +11182,7 @@ def api_expense_admin_create():
               b.get('document_id2') or None,
               b.get('reimbursement_method', '匯款').strip(),
               b.get('bank_name', '').strip(),
+              b.get('bank_branch', '').strip(),
               b.get('bank_account', '').strip(),
               b.get('account_holder', '').strip(),
               b.get('expense_type', '支出').strip(),
@@ -11306,8 +11308,8 @@ def api_expense_review(cid):
 def api_expense_claim_edit(cid):
     b = request.get_json(force=True)
     allowed = ['expense_date', 'expense_type', 'category', 'vendor', 'amount',
-               'note', 'reimbursement_method', 'bank_name', 'bank_account',
-               'account_holder', 'title']
+               'note', 'reimbursement_method', 'bank_name', 'bank_branch',
+               'bank_account', 'account_holder', 'title']
     sets, vals = [], []
     for key in allowed:
         if key in b:

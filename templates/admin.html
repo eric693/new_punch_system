@@ -2193,10 +2193,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div class="exp-divider"></div>
           <div class="exp-section-label indigo">② 匯款帳戶</div>
 
-          <div class="exp-row" style="grid-template-columns:1fr">
+          <div class="exp-row col2">
             <div class="exp-field">
               <label>銀行名稱</label>
               <input class="fi" type="text" id="add-exp-bank-name" placeholder="台灣銀行、國泰世華、玉山銀行…">
+            </div>
+            <div class="exp-field">
+              <label>分行</label>
+              <input class="fi" type="text" id="add-exp-bank-branch" placeholder="信義分行">
             </div>
           </div>
           <div class="exp-row col2">
@@ -2317,13 +2321,20 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
         <div class="exp-row col2">
           <div class="exp-field">
+            <label>分行</label>
+            <input class="fi" type="text" id="edit-exp-bank-branch" placeholder="信義分行">
+          </div>
+          <div class="exp-field">
             <label>戶名</label>
             <input class="fi" type="text" id="edit-exp-account-holder">
           </div>
+        </div>
+        <div class="exp-row col2">
           <div class="exp-field">
             <label>帳號</label>
             <input class="fi" type="text" id="edit-exp-bank-account">
           </div>
+          <div class="exp-field"></div>
         </div>
       </div>
       <div class="exp-modal-footer">
@@ -9857,6 +9868,7 @@ async function openAddExpenseModal() {
   document.getElementById('add-exp-vendor').value           = '';
   document.getElementById('add-exp-reimburse-method').value = '匯款';
   document.getElementById('add-exp-bank-name').value        = '';
+  document.getElementById('add-exp-bank-branch').value      = '';
   document.getElementById('add-exp-bank-account').value     = '';
   document.getElementById('add-exp-account-holder').value   = '';
   switchExpenseType('支出'); // 初始化費用性質 + 類別清單 + bank section
@@ -9887,6 +9899,7 @@ async function submitAdminExpense() {
   const vendor               = document.getElementById('add-exp-vendor').value.trim();
   const reimbursement_method = document.getElementById('add-exp-reimburse-method').value;
   const bank_name            = document.getElementById('add-exp-bank-name').value.trim();
+  const bank_branch          = document.getElementById('add-exp-bank-branch').value.trim();
   const account_holder       = document.getElementById('add-exp-account-holder').value.trim();
   const bank_account         = document.getElementById('add-exp-bank-account').value.trim();
   let hasErr = false;
@@ -9907,7 +9920,7 @@ async function submitAdminExpense() {
     method: 'POST',
     body: JSON.stringify({
       staff_id: parseInt(staff_id), expense_date, title, category, amount, note, vendor,
-      reimbursement_method, bank_name, account_holder, bank_account,
+      reimbursement_method, bank_name, bank_branch, account_holder, bank_account,
       expense_type, company: '進光設計',
       document_id:  _adminDocId1 || null,
       document_id2: _adminDocId2 || null,
@@ -10000,12 +10013,12 @@ function _renderAdminExpenseRows(c) {
   const statusMap   = { pending:'待審核', approved:'已核准', rejected:'已拒絕' };
   const statusColor = { pending:'var(--accent)', approved:'var(--green)', rejected:'var(--red)' };
   const expTypeColor = { '支出':'var(--red)', '收入':'var(--green)' };
-  const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.account_holder || c.bank_account);
+  const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.bank_branch || c.account_holder || c.bank_account);
   const bankRow = hasBankInfo ? `
     <tr style="background:var(--bg-subtle,#f8f9fb)">
       <td colspan="11" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
         <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
-        ${escHtml(c.bank_name||'')}
+        ${escHtml(c.bank_name||'')}${c.bank_branch ? `（${escHtml(c.bank_branch)}）` : ''}
         ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
         ${c.bank_account   ? `・帳號：<span style="font-family:'DM Mono',monospace">${escHtml(c.bank_account)}</span>` : ''}
       </td>
@@ -10119,9 +10132,10 @@ function openExpEditModal(id) {
   document.getElementById('edit-exp-vendor').value = c.vendor || '';
   document.getElementById('edit-exp-note').value = c.note || '';
   document.getElementById('edit-exp-reimburse-method').value = c.reimbursement_method || '匯款';
-  document.getElementById('edit-exp-bank-name').value = c.bank_name || '';
-  document.getElementById('edit-exp-account-holder').value = c.account_holder || '';
-  document.getElementById('edit-exp-bank-account').value = c.bank_account || '';
+  document.getElementById('edit-exp-bank-name').value        = c.bank_name    || '';
+  document.getElementById('edit-exp-bank-branch').value      = c.bank_branch  || '';
+  document.getElementById('edit-exp-account-holder').value   = c.account_holder || '';
+  document.getElementById('edit-exp-bank-account').value     = c.bank_account || '';
   switchEditExpType(c.expense_type || '支出');
   document.getElementById('modal-edit-expense').style.display = 'flex';
 }
@@ -10141,6 +10155,7 @@ async function saveExpEdit() {
     note:                 document.getElementById('edit-exp-note').value.trim(),
     reimbursement_method: document.getElementById('edit-exp-reimburse-method').value,
     bank_name:            document.getElementById('edit-exp-bank-name').value.trim(),
+    bank_branch:          document.getElementById('edit-exp-bank-branch').value.trim(),
     account_holder:       document.getElementById('edit-exp-account-holder').value.trim(),
     bank_account:         document.getElementById('edit-exp-bank-account').value.trim(),
   };
@@ -10287,6 +10302,7 @@ function onExpVendorInput(val) {
   const v = _vendors.find(x => x.name === val);
   if (!v) return;
   document.getElementById('add-exp-bank-name').value      = v.bank_name      || '';
+  document.getElementById('add-exp-bank-branch').value    = v.bank_branch    || '';
   document.getElementById('add-exp-account-holder').value = v.account_holder || '';
   document.getElementById('add-exp-bank-account').value   = v.bank_account   || '';
 }

@@ -219,6 +219,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <a href="#" class="nav-item"        id="nav-holiday" onclick="showPage('holiday',event)">國定假日</a>
     <a href="#" class="nav-item"        id="nav-finance" onclick="showPage('finance',event)">財務管理</a>
     <a href="#" class="nav-item"        id="nav-expense-review" onclick="showPage('expense-review',event)">費用審核<span class="nav-badge" id="badge-expense-review" style="display:none"></span></a>
+    <a href="#" class="nav-item"        id="nav-vendor-mgr"    onclick="showPage('vendor-mgr',event)">廠商名冊</a>
     <a href="#" class="nav-item"        id="nav-worklog" onclick="showPage('worklog',event)">工作日誌</a>
     <a href="#" class="nav-item"        id="nav-perf" onclick="showPage('perf',event)">績效考核</a>
     <a href="#" class="nav-item"        id="nav-stores"   onclick="showPage('stores',event)">門市管理</a>
@@ -2000,6 +2001,75 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     </div>
   </div><!-- end page-expense-review -->
 
+  <!-- ── 廠商名冊 ── -->
+  <div class="page" id="page-vendor-mgr" style="display:none">
+    <div class="filter-bar" style="margin-bottom:20px">
+      <input type="text" class="filter-input" id="vendor-search" placeholder="搜尋廠商名稱…" oninput="renderVendorTable()" style="min-width:200px">
+      <button class="btn btn-primary btn-sm" onclick="openVendorModal()">+ 新增廠商</button>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>廠商名稱</th><th>銀行</th><th>分行</th><th>戶名</th><th>帳號</th><th>聯絡人</th><th>備註</th><th>操作</th>
+          </tr></thead>
+          <tbody id="vendor-tbody">
+            <tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中…</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- end page-vendor-mgr -->
+
+  <!-- ── 廠商 CRUD Modal ── -->
+  <div class="modal-overlay" id="vendor-modal" style="display:none" onclick="if(event.target===this)closeVendorModal()">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span class="modal-title" id="vendor-modal-title">新增廠商</span>
+        <button class="modal-close" onclick="closeVendorModal()">✕</button>
+      </div>
+      <div style="padding:20px 24px;display:grid;gap:14px">
+        <input type="hidden" id="vm-id">
+        <div>
+          <label class="form-label">廠商名稱 <span style="color:#d64242">*</span></label>
+          <input class="form-input" id="vm-name" placeholder="廠商全名" style="width:100%">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="form-label">銀行名稱</label>
+            <input class="form-input" id="vm-bank-name" placeholder="玉山銀行" style="width:100%">
+          </div>
+          <div>
+            <label class="form-label">分行</label>
+            <input class="form-input" id="vm-bank-branch" placeholder="信義分行" style="width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="form-label">戶名</label>
+            <input class="form-input" id="vm-account-holder" placeholder="帳戶持有人" style="width:100%">
+          </div>
+          <div>
+            <label class="form-label">帳號</label>
+            <input class="form-input" id="vm-bank-account" placeholder="銀行帳號" style="width:100%">
+          </div>
+        </div>
+        <div>
+          <label class="form-label">聯絡人</label>
+          <input class="form-input" id="vm-contact" placeholder="聯絡人姓名或電話" style="width:100%">
+        </div>
+        <div>
+          <label class="form-label">備註</label>
+          <input class="form-input" id="vm-note" placeholder="其他說明" style="width:100%">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 24px 20px;border-top:1px solid var(--border)">
+        <button class="btn btn-outline" onclick="closeVendorModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveVendor()">儲存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 新增費用申請 Modal ── -->
   <style>
     .exp-modal-wrap { display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px) }
@@ -2097,7 +2167,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div class="exp-row col2">
             <div class="exp-field">
               <label>廠商名稱（選填）</label>
-              <input class="fi" type="text" id="add-exp-vendor" placeholder="請款廠商">
+              <input class="fi" type="text" id="add-exp-vendor" placeholder="請款廠商" list="vendor-datalist" oninput="onExpVendorInput(this.value)">
+              <datalist id="vendor-datalist"></datalist>
             </div>
             <div class="exp-field">
               <label>備註（選填）</label>
@@ -2131,8 +2202,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <div class="exp-row col2">
             <div class="exp-field">
               <label>戶名</label>
-              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名"
-                oninput="const v=document.getElementById('add-exp-vendor');if(!v.value.trim())v.value=this.value;">
+              <input class="fi" type="text" id="add-exp-account-holder" placeholder="帳戶持有人姓名">
             </div>
             <div class="exp-field">
               <label>帳號</label>
@@ -4645,7 +4715,7 @@ function showPage(page, e) {
   if (e) e.preventDefault();
   _currentPage = page;
   // 權限檢查（儀表板和帳號管理不受模組限制）
-  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation', worklog:'worklog' };
+  const moduleGuard = { punch:'punch', sched:'sched', leave:'leave', salary:'salary', ann:'ann', holiday:'holiday', finance:'finance', 'expense-review':'expense-review', perf:'perf', stores:'stores', training:'training', quotation:'quotation', worklog:'worklog', 'vendor-mgr':'expense-review' };
   if (moduleGuard[page] && !hasModule(moduleGuard[page])) {
     showToast('您沒有此功能的存取權限', 'error'); return;
   }
@@ -4654,14 +4724,15 @@ function showPage(page, e) {
   const navEl = document.getElementById('nav-' + page);
   if (navEl) navEl.classList.add('active');
   debouncedRefreshBadges();
-  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','worklog','perf','stores','training','quotation'].forEach(p =>
+  ['dash','punch','sched','leave','salary','ann','holiday','finance','adminmgr','expense-review','worklog','perf','stores','training','quotation','vendor-mgr'].forEach(p =>
     document.getElementById('page-' + p).style.display = p === page ? '' : 'none'
   );
-  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組' };
+  const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組', 'vendor-mgr':'廠商名冊' };
   document.getElementById('page-title').textContent = titles[page] || page;
   // 儀表板每次刷新；expense-review 每次進入都更新
   if (page === 'dash')           { initDash(); return; }
   if (page === 'expense-review') { loadExpenseReview(); return; }
+  if (page === 'vendor-mgr')    { loadVendors(); return; }
   if (page === 'worklog')        { initAdminWorklog(); return; }
   // 已初始化且內容正常 → 直接顯示，不重新 fetch
   if (_initedModules.has(page)) return;
@@ -9799,6 +9870,7 @@ async function openAddExpenseModal() {
     }
   });
   await _loadExpenseStaff();
+  if (!_vendors.length) await loadVendors();
 }
 
 function closeAddExpenseModal() {
@@ -10103,6 +10175,115 @@ async function deleteExpenseClaim(id) {
 
   const { ok } = await api(`/api/expense/claims/${id}`, { method:'DELETE' });
   if (!ok) { showToast('刪除失敗，請點重新整理', 'error'); loadExpenseReview(true); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 廠商名冊模組
+// ══════════════════════════════════════════════════════════════
+let _vendors = [];
+
+async function loadVendors() {
+  const { ok, data } = await api('/api/vendors');
+  if (!ok) { showToast('載入廠商失敗', 'error'); return; }
+  _vendors = data;
+  renderVendorTable();
+  _refreshVendorDatalist();
+}
+
+function _refreshVendorDatalist() {
+  const dl = document.getElementById('vendor-datalist');
+  if (!dl) return;
+  dl.innerHTML = _vendors.map(v => `<option value="${escHtml(v.name)}">`).join('');
+}
+
+function renderVendorTable() {
+  const q = (document.getElementById('vendor-search')?.value || '').toLowerCase();
+  const rows = _vendors.filter(v => !q || v.name.toLowerCase().includes(q));
+  const tbody = document.getElementById('vendor-tbody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無廠商資料</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(v => `
+    <tr>
+      <td style="font-weight:600">${escHtml(v.name)}</td>
+      <td style="font-size:12px">${escHtml(v.bank_name||'—')}</td>
+      <td style="font-size:12px">${escHtml(v.bank_branch||'—')}</td>
+      <td style="font-size:12px">${escHtml(v.account_holder||'—')}</td>
+      <td style="font-size:12px;font-family:'DM Mono',monospace">${escHtml(v.bank_account||'—')}</td>
+      <td style="font-size:12px">${escHtml(v.contact||'—')}</td>
+      <td style="font-size:12px;color:var(--muted)">${escHtml(v.note||'')}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openVendorModal(${v.id})" style="margin-right:4px">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteVendor(${v.id},'${escHtml(v.name)}')">刪除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function openVendorModal(id) {
+  const v = id ? _vendors.find(x => x.id === id) : null;
+  document.getElementById('vendor-modal-title').textContent = v ? '編輯廠商' : '新增廠商';
+  document.getElementById('vm-id').value            = v ? v.id : '';
+  document.getElementById('vm-name').value          = v ? v.name : '';
+  document.getElementById('vm-bank-name').value     = v ? (v.bank_name||'') : '';
+  document.getElementById('vm-bank-branch').value   = v ? (v.bank_branch||'') : '';
+  document.getElementById('vm-account-holder').value= v ? (v.account_holder||'') : '';
+  document.getElementById('vm-bank-account').value  = v ? (v.bank_account||'') : '';
+  document.getElementById('vm-contact').value       = v ? (v.contact||'') : '';
+  document.getElementById('vm-note').value          = v ? (v.note||'') : '';
+  document.getElementById('vendor-modal').style.display = 'flex';
+}
+
+function closeVendorModal() {
+  document.getElementById('vendor-modal').style.display = 'none';
+}
+
+async function saveVendor() {
+  const id   = document.getElementById('vm-id').value;
+  const body = {
+    name:           document.getElementById('vm-name').value.trim(),
+    bank_name:      document.getElementById('vm-bank-name').value.trim(),
+    bank_branch:    document.getElementById('vm-bank-branch').value.trim(),
+    account_holder: document.getElementById('vm-account-holder').value.trim(),
+    bank_account:   document.getElementById('vm-bank-account').value.trim(),
+    contact:        document.getElementById('vm-contact').value.trim(),
+    note:           document.getElementById('vm-note').value.trim(),
+  };
+  if (!body.name) { showToast('請填寫廠商名稱', 'error'); return; }
+  const url    = id ? `/api/vendors/${id}` : '/api/vendors';
+  const method = id ? 'PUT' : 'POST';
+  const { ok, data } = await api(url, { method, body: JSON.stringify(body) });
+  if (!ok) { showToast(data?.error || '儲存失敗', 'error'); return; }
+  if (id) {
+    const idx = _vendors.findIndex(v => v.id === data.id);
+    if (idx >= 0) _vendors[idx] = data; else _vendors.push(data);
+  } else {
+    _vendors.push(data);
+    _vendors.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant'));
+  }
+  _refreshVendorDatalist();
+  renderVendorTable();
+  closeVendorModal();
+  showToast(id ? '廠商已更新' : '廠商已新增', 'success');
+}
+
+async function deleteVendor(id, name) {
+  if (!confirm(`確定要刪除廠商「${name}」？`)) return;
+  const { ok } = await api(`/api/vendors/${id}`, { method:'DELETE' });
+  if (!ok) { showToast('刪除失敗', 'error'); return; }
+  _vendors = _vendors.filter(v => v.id !== id);
+  _refreshVendorDatalist();
+  renderVendorTable();
+  showToast('已刪除', 'success');
+}
+
+function onExpVendorInput(val) {
+  const v = _vendors.find(x => x.name === val);
+  if (!v) return;
+  document.getElementById('add-exp-bank-name').value        = v.bank_name      || '';
+  document.getElementById('add-exp-account-holder').value   = v.account_holder || '';
+  document.getElementById('add-exp-bank-account').value     = v.bank_account   || '';
 }
 
 // ══════════════════════════════════════════════════════════════

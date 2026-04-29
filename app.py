@@ -4638,9 +4638,12 @@ def api_leave_request_review(rid):
                 reviewed_at=NOW(), updated_at=NOW()
             WHERE id=%s RETURNING *
         """, (new_status, reviewed_by, review_note, rid)).fetchone()
-        if action == 'approve':
+        if action == 'approve' and old['status'] != 'approved':
             _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
                                   str(old['start_date'])[:4], float(old['total_days']))
+        elif action == 'reject' and old['status'] == 'approved':
+            _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
+                                  str(old['start_date'])[:4], -float(old['total_days']))
     if row:
         extra = f"{str(old['start_date'])} ~ {str(old['end_date'])} 共 {float(old['total_days'])} 天"
         if review_note: extra += f"\n審核意見：{review_note}"
@@ -4652,7 +4655,13 @@ def api_leave_request_review(rid):
 @require_module('leave')
 def api_leave_request_delete(rid):
     with get_db() as conn:
+        old = conn.execute("SELECT * FROM leave_requests WHERE id=%s", (rid,)).fetchone()
+        if not old: return ('', 404)
         conn.execute("DELETE FROM leave_requests WHERE id=%s", (rid,))
+        if old['status'] == 'approved':
+            _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
+                                  str(old['start_date'])[:4], -float(old['total_days']))
+    _badges_cache.clear()
     return jsonify({'deleted': rid})
 
 def _update_leave_balance(conn, staff_id, leave_type_id, year_str, delta_days):
@@ -5289,18 +5298,43 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
     """, (staff['id'], month)).fetchone()
     ot_pay = float(ot_rows['total']) if ot_rows else 0.0
 
-    # ── 請假資訊 ────────────────────────────────────────────
-    leave_rows = conn.execute("""
-        SELECT lr.total_days, lt.pay_rate, lt.code, lt.name as leave_name
+    # ── 請假資訊（含跨月假單）────────────────────────────────
+    month_start = f"{y}-{m:02d}-01"
+    month_end   = f"{y}-{m:02d}-{_cal2.monthrange(y, m)[1]:02d}"
+    _leave_raw = conn.execute("""
+        SELECT lr.start_date, lr.end_date,
+               lr.start_half, lr.end_half, lr.lv_start_time, lr.lv_end_time,
+               lt.pay_rate, lt.code, lt.name as leave_name
         FROM leave_requests lr
         JOIN leave_types lt ON lt.id = lr.leave_type_id
         WHERE lr.staff_id=%s AND lr.status='approved'
-          AND to_char(lr.start_date,'YYYY-MM')=%s
-    """, (staff['id'], month)).fetchall()
-    leave_days    = sum(float(r['total_days']) for r in leave_rows)
-    unpaid_days   = sum(float(r['total_days']) for r in leave_rows if float(r['pay_rate']) == 0)
-    half_pay_days = sum(float(r['total_days']) for r in leave_rows if 0 < float(r['pay_rate']) < 1)
-    actual_days   = total_work_days - leave_days
+          AND lr.start_date <= %s AND lr.end_date >= %s
+    """, (staff['id'], month_end, month_start)).fetchall()
+    leave_days    = 0.0
+    unpaid_days   = 0.0
+    half_pay_days = 0.0
+    leave_rows    = []   # 保留供後續扣款名稱使用
+    for _lr in _leave_raw:
+        _sd = str(_lr['start_date'])
+        _ed = str(_lr['end_date'])
+        _eff_s = max(_sd, month_start)
+        _eff_e = min(_ed, month_end)
+        _s_half = bool(_lr['start_half']) and (_sd == _eff_s)
+        _e_half = bool(_lr['end_half'])   and (_ed == _eff_e)
+        _s_time = (_lr['lv_start_time'] if _sd == _eff_s else None)
+        _e_time = (_lr['lv_end_time']   if _ed == _eff_e else None)
+        _days = _calc_leave_days(_eff_s, _eff_e,
+                                 start_half=_s_half, end_half=_e_half,
+                                 start_time=_s_time, end_time=_e_time)
+        leave_days += _days
+        _pay = float(_lr['pay_rate'])
+        if _pay == 0:
+            unpaid_days += _days
+        elif 0 < _pay < 1:
+            half_pay_days += _days
+        leave_rows.append({'total_days': _days, 'pay_rate': _lr['pay_rate'],
+                           'leave_name': _lr['leave_name'], 'code': _lr['code']})
+    actual_days = total_work_days - leave_days
 
     # ── 日薪 / 時薪（用於請假扣款） ───────────────────────
     if salary_type == 'hourly':
@@ -9070,11 +9104,12 @@ def api_finance_category_create():
     if not b.get('name','').strip(): return jsonify({'error': '名稱為必填'}), 400
     with get_db() as conn:
         row = conn.execute("""
-            INSERT INTO finance_categories (name,type,color,sort_order,active,statement_section)
-            VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
+            INSERT INTO finance_categories (name,type,color,sort_order,active,statement_section,company_unit)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (b['name'].strip(), b.get('type','expense'), b.get('color','#4a7bda'),
               int(b.get('sort_order',0)), bool(b.get('active',True)),
-              b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense')
+              b.get('statement_section') or ('operating_revenue' if b.get('type')=='income' else 'operating_expense'),
+              b.get('company_unit','ad')
              )).fetchone()
     _fin_cats_cache.clear()
     return jsonify(_finance_cat_row(row)), 201
@@ -10882,6 +10917,101 @@ def _init_expense_db():
             print(f"[expense_init] {e}")
 
 _init_expense_db()
+
+
+# ─── 廠商名冊 ──────────────────────────────────────────────────────────────
+
+def _init_vendors_db():
+    sqls = [
+        """CREATE TABLE IF NOT EXISTS vendors (
+            id              SERIAL PRIMARY KEY,
+            name            TEXT NOT NULL,
+            bank_name       TEXT NOT NULL DEFAULT '',
+            bank_branch     TEXT NOT NULL DEFAULT '',
+            account_holder  TEXT NOT NULL DEFAULT '',
+            bank_account    TEXT NOT NULL DEFAULT '',
+            contact         TEXT NOT NULL DEFAULT '',
+            note            TEXT NOT NULL DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_name ON vendors(name)",
+    ]
+    for sql in sqls:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[vendors_init] {e}")
+
+_init_vendors_db()
+
+
+@app.route('/api/vendors', methods=['GET'])
+@login_required
+def api_vendors_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM vendors ORDER BY name ASC").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/vendors', methods=['POST'])
+@login_required
+def api_vendors_create():
+    b = request.get_json(force=True)
+    name = (b.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': '廠商名稱為必填'}), 400
+    with get_db() as conn:
+        try:
+            row = conn.execute(
+                """INSERT INTO vendors (name, bank_name, bank_branch, account_holder, bank_account, contact, note)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
+                (name, (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
+                 (b.get('account_holder') or '').strip(), (b.get('bank_account') or '').strip(),
+                 (b.get('contact') or '').strip(), (b.get('note') or '').strip())
+            ).fetchone()
+        except Exception as e:
+            if 'unique' in str(e).lower():
+                return jsonify({'error': '廠商名稱已存在'}), 409
+            raise
+    return jsonify(dict(row)), 201
+
+
+@app.route('/api/vendors/<int:vid>', methods=['PUT'])
+@login_required
+def api_vendors_update(vid):
+    b = request.get_json(force=True)
+    name = (b.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': '廠商名稱為必填'}), 400
+    with get_db() as conn:
+        try:
+            row = conn.execute(
+                """UPDATE vendors SET name=%s, bank_name=%s, bank_branch=%s,
+                   account_holder=%s, bank_account=%s, contact=%s, note=%s
+                   WHERE id=%s RETURNING *""",
+                (name, (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
+                 (b.get('account_holder') or '').strip(), (b.get('bank_account') or '').strip(),
+                 (b.get('contact') or '').strip(), (b.get('note') or '').strip(), vid)
+            ).fetchone()
+        except Exception as e:
+            if 'unique' in str(e).lower():
+                return jsonify({'error': '廠商名稱已存在'}), 409
+            raise
+    if not row:
+        return jsonify({'error': '找不到廠商'}), 404
+    return jsonify(dict(row))
+
+
+@app.route('/api/vendors/<int:vid>', methods=['DELETE'])
+@login_required
+def api_vendors_delete(vid):
+    with get_db() as conn:
+        conn.execute("DELETE FROM vendors WHERE id=%s", (vid,))
+    return jsonify({'deleted': vid})
+
+
+# ─── end 廠商名冊 ──────────────────────────────────────────────────────────
 
 
 def _expense_row(r):
@@ -13213,7 +13343,7 @@ def api_quotations_create():
                   item.get('note','').strip()))
         # 更新小計
         conn.execute(
-            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
+            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount+handmade),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
             (qid, qid)
         )
     return jsonify({'id': qid, 'quote_no': quote_no}), 201
@@ -13301,7 +13431,7 @@ def api_quotation_update(qid):
                   item.get('payment_status',''),
                   item.get('note','').strip()))
         conn.execute(
-            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
+            "UPDATE quotations SET subtotal=(SELECT COALESCE(SUM(amount+handmade),0) FROM quotation_items WHERE quotation_id=%s) WHERE id=%s",
             (qid, qid)
         )
     return jsonify({'ok': True})

@@ -10183,11 +10183,11 @@ async function deleteExpenseClaim(id) {
 let _vendors = [];
 
 async function loadVendors() {
-  const { ok, data } = await api('/api/vendors');
+  const { ok, data } = await api('/api/vendors', {}, true); // silent=true，api()不彈toast
   if (!ok) { showToast('載入廠商失敗', 'error'); return; }
   _vendors = data;
-  renderVendorTable();
   _refreshVendorDatalist();
+  renderVendorTable();
 }
 
 function _refreshVendorDatalist() {
@@ -10206,7 +10206,7 @@ function renderVendorTable() {
     return;
   }
   tbody.innerHTML = rows.map(v => `
-    <tr>
+    <tr data-vid="${v.id}">
       <td style="font-weight:600">${escHtml(v.name)}</td>
       <td style="font-size:12px">${escHtml(v.bank_name||'—')}</td>
       <td style="font-size:12px">${escHtml(v.bank_branch||'—')}</td>
@@ -10216,7 +10216,7 @@ function renderVendorTable() {
       <td style="font-size:12px;color:var(--muted)">${escHtml(v.note||'')}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="openVendorModal(${v.id})" style="margin-right:4px">編輯</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteVendor(${v.id},'${escHtml(v.name)}')">刪除</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteVendorById(${v.id})">刪除</button>
       </td>
     </tr>`).join('');
 }
@@ -10224,14 +10224,14 @@ function renderVendorTable() {
 function openVendorModal(id) {
   const v = id ? _vendors.find(x => x.id === id) : null;
   document.getElementById('vendor-modal-title').textContent = v ? '編輯廠商' : '新增廠商';
-  document.getElementById('vm-id').value            = v ? v.id : '';
-  document.getElementById('vm-name').value          = v ? v.name : '';
-  document.getElementById('vm-bank-name').value     = v ? (v.bank_name||'') : '';
-  document.getElementById('vm-bank-branch').value   = v ? (v.bank_branch||'') : '';
-  document.getElementById('vm-account-holder').value= v ? (v.account_holder||'') : '';
-  document.getElementById('vm-bank-account').value  = v ? (v.bank_account||'') : '';
-  document.getElementById('vm-contact').value       = v ? (v.contact||'') : '';
-  document.getElementById('vm-note').value          = v ? (v.note||'') : '';
+  document.getElementById('vm-id').value             = v ? v.id : '';
+  document.getElementById('vm-name').value           = v ? v.name          : '';
+  document.getElementById('vm-bank-name').value      = v ? (v.bank_name    || '') : '';
+  document.getElementById('vm-bank-branch').value    = v ? (v.bank_branch  || '') : '';
+  document.getElementById('vm-account-holder').value = v ? (v.account_holder || '') : '';
+  document.getElementById('vm-bank-account').value   = v ? (v.bank_account || '') : '';
+  document.getElementById('vm-contact').value        = v ? (v.contact      || '') : '';
+  document.getElementById('vm-note').value           = v ? (v.note         || '') : '';
   document.getElementById('vendor-modal').style.display = 'flex';
 }
 
@@ -10240,6 +10240,7 @@ function closeVendorModal() {
 }
 
 async function saveVendor() {
+  const btn  = document.querySelector('#vendor-modal .btn-primary');
   const id   = document.getElementById('vm-id').value;
   const body = {
     name:           document.getElementById('vm-name').value.trim(),
@@ -10251,28 +10252,32 @@ async function saveVendor() {
     note:           document.getElementById('vm-note').value.trim(),
   };
   if (!body.name) { showToast('請填寫廠商名稱', 'error'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '儲存中…'; }
   const url    = id ? `/api/vendors/${id}` : '/api/vendors';
   const method = id ? 'PUT' : 'POST';
   const { ok, data } = await api(url, { method, body: JSON.stringify(body) });
-  if (!ok) { showToast(data?.error || '儲存失敗', 'error'); return; }
+  if (btn) { btn.disabled = false; btn.textContent = '儲存'; }
+  if (!ok) return; // api() 已彈 toast
   if (id) {
     const idx = _vendors.findIndex(v => v.id === data.id);
     if (idx >= 0) _vendors[idx] = data; else _vendors.push(data);
   } else {
     _vendors.push(data);
-    _vendors.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant'));
   }
+  _vendors.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant'));
   _refreshVendorDatalist();
   renderVendorTable();
   closeVendorModal();
   showToast(id ? '廠商已更新' : '廠商已新增', 'success');
 }
 
-async function deleteVendor(id, name) {
-  if (!confirm(`確定要刪除廠商「${name}」？`)) return;
+async function deleteVendorById(id) {
+  const v = _vendors.find(x => x.id === id);
+  if (!v) return;
+  if (!confirm(`確定要刪除廠商「${v.name}」？`)) return;
   const { ok } = await api(`/api/vendors/${id}`, { method:'DELETE' });
-  if (!ok) { showToast('刪除失敗', 'error'); return; }
-  _vendors = _vendors.filter(v => v.id !== id);
+  if (!ok) return; // api() 已彈 toast
+  _vendors = _vendors.filter(x => x.id !== id);
   _refreshVendorDatalist();
   renderVendorTable();
   showToast('已刪除', 'success');
@@ -10281,9 +10286,9 @@ async function deleteVendor(id, name) {
 function onExpVendorInput(val) {
   const v = _vendors.find(x => x.name === val);
   if (!v) return;
-  document.getElementById('add-exp-bank-name').value        = v.bank_name      || '';
-  document.getElementById('add-exp-account-holder').value   = v.account_holder || '';
-  document.getElementById('add-exp-bank-account').value     = v.bank_account   || '';
+  document.getElementById('add-exp-bank-name').value      = v.bank_name      || '';
+  document.getElementById('add-exp-account-holder').value = v.account_holder || '';
+  document.getElementById('add-exp-bank-account').value   = v.bank_account   || '';
 }
 
 // ══════════════════════════════════════════════════════════════

@@ -5312,8 +5312,9 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
     """, (staff['id'], month_end, month_start)).fetchall()
     leave_days    = 0.0
     unpaid_days   = 0.0
-    half_pay_days = 0.0
     leave_rows    = []   # 保留供後續扣款名稱使用
+    # 半薪假按實際 pay_rate 分組統計，key=pay_rate, value={'days':..., 'names':set()}
+    partial_pay_map = {}
     for _lr in _leave_raw:
         _sd = str(_lr['start_date'])
         _ed = str(_lr['end_date'])
@@ -5331,7 +5332,10 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
         if _pay == 0:
             unpaid_days += _days
         elif 0 < _pay < 1:
-            half_pay_days += _days
+            if _pay not in partial_pay_map:
+                partial_pay_map[_pay] = {'days': 0.0, 'names': set()}
+            partial_pay_map[_pay]['days'] += _days
+            partial_pay_map[_pay]['names'].add(_lr['leave_name'])
         leave_rows.append({'total_days': _days, 'pay_rate': _lr['pay_rate'],
                            'leave_name': _lr['leave_name'], 'code': _lr['code']})
     actual_days = total_work_days - leave_days
@@ -5476,17 +5480,17 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
         })
         deduction_total += deduct
 
-    if half_pay_days > 0 and daily_wage > 0:
-        leave_names = '、'.join(set(
-            r['leave_name'] for r in leave_rows if 0 < float(r['pay_rate']) < 1
-        ))
-        deduct = round(daily_wage * half_pay_days * 0.5, 2)
-        items.append({
-            'id': 'halfpay', 'name': f'半薪假扣款（{leave_names}）', 'type': 'deduction',
-            'amount': deduct, 'formula': '',
-            'calc_note': f'{half_pay_days}天 × 日薪${round(daily_wage, 0)} × 0.5',
-        })
-        deduction_total += deduct
+    for _pp_rate, _pp in sorted(partial_pay_map.items()):
+        if _pp['days'] > 0 and daily_wage > 0:
+            _deduct_ratio = round(1.0 - _pp_rate, 4)  # 扣款比例 = 1 - pay_rate
+            _pp_deduct = round(daily_wage * _pp['days'] * _deduct_ratio, 2)
+            _pp_names  = '、'.join(_pp['names'])
+            items.append({
+                'id': f'halfpay_{int(_pp_rate*100)}', 'name': f'部分薪假扣款（{_pp_names}）',
+                'type': 'deduction', 'amount': _pp_deduct, 'formula': '',
+                'calc_note': f'{_pp["days"]}天 × 日薪${round(daily_wage,0)} × {_deduct_ratio}（pay_rate={_pp_rate}）',
+            })
+            deduction_total += _pp_deduct
 
     # ── 月薪制：缺勤扣款（打卡記錄核查） ─────────────────────
     absent_days = 0
@@ -5497,19 +5501,25 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
               AND TO_CHAR(punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM')=%s
         """, (staff['id'], month)).fetchall()
         punched_dates = {r['work_date'].isoformat() if hasattr(r['work_date'], 'isoformat') else str(r['work_date']) for r in punch_rows}
-        # 已核准請假日期集合
+        # 已核准請假日期集合（含跨月假單，需用 start_date<=月末 AND end_date>=月初）
         leave_date_rows = conn.execute("""
             SELECT start_date, end_date FROM leave_requests
             WHERE staff_id=%s AND status='approved'
-              AND TO_CHAR(start_date,'YYYY-MM')=%s
-        """, (staff['id'], month)).fetchall()
+              AND start_date <= %s AND end_date >= %s
+        """, (staff['id'], month_end, month_start)).fetchall()
         leave_date_set = set()
         for _lr in leave_date_rows:
             _ld = _lr['start_date']
             _le = _lr['end_date']
-            while _ld <= _le:
-                leave_date_set.add(_ld.isoformat() if hasattr(_ld, 'isoformat') else str(_ld))
-                _ld += _td5(days=1)
+            # 只加入本月範圍內的日期
+            _ld_str = _ld.isoformat() if hasattr(_ld, 'isoformat') else str(_ld)
+            _le_str = _le.isoformat() if hasattr(_le, 'isoformat') else str(_le)
+            _ld_eff = _d5.fromisoformat(max(_ld_str, month_start))
+            _le_eff = _d5.fromisoformat(min(_le_str, month_end))
+            _cur = _ld_eff
+            while _cur <= _le_eff:
+                leave_date_set.add(_cur.isoformat())
+                _cur += _td5(days=1)
         # 缺勤 = 排班但未打卡且非假日，僅計算過去日期
         absent_date_list = sorted(
             ds for ds in scheduled_dates

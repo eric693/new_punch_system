@@ -2295,7 +2295,9 @@ def _do_line_leave_submit(staff, user_id, leave_type_name, start_date, end_date,
             _send_line_punch(user_id, f'找不到假別「{leave_type_name}」\n可用：{"、".join(r["name"] for r in avail)}')
             return
 
-        days = _calc_leave_days(start_date, end_date, start_time=start_time, end_time=end_time)
+        sched = _get_scheduled_dates(conn, staff['id'], start_date, end_date)
+        days = _calc_leave_days(start_date, end_date, start_time=start_time, end_time=end_time,
+                                scheduled_dates=sched)
         year = int(start_date[:4])
         bal = conn.execute("""
             SELECT total_days, used_days FROM leave_balances
@@ -4438,9 +4440,23 @@ def _calc_annual_leave_schedule(hire_date_str):
 
     return result
 
+def _get_scheduled_dates(conn, staff_id, start_date, end_date):
+    """回傳員工在 [start_date, end_date] 內的排班日期集合。
+    若無排班記錄則回傳 None，讓呼叫方退回到週一至週五邏輯。"""
+    rows = conn.execute("""
+        SELECT DISTINCT shift_date FROM shift_assignments
+        WHERE staff_id=%s AND shift_date BETWEEN %s AND %s
+    """, (staff_id, start_date, end_date)).fetchall()
+    if not rows:
+        return None
+    return {(r['shift_date'].isoformat() if hasattr(r['shift_date'], 'isoformat') else str(r['shift_date'])) for r in rows}
+
+
 def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=False,
-                     start_time=None, end_time=None):
-    """計算請假天數（排除週日）。
+                     start_time=None, end_time=None, scheduled_dates=None):
+    """計算請假天數。
+    若提供 scheduled_dates（set of 'YYYY-MM-DD'），以排班記錄判斷工作日（支援週末班）；
+    否則排除週六週日（weekday < 5）。
     若提供 start_time/end_time（HH:MM），以 每日小時數 ÷ 8 計算，四捨五入至 0.5。
     否則沿用 start_half/end_half 半天旗標邏輯。
     """
@@ -4451,6 +4467,11 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
     except Exception:
         return 0.0
     if e < s: return 0.0
+
+    def _is_workday(dt):
+        if scheduled_dates is not None:
+            return dt.isoformat() in scheduled_dates
+        return dt.weekday() < 5
 
     # Time-based: hours ÷ 8 per working day
     if start_time and end_time:
@@ -4463,7 +4484,7 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
         if daily_hours > 0:
             working_days = sum(
                 1 for i in range((e - s).days + 1)
-                if (s + _tdd(days=i)).weekday() < 5
+                if _is_workday(s + _tdd(days=i))
             )
             raw = working_days * daily_hours / 8.0
             return max(0.5, round(raw * 2) / 2)  # round to nearest 0.5, min 0.5
@@ -4472,7 +4493,7 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
     days = 0.0
     cur  = s
     while cur <= e:
-        if cur.weekday() < 5:
+        if _is_workday(cur):
             if cur == s and cur == e:
                 if start_half and end_half: days += 1.0
                 elif start_half or end_half: days += 0.5
@@ -4598,12 +4619,14 @@ def api_leave_request_admin_create():
     if not all([sid, leave_type_id, start_date, end_date]):
         return jsonify({'error': '缺少必要欄位'}), 400
 
-    total_days = _calc_leave_days(start_date, end_date,
-                                  start_time=lv_start_time, end_time=lv_end_time)
-    if total_days <= 0:
-        return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
-
     with get_db() as conn:
+        sched = _get_scheduled_dates(conn, sid, start_date, end_date)
+        total_days = _calc_leave_days(start_date, end_date,
+                                      start_time=lv_start_time, end_time=lv_end_time,
+                                      scheduled_dates=sched)
+        if total_days <= 0:
+            return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
+
         row = conn.execute("""
             INSERT INTO leave_requests
               (staff_id, leave_type_id, start_date, end_date,
@@ -4715,12 +4738,14 @@ def api_leave_submit():
     if not all([leave_type_id, start_date, end_date]):
         return jsonify({'error': '缺少必要欄位'}), 400
 
-    total_days = _calc_leave_days(start_date, end_date,
-                                  start_time=lv_start_time, end_time=lv_end_time)
-    if total_days <= 0:
-        return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
-
     with get_db() as conn:
+        sched = _get_scheduled_dates(conn, sid, start_date, end_date)
+        total_days = _calc_leave_days(start_date, end_date,
+                                      start_time=lv_start_time, end_time=lv_end_time,
+                                      scheduled_dates=sched)
+        if total_days <= 0:
+            return jsonify({'error': '請假天數不合理，請檢查日期'}), 400
+
         # Check balance for types with limits
         lt = conn.execute("SELECT * FROM leave_types WHERE id=%s", (leave_type_id,)).fetchone()
         if lt and lt['max_days'] is not None:
@@ -5333,7 +5358,8 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
         _e_time = (_lr['lv_end_time']   if _ed == _eff_e else None)
         _days = _calc_leave_days(_eff_s, _eff_e,
                                  start_half=_s_half, end_half=_e_half,
-                                 start_time=_s_time, end_time=_e_time)
+                                 start_time=_s_time, end_time=_e_time,
+                                 scheduled_dates=scheduled_dates if scheduled_dates else None)
         leave_days += _days
         _pay = float(_lr['pay_rate'])
         if _pay == 0:
@@ -11839,11 +11865,9 @@ def _line_submit_leave(staff, user_id, text):
             WHERE staff_id=%s AND leave_type_id=%s AND year=%s
         """, (staff['id'], lt['id'], int(year))).fetchone()
 
-        # Calculate requested days (exclude Saturday and Sunday)
-        from datetime import timedelta as _tdlv
-        s = _dlv.fromisoformat(date_str1); e = _dlv.fromisoformat(date_str2)
-        days = sum(1 for i in range((e-s).days+1)
-                   if (_dlv.fromisoformat(date_str1) + __import__('datetime').timedelta(days=i)).weekday() < 5)
+        # Calculate requested days (schedule-aware)
+        sched = _get_scheduled_dates(conn, staff['id'], date_str1, date_str2)
+        days = _calc_leave_days(date_str1, date_str2, scheduled_dates=sched)
 
         remain = None
         if bal:

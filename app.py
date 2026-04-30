@@ -4463,7 +4463,7 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
         if daily_hours > 0:
             working_days = sum(
                 1 for i in range((e - s).days + 1)
-                if (s + _tdd(days=i)).weekday() != 6
+                if (s + _tdd(days=i)).weekday() < 5
             )
             raw = working_days * daily_hours / 8.0
             return max(0.5, round(raw * 2) / 2)  # round to nearest 0.5, min 0.5
@@ -4472,7 +4472,7 @@ def _calc_leave_days(start_date_str, end_date_str, start_half=False, end_half=Fa
     days = 0.0
     cur  = s
     while cur <= e:
-        if cur.weekday() != 6:
+        if cur.weekday() < 5:
             if cur == s and cur == e:
                 if start_half and end_half: days += 1.0
                 elif start_half or end_half: days += 0.5
@@ -5421,7 +5421,7 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
                 ORDER BY sort_order, id
             """).fetchall()
         for it in salary_items_rows:
-            calc_amt = _eval_formula(it['formula'] or '', base_salary or insured_salary,
+            calc_amt = _eval_formula(it['formula'] or '', hourly_base_pay,
                                      insured_salary, service_years)
             amt, overridden = _apply_override(it['id'], calc_amt)
             note = f'手動設定 ${amt}' if overridden else (it['formula'] or '')
@@ -11839,11 +11839,11 @@ def _line_submit_leave(staff, user_id, text):
             WHERE staff_id=%s AND leave_type_id=%s AND year=%s
         """, (staff['id'], lt['id'], int(year))).fetchone()
 
-        # Calculate requested days (exclude Sunday)
+        # Calculate requested days (exclude Saturday and Sunday)
         from datetime import timedelta as _tdlv
         s = _dlv.fromisoformat(date_str1); e = _dlv.fromisoformat(date_str2)
         days = sum(1 for i in range((e-s).days+1)
-                   if (_dlv.fromisoformat(date_str1) + __import__('datetime').timedelta(days=i)).weekday() != 6)
+                   if (_dlv.fromisoformat(date_str1) + __import__('datetime').timedelta(days=i)).weekday() < 5)
 
         remain = None
         if bal:

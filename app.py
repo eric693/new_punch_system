@@ -5265,7 +5265,7 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
             for _d in range(1, days_in_month + 1):
                 _dt = _d5(y, m, _d)
                 _ds = _dt.isoformat()
-                if _dt.weekday() != 6 and _ds not in holiday_dates:
+                if _dt.weekday() < 5 and _ds not in holiday_dates:
                     scheduled_dates.add(_ds)
             total_work_days = len(scheduled_dates)
 

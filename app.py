@@ -5326,7 +5326,7 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
         SELECT COALESCE(SUM(ot_pay), 0) as total
         FROM overtime_requests
         WHERE staff_id=%s AND status='approved'
-          AND to_char(request_date,'YYYY-MM')=%s
+          AND to_char(ot_date,'YYYY-MM')=%s
     """, (staff['id'], month)).fetchone()
     ot_pay = float(ot_rows['total']) if ot_rows else 0.0
 
@@ -5373,6 +5373,18 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
                            'leave_name': _lr['leave_name'], 'code': _lr['code']})
     actual_days = total_work_days - leave_days
 
+    # 建立請假日期集合（供缺勤核查與時薪制加班估算排除請假日使用）
+    leave_date_set = set()
+    for _lr in _leave_raw:
+        _ld_str = str(_lr['start_date'])
+        _le_str = str(_lr['end_date'])
+        _ld_eff = _d5.fromisoformat(max(_ld_str, month_start))
+        _le_eff = _d5.fromisoformat(min(_le_str, month_end))
+        _cur = _ld_eff
+        while _cur <= _le_eff:
+            leave_date_set.add(_cur.isoformat())
+            _cur += _td5(days=1)
+
     # ── 日薪 / 時薪（用於請假扣款） ───────────────────────
     if salary_type == 'hourly':
         daily_wage  = hourly_rate * daily_hours   # 時薪制日薪 = 時薪 × 每日工時
@@ -5413,8 +5425,10 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
         # 時薪制加班費（從打卡計算，若無申請記錄則估算）
         # 先用「加班申請」核准金額；若為 0 則嘗試從工時估算
         if ot_pay == 0 and actual_work_hours > 0:
-            # 每天超過 daily_hours 的部分算加班
+            # 每天超過 daily_hours 的部分算加班，排除已核准請假日
             for pd in punch_details:
+                if pd.get('date') in leave_date_set:
+                    continue
                 overtime_h = max(0.0, pd['net_hours'] - daily_hours)
                 if overtime_h > 0:
                     h1 = min(overtime_h, 2.0)
@@ -5534,25 +5548,7 @@ def _auto_generate_salary(conn, staff, month, work_days=None):
               AND TO_CHAR(punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM')=%s
         """, (staff['id'], month)).fetchall()
         punched_dates = {r['work_date'].isoformat() if hasattr(r['work_date'], 'isoformat') else str(r['work_date']) for r in punch_rows}
-        # 已核准請假日期集合（含跨月假單，需用 start_date<=月末 AND end_date>=月初）
-        leave_date_rows = conn.execute("""
-            SELECT start_date, end_date FROM leave_requests
-            WHERE staff_id=%s AND status='approved'
-              AND start_date <= %s AND end_date >= %s
-        """, (staff['id'], month_end, month_start)).fetchall()
-        leave_date_set = set()
-        for _lr in leave_date_rows:
-            _ld = _lr['start_date']
-            _le = _lr['end_date']
-            # 只加入本月範圍內的日期
-            _ld_str = _ld.isoformat() if hasattr(_ld, 'isoformat') else str(_ld)
-            _le_str = _le.isoformat() if hasattr(_le, 'isoformat') else str(_le)
-            _ld_eff = _d5.fromisoformat(max(_ld_str, month_start))
-            _le_eff = _d5.fromisoformat(min(_le_str, month_end))
-            _cur = _ld_eff
-            while _cur <= _le_eff:
-                leave_date_set.add(_cur.isoformat())
-                _cur += _td5(days=1)
+        # 已核准請假日期集合（重用上方從 _leave_raw 建立的 leave_date_set）
         # 缺勤 = 排班但未打卡且非假日，僅計算過去日期
         absent_date_list = sorted(
             ds for ds in scheduled_dates
@@ -12515,9 +12511,13 @@ def mobile_salary():
     staff_id = int(u['sub'])
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, month, base_salary, deduction_total, net_pay,
-                      status, confirmed_at, created_at
-               FROM salary_records WHERE staff_id=%s ORDER BY month DESC LIMIT 12""",
+            """SELECT sr.id, sr.month, sr.base_salary, sr.allowance_total, sr.deduction_total,
+                      sr.net_pay, sr.ot_pay, sr.actual_work_hours, sr.leave_days, sr.absent_days,
+                      sr.status, sr.confirmed_at, sr.created_at,
+                      ps.salary_type, ps.hourly_rate
+               FROM salary_records sr
+               JOIN punch_staff ps ON ps.id = sr.staff_id
+               WHERE sr.staff_id=%s ORDER BY sr.month DESC LIMIT 12""",
             (staff_id,)
         ).fetchall()
     data = []
@@ -12525,7 +12525,8 @@ def mobile_salary():
         d = dict(r)
         for k in ('confirmed_at', 'created_at'):
             if d.get(k): d[k] = str(d[k])
-        for k in ('base_salary', 'deduction_total', 'net_pay'):
+        for k in ('base_salary', 'allowance_total', 'deduction_total', 'net_pay',
+                  'ot_pay', 'actual_work_hours', 'leave_days', 'absent_days', 'hourly_rate'):
             if d.get(k) is not None: d[k] = float(d[k])
         data.append(d)
     return jsonify(data)
@@ -12551,12 +12552,14 @@ def mobile_overtime():
         hours = float(hours)
     except Exception:
         return jsonify({'error': '格式錯誤'}), 400
+    from datetime import date as _dt_today
+    request_date = _dt_today.today().isoformat()
     with get_db() as conn:
         conn.execute(
             """INSERT INTO overtime_requests
                (staff_id, ot_date, request_date, ot_hours, reason, status)
                VALUES (%s, %s, %s, %s, %s, 'pending')""",
-            (staff_id, ot_date, ot_date, hours, reason)
+            (staff_id, ot_date, request_date, hours, reason)
         )
     return jsonify({'ok': True})
 

@@ -4985,6 +4985,8 @@ def init_salary_db():
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS salary_item_ids JSONB DEFAULT NULL",
         "ALTER TABLE punch_staff ADD COLUMN IF NOT EXISTS salary_item_overrides JSONB DEFAULT NULL",
         "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS income_tax_withheld NUMERIC(12,2) DEFAULT 0",
+        "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS actual_work_hours NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS punch_details JSONB DEFAULT '[]'",
         """CREATE TABLE IF NOT EXISTS salary_advances (
             id           SERIAL PRIMARY KEY,
             staff_id     INT REFERENCES punch_staff(id) ON DELETE CASCADE,
@@ -5064,11 +5066,16 @@ def salary_record_row(row):
     if not row: return None
     d = dict(row)
     for f in ['base_salary','insured_salary','work_days','actual_days','leave_days',
-              'unpaid_days','ot_pay','allowance_total','deduction_total','net_pay']:
+              'unpaid_days','ot_pay','allowance_total','deduction_total','net_pay',
+              'actual_work_hours']:
         if d.get(f) is not None: d[f] = float(d[f])
     if isinstance(d.get('items'), str):
         try: d['items'] = _json.loads(d['items'])
         except (ValueError, TypeError): d['items'] = []
+    if isinstance(d.get('punch_details'), str):
+        try: d['punch_details'] = _json.loads(d['punch_details'])
+        except (ValueError, TypeError): d['punch_details'] = []
+    if d.get('punch_details') is None: d['punch_details'] = []
     if d.get('confirmed_at'): d['confirmed_at'] = d['confirmed_at'].isoformat()
     if d.get('created_at'):   d['created_at']   = d['created_at'].isoformat()
     if d.get('updated_at'):   d['updated_at']   = d['updated_at'].isoformat()
@@ -5714,26 +5721,30 @@ def api_salary_generate():
             for staff in staff_list:
                 data = _auto_generate_salary(conn, dict(staff), month)
                 items_json = _json.dumps(data['items'], ensure_ascii=False)
+                punch_details_json = _json.dumps(data.get('punch_details', []), ensure_ascii=False)
+                stored_base = data['hourly_base_pay'] if data['salary_type'] == 'hourly' else data['base_salary']
                 conn.execute("""
                     INSERT INTO salary_records
                       (staff_id, month, base_salary, insured_salary, work_days, actual_days,
                        leave_days, unpaid_days, ot_pay, allowance_total, deduction_total,
-                       net_pay, items, status, updated_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,'draft',NOW())
+                       net_pay, items, actual_work_hours, punch_details, status, updated_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s::jsonb,'draft',NOW())
                     ON CONFLICT (staff_id, month) DO UPDATE
                       SET base_salary=%s, insured_salary=%s, work_days=%s, actual_days=%s,
                           leave_days=%s, unpaid_days=%s, ot_pay=%s, allowance_total=%s,
                           deduction_total=%s, net_pay=%s, items=%s::jsonb,
+                          actual_work_hours=%s, punch_details=%s::jsonb,
                           status=CASE WHEN salary_records.status='confirmed' THEN 'confirmed' ELSE 'draft' END,
                           updated_at=NOW()
                 """, (
-                    data['staff_id'], month, data['base_salary'], data['insured_salary'],
+                    data['staff_id'], month, stored_base, data['insured_salary'],
                     data['work_days'], data['actual_days'], data['leave_days'], data['unpaid_days'],
                     data['ot_pay'], data['allowance_total'], data['deduction_total'],
-                    data['net_pay'], items_json,
-                    data['base_salary'], data['insured_salary'], data['work_days'], data['actual_days'],
+                    data['net_pay'], items_json, data['actual_work_hours'], punch_details_json,
+                    stored_base, data['insured_salary'], data['work_days'], data['actual_days'],
                     data['leave_days'], data['unpaid_days'], data['ot_pay'], data['allowance_total'],
                     data['deduction_total'], data['net_pay'], items_json,
+                    data['actual_work_hours'], punch_details_json,
                 ))
                 generated += 1
         finally:

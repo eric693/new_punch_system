@@ -2451,9 +2451,9 @@ def _handle_conv_ot(staff, user_id, state, text=None, pb_data=None):
         with get_db() as conn:
             row = conn.execute("""
                 INSERT INTO overtime_requests
-                  (staff_id, request_date, start_time, end_time, ot_hours, reason, status)
-                VALUES (%s,%s,%s,%s,%s,%s,'pending') RETURNING id
-            """, (staff['id'], d['date'], d['start_time'], d['end_time'],
+                  (staff_id, ot_date, request_date, start_time, end_time, ot_hours, reason, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,'pending') RETURNING id
+            """, (staff['id'], d['date'], d['date'], d['start_time'], d['end_time'],
                   d['hours'], reason or '（LINE 加班申請）')).fetchone()
         _send_line_punch(user_id,
             f'✅ 加班申請已送出\n\n'
@@ -3986,9 +3986,9 @@ def api_ot_submit():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO overtime_requests
-              (staff_id, request_date, start_time, end_time, ot_hours, reason, day_type)
-            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (sid, request_date, start_time, end_time, ot_hours, reason, day_type)).fetchone()
+              (staff_id, ot_date, request_date, start_time, end_time, ot_hours, reason, day_type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (sid, request_date, request_date, start_time, end_time, ot_hours, reason, day_type)).fetchone()
     return jsonify(ot_req_row(row)), 201
 
 
@@ -12068,10 +12068,10 @@ def _line_submit_overtime(staff, user_id, text):
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO overtime_requests
-              (staff_id, request_date, start_time, end_time, ot_hours, reason, status)
-            VALUES (%s, %s, NULL, NULL, %s, %s, 'pending')
+              (staff_id, ot_date, request_date, start_time, end_time, ot_hours, reason, status)
+            VALUES (%s, %s, %s, NULL, NULL, %s, %s, 'pending')
             RETURNING id
-        """, (staff['id'], date_str, hours, reason)).fetchone()
+        """, (staff['id'], date_str, date_str, hours, reason)).fetchone()
 
     _send_line_punch(user_id,
         f'✅ 加班申請已送出\n\n'
@@ -12515,17 +12515,17 @@ def mobile_salary():
     staff_id = int(u['sub'])
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, period_year, period_month, base_salary, bonus, deductions,
-                      net_salary, status, paid_at, created_at
-               FROM salary_records WHERE staff_id=%s ORDER BY period_year DESC, period_month DESC LIMIT 12""",
+            """SELECT id, month, base_salary, deduction_total, net_pay,
+                      status, confirmed_at, created_at
+               FROM salary_records WHERE staff_id=%s ORDER BY month DESC LIMIT 12""",
             (staff_id,)
         ).fetchall()
     data = []
     for r in rows:
         d = dict(r)
-        for k in ('paid_at','created_at'):
+        for k in ('confirmed_at', 'created_at'):
             if d.get(k): d[k] = str(d[k])
-        for k in ('base_salary','bonus','deductions','net_salary'):
+        for k in ('base_salary', 'deduction_total', 'net_pay'):
             if d.get(k) is not None: d[k] = float(d[k])
         data.append(d)
     return jsonify(data)

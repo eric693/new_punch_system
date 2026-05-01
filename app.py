@@ -106,19 +106,21 @@ def get_db():
                 _db_pool.check()
             except Exception:
                 pass
-    # Direct fallback with up to 3 attempts (handles brief DB blips)
+    # Direct fallback with up to 3 attempts (only retries on connection errors)
     last_exc = None
     for attempt in range(3):
         try:
-            with psycopg.connect(DATABASE_URL, row_factory=dict_row,
-                                 connect_timeout=10) as conn:
-                yield conn
-            return
+            raw = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10)
         except Exception as e:
             last_exc = e
             if attempt < 2:
                 print(f"[db] direct connect attempt {attempt+1} failed: {e}, retrying...")
                 time.sleep(2)
+            continue
+        # Connection succeeded; SQL errors from here propagate directly to caller
+        with raw:
+            yield raw
+        return
     raise last_exc
 
 def _hash_pw(pw):
@@ -10925,21 +10927,64 @@ def _broadcast_announcement_line(title, content):
 
 def _init_expense_db():
     sqls = [
+        # 先建依賴表，確保 expense_claims FK 不會失敗
+        """CREATE TABLE IF NOT EXISTS finance_categories (
+            id          SERIAL PRIMARY KEY,
+            name        TEXT NOT NULL,
+            type        TEXT NOT NULL DEFAULT 'expense',
+            color       TEXT DEFAULT '#4a7bda',
+            sort_order  INT DEFAULT 0,
+            active      BOOLEAN DEFAULT TRUE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS finance_documents (
+            id              SERIAL PRIMARY KEY,
+            filename        TEXT NOT NULL,
+            doc_type        TEXT DEFAULT '',
+            ocr_raw         JSONB DEFAULT '{}',
+            upload_date     DATE DEFAULT CURRENT_DATE,
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS finance_records (
+            id              SERIAL PRIMARY KEY,
+            record_date     DATE NOT NULL,
+            category_id     INT REFERENCES finance_categories(id) ON DELETE SET NULL,
+            type            TEXT NOT NULL DEFAULT 'expense',
+            title           TEXT NOT NULL,
+            amount          NUMERIC(14,2) NOT NULL DEFAULT 0,
+            tax_amount      NUMERIC(14,2) DEFAULT 0,
+            vendor          TEXT DEFAULT '',
+            invoice_no      TEXT DEFAULT '',
+            note            TEXT DEFAULT '',
+            document_id     INT,
+            created_by      TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )""",
         """CREATE TABLE IF NOT EXISTS expense_claims (
-            id                SERIAL PRIMARY KEY,
-            staff_id          INT REFERENCES punch_staff(id) ON DELETE CASCADE,
-            title             TEXT NOT NULL,
-            amount            NUMERIC(12,2) NOT NULL DEFAULT 0,
-            expense_date      DATE NOT NULL,
-            category          TEXT DEFAULT '',
-            note              TEXT DEFAULT '',
-            status            TEXT NOT NULL DEFAULT 'pending',
-            document_id       INT REFERENCES finance_documents(id) ON DELETE SET NULL,
-            review_note       TEXT DEFAULT '',
-            reviewed_by       TEXT DEFAULT '',
-            reviewed_at       TIMESTAMPTZ,
-            finance_record_id INT REFERENCES finance_records(id) ON DELETE SET NULL,
-            created_at        TIMESTAMPTZ DEFAULT NOW()
+            id                   SERIAL PRIMARY KEY,
+            staff_id             INT REFERENCES punch_staff(id) ON DELETE CASCADE,
+            title                TEXT NOT NULL,
+            amount               NUMERIC(12,2) NOT NULL DEFAULT 0,
+            expense_date         DATE NOT NULL,
+            category             TEXT DEFAULT '',
+            note                 TEXT DEFAULT '',
+            status               TEXT NOT NULL DEFAULT 'pending',
+            document_id          INT REFERENCES finance_documents(id) ON DELETE SET NULL,
+            review_note          TEXT DEFAULT '',
+            reviewed_by          TEXT DEFAULT '',
+            reviewed_at          TIMESTAMPTZ,
+            finance_record_id    INT REFERENCES finance_records(id) ON DELETE SET NULL,
+            created_at           TIMESTAMPTZ DEFAULT NOW(),
+            document_id2         INT REFERENCES finance_documents(id) ON DELETE SET NULL,
+            reimbursement_method TEXT NOT NULL DEFAULT '匯款',
+            bank_name            TEXT NOT NULL DEFAULT '',
+            bank_branch          TEXT NOT NULL DEFAULT '',
+            bank_account         TEXT NOT NULL DEFAULT '',
+            account_holder       TEXT NOT NULL DEFAULT '',
+            expense_type         TEXT NOT NULL DEFAULT '支出',
+            company              TEXT NOT NULL DEFAULT '進光設計',
+            vendor               TEXT NOT NULL DEFAULT ''
         )""",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS document_id2 INT REFERENCES finance_documents(id) ON DELETE SET NULL",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS reimbursement_method TEXT NOT NULL DEFAULT '匯款'",
@@ -11239,19 +11284,24 @@ def api_expense_admin_list():
     conds, params = ['TRUE'], []
     if status: conds.append("ec.status=%s");                              params.append(status)
     if ym:     conds.append("TO_CHAR(ec.expense_date,'YYYY-MM')=%s");    params.append(ym)
-    with get_db() as conn:
-        rows = conn.execute(f"""
-            SELECT ec.*, ps.name as staff_name, ps.employee_code
-            FROM expense_claims ec
-            JOIN punch_staff ps ON ps.id=ec.staff_id
-            WHERE {' AND '.join(conds)}
-            ORDER BY ec.expense_date ASC, ec.created_at ASC
-        """, params).fetchall()
+    try:
+        with get_db() as conn:
+            rows = conn.execute(f"""
+                SELECT ec.*, ps.name as staff_name, ps.employee_code
+                FROM expense_claims ec
+                LEFT JOIN punch_staff ps ON ps.id=ec.staff_id
+                WHERE {' AND '.join(conds)}
+                ORDER BY ec.expense_date ASC, ec.created_at ASC
+            """, params).fetchall()
+    except Exception as e:
+        print(f"[expense/claims GET] DB error: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'資料庫錯誤：{e}'}), 500
     result = []
     for r in rows:
         d = _expense_row(r)
-        d['staff_name']    = r['staff_name']
-        d['employee_code'] = r['employee_code']
+        d['staff_name']    = r['staff_name'] or ''
+        d['employee_code'] = (r['employee_code'] or '') if r['employee_code'] is not None else ''
         result.append(d)
     return jsonify(result)
 

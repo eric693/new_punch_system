@@ -9984,7 +9984,7 @@ async function _fetchExpenseFromServer(ym, reRenderAfter) {
   const params = new URLSearchParams();
   if (ym) params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
-  const {ok, data} = await api(`/api/expense/claims${qs}`, {}, true);
+  const {ok, data} = await api(`/api/expense/claims${qs}`, {});
   if (!ok) return false;
   _expAllClaims = Array.isArray(data) ? data : [];
   _expCacheYm   = ym;

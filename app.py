@@ -2308,11 +2308,14 @@ def _do_line_leave_submit(staff, user_id, leave_type_name, start_date, end_date,
 
         remain = None
         if bal:
-            remain = float(bal['total_days'] or 0) - float(bal['used_days'] or 0)
-            if remain < days:
-                _send_line_punch(user_id,
-                    f'⚠️ {lt["name"]} 餘額不足\n剩餘 {remain:.1f} 天，申請 {days} 天\n\n請至員工系統調整後再申請。')
-                return
+            quota = float(bal['total_days']) if bal['total_days'] else (float(lt['max_days']) if lt['max_days'] else None)
+            used  = float(bal['used_days'] or 0)
+            if quota is not None:
+                remain = quota - used
+                if remain < days:
+                    _send_line_punch(user_id,
+                        f'⚠️ {lt["name"]} 餘額不足\n剩餘 {remain:.1f} 天，申請 {days} 天\n\n請至員工系統調整後再申請。')
+                    return
 
         row = conn.execute("""
             INSERT INTO leave_requests
@@ -11803,7 +11806,7 @@ def _line_query_leave_balance(staff, user_id):
     try:
         with get_db() as conn:
             rows = conn.execute("""
-                SELECT lb.total_days, lb.used_days, lt.name AS type_name
+                SELECT lb.total_days, lb.used_days, lt.name AS type_name, lt.max_days
                 FROM leave_balances lb
                 JOIN leave_types lt ON lt.id=lb.leave_type_id
                 WHERE lb.staff_id=%s AND lb.year=%s
@@ -11817,11 +11820,15 @@ def _line_query_leave_balance(staff, user_id):
         return
     lines = [f'📋 {staff["name"]} {year} 年假期餘額']
     for r in rows:
-        total = float(r['total_days'] or 0)
+        # total_days=0 表示尚未由管理員覆寫，以 leave_types.max_days 為準
+        total = float(r['total_days']) if r['total_days'] else (float(r['max_days']) if r['max_days'] else 0.0)
         used  = float(r['used_days']  or 0)
         remain= total - used
-        bar   = '▓' * int(remain) + '░' * max(0, int(total - remain))
-        lines.append(f'\n【{r["type_name"]}】\n  剩餘 {remain:.1f} 天 / 共 {total:.0f} 天\n  {bar}')
+        if r['max_days'] is None:
+            lines.append(f'\n【{r["type_name"]}】\n  剩餘 {remain:.1f} 天（無上限）')
+        else:
+            bar = '▓' * int(remain) + '░' * max(0, int(total - remain))
+            lines.append(f'\n【{r["type_name"]}】\n  剩餘 {remain:.1f} 天 / 共 {total:.0f} 天\n  {bar}')
     _send_line_punch(user_id, '\n'.join(lines))
 
 
@@ -11917,12 +11924,15 @@ def _line_submit_leave(staff, user_id, text):
 
         remain = None
         if bal:
-            remain = float(bal['total_days'] or 0) - float(bal['used_days'] or 0)
-            if remain < days:
-                _send_line_punch(user_id,
-                    f'⚠️ {lt["name"]} 餘額不足\n剩餘 {remain:.1f} 天，申請 {days} 天\n\n'
-                    f'請至員工系統調整後再申請。')
-                return
+            quota = float(bal['total_days']) if bal['total_days'] else (float(lt['max_days']) if lt['max_days'] else None)
+            used  = float(bal['used_days'] or 0)
+            if quota is not None:
+                remain = quota - used
+                if remain < days:
+                    _send_line_punch(user_id,
+                        f'⚠️ {lt["name"]} 餘額不足\n剩餘 {remain:.1f} 天，申請 {days} 天\n\n'
+                        f'請至員工系統調整後再申請。')
+                    return
 
         # Create leave request
         row = conn.execute("""

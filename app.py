@@ -162,6 +162,10 @@ _BADGES_TTL = 8.0            # 8 秒（足夠吸收 setInterval+手動觸發的�
 _admin_html_cache: dict = {}
 _admin_tmtime_cache: dict = {'at': 0.0, 'mtime': 0}  # 快取 template mtime（避免每 request 都做 IO）
 
+# 費用審核清單快取 —— key: "status:ym" → {data, at}
+_expense_list_cache: dict = {}
+_EXPENSE_LIST_TTL = 10.0  # 10 秒：審核操作後前端會主動清除快取
+
 # 重量級查詢快取 —— 避免每次切頁都重跑複雜 GROUP BY
 _dashboard_cache:    dict = {}   # key: "month" → {data, at}
 _punch_summary_cache: dict = {}  # key: "month" → {data, at}
@@ -11300,6 +11304,8 @@ def api_expense_admin_create():
     if staff:
         d['staff_name']    = staff['name']
         d['employee_code'] = staff['employee_code'] or ''
+    _expense_list_cache.clear()
+    _badges_cache.clear()
     return jsonify(d), 201
 
 
@@ -11307,18 +11313,24 @@ def api_expense_admin_create():
 @login_required
 def api_expense_admin_list():
     status = request.args.get('status', '')
-    ym     = request.args.get('ym', '')   # YYYY-MM
-    conds, params = ['TRUE'], []
-    if status: conds.append("ec.status=%s");                              params.append(status)
-    if ym:     conds.append("TO_CHAR(ec.expense_date,'YYYY-MM')=%s");    params.append(ym)
+    ym     = request.args.get('ym', '')
+    cache_key = f"{status}:{ym}"
+    now = time.time()
+    cached = _expense_list_cache.get(cache_key)
+    if cached and now - cached['at'] < _EXPENSE_LIST_TTL:
+        return jsonify(cached['data'])
+    conds, params = [], []
+    if status: conds.append("ec.status=%s");                           params.append(status)
+    if ym:     conds.append("TO_CHAR(ec.expense_date,'YYYY-MM')=%s"); params.append(ym)
+    where = ('WHERE ' + ' AND '.join(conds)) if conds else ''
     try:
         with get_db() as conn:
             rows = conn.execute(f"""
                 SELECT ec.*, ps.name as staff_name, ps.employee_code
                 FROM expense_claims ec
                 LEFT JOIN punch_staff ps ON ps.id=ec.staff_id
-                WHERE {' AND '.join(conds)}
-                ORDER BY ec.expense_date ASC, ec.created_at ASC
+                {where}
+                ORDER BY ec.created_at DESC
             """, params).fetchall()
     except Exception as e:
         print(f"[expense/claims GET] DB error: {e}")
@@ -11331,6 +11343,7 @@ def api_expense_admin_list():
             d['staff_name']    = r['staff_name'] or ''
             d['employee_code'] = (r['employee_code'] or '') if r['employee_code'] is not None else ''
             result.append(d)
+        _expense_list_cache[cache_key] = {'data': result, 'at': now}
         return jsonify(result)
     except Exception as e:
         print(f"[expense/claims] serialize error: {e}")
@@ -11414,6 +11427,7 @@ def api_expense_review(cid):
             d['staff_name']    = staff['name']
             d['employee_code'] = staff['employee_code'] or ''
         _badges_cache.clear()
+        _expense_list_cache.clear()
         return jsonify(d)
     return ('', 404)
 
@@ -11446,6 +11460,7 @@ def api_expense_claim_edit(cid):
     if staff:
         d['staff_name']    = staff['name']
         d['employee_code'] = staff['employee_code'] or ''
+    _expense_list_cache.clear()
     return jsonify(d)
 
 
@@ -11454,6 +11469,7 @@ def api_expense_claim_edit(cid):
 def api_expense_claim_delete(cid):
     with get_db() as conn:
         conn.execute("DELETE FROM expense_claims WHERE id=%s", (cid,))
+    _expense_list_cache.clear()
     return jsonify({'deleted': cid})
 
 

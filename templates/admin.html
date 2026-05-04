@@ -9949,10 +9949,11 @@ async function submitAdminExpense() {
   }
 }
 
-let _expClaimsMap = {};
-let _expAllClaims = null;   // 目前 ym 下所有筆數（無狀態過濾）
-let _expCacheYm   = undefined; // 快取對應的 ym 值
-let _expLastError = '';     // 最近一次錯誤訊息
+let _expClaimsMap   = {};
+let _expAllClaims   = null;      // 目前 (status, ym) 下的筆數
+let _expCacheYm     = undefined; // 快取對應的 ym
+let _expCacheStatus = undefined; // 快取對應的 status
+let _expLastError   = '';        // 最近一次錯誤訊息
 
 async function loadExpenseReview(forceRefresh = false) {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
@@ -9960,16 +9961,16 @@ async function loadExpenseReview(forceRefresh = false) {
   const tbody  = document.getElementById('exp-review-tbody');
   if (!tbody) return;
 
-  const ymChanged = ym !== _expCacheYm;
+  // status 或 ym 改變時都要重拉（伺服器依 status 過濾，快取 key 不同）
+  const changed = status !== _expCacheStatus || ym !== _expCacheYm;
 
-  // 快取有效：client-side 立即過濾，背景更新資料
-  if (_expAllClaims !== null && !forceRefresh && !ymChanged) {
+  // 快取有效：直接渲染，背景靜默更新
+  if (_expAllClaims !== null && !forceRefresh && !changed) {
     _renderExpenseFiltered(status);
     _fetchExpenseFromServer(ym, true);
     return;
   }
 
-  // 需要重新從 server 拉：若表格空白才顯示 loading
   if (!tbody.querySelector('tr[data-exp-id]')) {
     tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   }
@@ -9982,32 +9983,30 @@ async function loadExpenseReview(forceRefresh = false) {
 }
 
 async function _fetchExpenseFromServer(ym, reRenderAfter) {
+  const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const params = new URLSearchParams();
-  if (ym) params.set('ym', ym);
+  if (status) params.set('status', status);
+  if (ym)     params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {});
   if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
-  _expAllClaims = Array.isArray(data) ? data : [];
-  _expCacheYm   = ym;
-  _expClaimsMap = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
-  if (reRenderAfter) {
-    const status = document.getElementById('exp-review-status')?.value ?? 'pending';
-    _renderExpenseFiltered(status);
-  }
+  _expAllClaims   = Array.isArray(data) ? data : [];
+  _expCacheYm     = ym;
+  _expCacheStatus = status;
+  _expClaimsMap   = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
+  if (reRenderAfter) _renderExpenseFiltered(status);
   return true;
 }
 
 function _renderExpenseFiltered(status) {
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody || _expAllClaims === null) return;
-  const filtered   = status ? _expAllClaims.filter(c => c.status === status) : _expAllClaims;
-  const pendingCnt = _expAllClaims.filter(c => c.status === 'pending').length;
-  setBadge('badge-expense-review', pendingCnt);
-  if (!filtered.length) {
+  // 資料已由伺服器依 status 過濾，直接渲染
+  if (!_expAllClaims.length) {
     tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無資料</div></td></tr>';
     return;
   }
-  tbody.innerHTML = filtered.map(_renderAdminExpenseRows).join('');
+  tbody.innerHTML = _expAllClaims.map(_renderAdminExpenseRows).join('');
 }
 
 function _renderAdminExpenseRows(c) {

@@ -9952,6 +9952,7 @@ async function submitAdminExpense() {
 let _expClaimsMap = {};
 let _expAllClaims = null;   // 目前 ym 下所有筆數（無狀態過濾）
 let _expCacheYm   = undefined; // 快取對應的 ym 值
+let _expLastError = '';     // 最近一次錯誤訊息
 
 async function loadExpenseReview(forceRefresh = false) {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
@@ -9974,7 +9975,7 @@ async function loadExpenseReview(forceRefresh = false) {
   }
   const ok = await _fetchExpenseFromServer(ym, false);
   if (!ok) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」</div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
     return;
   }
   _renderExpenseFiltered(status);
@@ -9985,7 +9986,7 @@ async function _fetchExpenseFromServer(ym, reRenderAfter) {
   if (ym) params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {});
-  if (!ok) return false;
+  if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
   _expAllClaims = Array.isArray(data) ? data : [];
   _expCacheYm   = ym;
   _expClaimsMap = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));

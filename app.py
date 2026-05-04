@@ -11300,13 +11300,18 @@ def api_expense_admin_list():
         print(f"[expense/claims GET] DB error: {e}")
         traceback.print_exc()
         return jsonify({'error': f'資料庫錯誤：{e}'}), 500
-    result = []
-    for r in rows:
-        d = _expense_row(r)
-        d['staff_name']    = r['staff_name'] or ''
-        d['employee_code'] = (r['employee_code'] or '') if r['employee_code'] is not None else ''
-        result.append(d)
-    return jsonify(result)
+    try:
+        result = []
+        for r in rows:
+            d = _expense_row(r)
+            d['staff_name']    = r['staff_name'] or ''
+            d['employee_code'] = (r['employee_code'] or '') if r['employee_code'] is not None else ''
+            result.append(d)
+        return jsonify(result)
+    except Exception as e:
+        print(f"[expense/claims] serialize error: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'資料處理錯誤：{e}'}), 500
 
 
 @app.route('/api/expense/claims/<int:cid>', methods=['PUT'])

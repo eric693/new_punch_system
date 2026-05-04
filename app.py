@@ -157,6 +157,11 @@ _ANN_TTL        = 30.0           # 30 秒（公告較常更新）
 _badges_cache:   dict = {}   # key: admin_id → {data, at}
 _BADGES_TTL = 8.0            # 8 秒（足夠吸收 setInterval+手動觸發的重複呼叫）
 
+# 後台 HTML render 快取 —— 避免每次進入 /admin 都重新渲染 700KB 模板
+# key: etag value（包含模板 mtime + admin_id + 權限）→ 渲染後的 HTML 字串
+_admin_html_cache: dict = {}
+_admin_tmtime_cache: dict = {'at': 0.0, 'mtime': 0}  # 快取 template mtime（避免每 request 都做 IO）
+
 # 重量級查詢快取 —— 避免每次切頁都重跑複雜 GROUP BY
 _dashboard_cache:    dict = {}   # key: "month" → {data, at}
 _punch_summary_cache: dict = {}  # key: "month" → {data, at}
@@ -921,24 +926,43 @@ def admin_logout():
 @app.route('/admin/')
 @login_required
 def admin_dashboard():
-    perms    = session.get('admin_permissions') or []
-    is_super = bool(session.get('admin_is_super'))
-    admin_id = session.get('admin_id', 0)
-    # ETag = template mtime + user identity，template 未改且權限未變時直接 304
-    template_path = os.path.join(app.template_folder or 'templates', 'admin.html')
-    try:
-        tmtime = int(os.path.getmtime(template_path))
-    except OSError:
-        tmtime = 0
-    etag_src = f"{tmtime}:{admin_id}:{sorted(perms)}:{is_super}"
+    perms        = session.get('admin_permissions') or []
+    is_super     = bool(session.get('admin_is_super'))
+    admin_id     = session.get('admin_id', 0)
+    display_name = session.get('admin_display_name', '')
+
+    # 快取 template mtime（每 30 秒才重新讀一次 IO）
+    now = time.time()
+    tc  = _admin_tmtime_cache
+    if now - tc['at'] > 30:
+        template_path = os.path.join(app.template_folder or 'templates', 'admin.html')
+        try:
+            tc['mtime'] = int(os.path.getmtime(template_path))
+        except OSError:
+            tc['mtime'] = 0
+        tc['at'] = now
+    tmtime = tc['mtime']
+
+    # ETag = template mtime + admin 身份（含 display_name，避免改名後顯示舊名）
+    etag_src = f"{tmtime}:{admin_id}:{sorted(perms)}:{is_super}:{display_name}"
     etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:16] + '"'
     if request.headers.get('If-None-Match') == etag:
         return ('', 304)
-    resp = make_response(render_template('admin.html',
-        admin_display_name=session.get('admin_display_name',''),
-        admin_permissions=perms,
-        admin_is_super=is_super,
-    ))
+
+    # 伺服器端 HTML render 快取：相同 etag 只渲染一次，不同 worker 各自暖機後共享
+    html = _admin_html_cache.get(etag)
+    if html is None:
+        html = render_template('admin.html',
+            admin_display_name=display_name,
+            admin_permissions=perms,
+            admin_is_super=is_super,
+        )
+        # 只保留最近 20 個版本（多帳號 × 多權限組合），避免無限增長
+        if len(_admin_html_cache) >= 20:
+            _admin_html_cache.clear()
+        _admin_html_cache[etag] = html
+
+    resp = make_response(html)
     resp.headers['ETag']          = etag
     resp.headers['Cache-Control'] = 'private, no-cache'
     return resp

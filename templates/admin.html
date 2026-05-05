@@ -1983,7 +1983,6 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </select>
       <span class="filter-label">年月</span>
       <input type="month" id="exp-review-ym" class="filter-input" style="min-width:130px" onchange="loadExpenseReview()">
-      <input type="text" id="exp-review-keyword" class="filter-input" placeholder="🔍 關鍵字搜尋…" style="min-width:180px" oninput="_renderExpenseFiltered()">
       <button class="btn btn-outline btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
       <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>
       <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">+ 新增費用申請</button>
@@ -4650,6 +4649,12 @@ async function _getStaffList() {
 
 async function staffSearchInput(q) {
   const dd = document.getElementById('staff-search-dd');
+  // 費用審核頁：直接過濾表格，不顯示下拉
+  if (_currentPage === 'expense-review') {
+    dd.style.display = 'none';
+    _renderExpenseFiltered();
+    return;
+  }
   if (!q || !q.trim()) { dd.style.display = 'none'; return; }
   const list = await _getStaffList();
   const ql = q.toLowerCase();
@@ -4752,6 +4757,13 @@ function showPage(page, e) {
   );
   const titles = { dash:'儀表板', punch:'打卡管理', sched:'排班管理', leave:'請假管理', salary:'薪資管理', ann:'公告管理', holiday:'國定假日', finance:'財務管理', adminmgr:'帳號管理', 'expense-review':'費用審核', worklog:'工作日誌', perf:'績效考核', stores:'門市管理', training:'教育訓練追蹤', quotation:'財報模組', 'vendor-mgr':'廠商名冊' };
   document.getElementById('page-title').textContent = titles[page] || page;
+  // 切換頁面時重設搜尋欄
+  const searchInput = document.getElementById('staff-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.placeholder = page === 'expense-review' ? '🔍 關鍵字搜尋費用…' : '🔍 搜尋員工...';
+  }
+  closeStaffSearch();
   // 儀表板每次刷新；expense-review 每次進入都更新
   if (page === 'dash')           { initDash(); return; }
   if (page === 'expense-review') { loadExpenseReview(); return; }
@@ -10013,7 +10025,7 @@ async function _fetchExpenseFromServer(ym, reRenderAfter) {
 function _renderExpenseFiltered(status) {
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody || _expAllClaims === null) return;
-  const kw = (document.getElementById('exp-review-keyword')?.value || '').trim().toLowerCase();
+  const kw = (document.getElementById('staff-search-input')?.value || '').trim().toLowerCase();
   let list = _expAllClaims;
   if (kw) {
     list = list.filter(c =>

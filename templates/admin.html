@@ -10041,13 +10041,15 @@ function _renderAdminExpenseRows(c) {
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
     <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
-    <td style="white-space:nowrap">
-      ${c.status === 'pending' ? `
-        <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
-        <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff;margin-left:4px" onclick="promptRejectExpense(${c.id})">拒絕</button>
-      ` : ''}
-      <button type="button" class="btn btn-sm btn-outline" style="margin-left:4px" onclick="openExpEditModal(${c.id})">編輯</button>
-      <button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff;margin-left:4px" onclick="deleteExpenseClaim(${c.id})">刪除</button>
+    <td style="min-width:110px">
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${c.status === 'pending' ? `
+          <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
+          <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff" onclick="promptRejectExpense(${c.id})">拒絕</button>
+        ` : ''}
+        <button type="button" class="btn btn-sm btn-outline" onclick="openExpEditModal(${c.id})">編輯</button>
+        <button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff" onclick="deleteExpenseClaim(${c.id})">刪除</button>
+      </div>
     </td>
   </tr>
   ${bankRow}${reviewerNoteRow}`;

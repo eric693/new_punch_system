@@ -1983,6 +1983,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </select>
       <span class="filter-label">年月</span>
       <input type="month" id="exp-review-ym" class="filter-input" style="min-width:130px" onchange="loadExpenseReview()">
+      <input type="text" id="exp-review-keyword" class="filter-input" placeholder="🔍 關鍵字搜尋…" style="min-width:180px" oninput="_renderExpenseFiltered()">
       <button class="btn btn-outline btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
       <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>
       <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">+ 新增費用申請</button>
@@ -10012,12 +10013,23 @@ async function _fetchExpenseFromServer(ym, reRenderAfter) {
 function _renderExpenseFiltered(status) {
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody || _expAllClaims === null) return;
-  // 資料已由伺服器依 status 過濾，直接渲染
-  if (!_expAllClaims.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無資料</div></td></tr>';
+  const kw = (document.getElementById('exp-review-keyword')?.value || '').trim().toLowerCase();
+  let list = _expAllClaims;
+  if (kw) {
+    list = list.filter(c =>
+      (c.staff_name  || '').toLowerCase().includes(kw) ||
+      (c.vendor      || '').toLowerCase().includes(kw) ||
+      (c.category    || '').toLowerCase().includes(kw) ||
+      (c.note        || '').toLowerCase().includes(kw) ||
+      (c.expense_date|| '').includes(kw) ||
+      String(c.amount || '').includes(kw)
+    );
+  }
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無符合資料</div></td></tr>';
     return;
   }
-  tbody.innerHTML = _expAllClaims.map(_renderAdminExpenseRows).join('');
+  tbody.innerHTML = list.map(_renderAdminExpenseRows).join('');
 }
 
 function _renderAdminExpenseRows(c) {

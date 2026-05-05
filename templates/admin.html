@@ -2165,10 +2165,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           </div>
 
           <div class="exp-row col2">
-            <div class="exp-field">
+            <div class="exp-field" style="position:relative">
               <label>廠商名稱（選填）</label>
-              <input class="fi" type="text" id="add-exp-vendor" placeholder="請款廠商" list="vendor-datalist" oninput="onExpVendorInput(this.value)">
-              <datalist id="vendor-datalist"></datalist>
+              <input class="fi" type="text" id="add-exp-vendor" placeholder="請款廠商" autocomplete="off"
+                oninput="onExpVendorInput(this.value)"
+                onfocus="showVendorDropdown(this.value)"
+                onblur="hideVendorDropdown()"
+                onkeydown="onVendorKeydown(event)">
+              <div id="exp-vendor-dropdown"
+                style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border:1px solid #dde3ef;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.13);z-index:9999;max-height:220px;overflow-y:auto"></div>
             </div>
             <div class="exp-field">
               <label>備註（選填）</label>
@@ -2294,9 +2299,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
             <label>費用類別</label>
             <input class="fi" type="text" id="edit-exp-category">
           </div>
-          <div class="exp-field">
+          <div class="exp-field" style="position:relative">
             <label>廠商名稱</label>
-            <input class="fi" type="text" id="edit-exp-vendor">
+            <input class="fi" type="text" id="edit-exp-vendor" autocomplete="off"
+              oninput="onEditExpVendorInput(this.value)"
+              onfocus="showEditVendorDropdown(this.value)"
+              onblur="hideEditVendorDropdown()"
+              onkeydown="if(event.key==='Escape'){const d=document.getElementById('edit-exp-vendor-dd');if(d)d.style.display='none'}">
+            <div id="edit-exp-vendor-dd"
+              style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border:1px solid #dde3ef;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.13);z-index:9999;max-height:220px;overflow-y:auto"></div>
           </div>
         </div>
         <div class="exp-field" style="margin-bottom:14px">
@@ -10300,13 +10311,103 @@ async function deleteVendorById(id) {
   showToast('已刪除', 'success');
 }
 
-function onExpVendorInput(val) {
-  const v = _vendors.find(x => x.name === val);
+function _fillVendorBank(v) {
   if (!v) return;
   document.getElementById('add-exp-bank-name').value      = v.bank_name      || '';
   document.getElementById('add-exp-bank-branch').value    = v.bank_branch    || '';
   document.getElementById('add-exp-account-holder').value = v.account_holder || '';
   document.getElementById('add-exp-bank-account').value   = v.bank_account   || '';
+}
+
+function onExpVendorInput(val) {
+  const exact = _vendors.find(x => x.name === val);
+  if (exact) _fillVendorBank(exact);
+  showVendorDropdown(val);
+}
+
+let _vendorDropdownHideTimer = null;
+
+function showVendorDropdown(val) {
+  const q = (val || '').trim().toLowerCase();
+  const list = q ? _vendors.filter(v => v.name.toLowerCase().includes(q)) : _vendors;
+  _renderVendorDropdownItems(list, 'exp-vendor-dropdown', 'selectExpVendor');
+}
+
+function hideVendorDropdown() {
+  _vendorDropdownHideTimer = setTimeout(() => {
+    const dd = document.getElementById('exp-vendor-dropdown');
+    if (dd) dd.style.display = 'none';
+  }, 150);
+}
+
+function selectExpVendor(vendorId) {
+  clearTimeout(_vendorDropdownHideTimer);
+  const v = _vendors.find(x => x.id === vendorId);
+  if (!v) return;
+  document.getElementById('add-exp-vendor').value = v.name;
+  _fillVendorBank(v);
+  const dd = document.getElementById('exp-vendor-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+function onVendorKeydown(e) {
+  if (e.key === 'Escape') {
+    const dd = document.getElementById('exp-vendor-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+}
+
+function _renderVendorDropdownItems(list, ddId, selectFn) {
+  const dd = document.getElementById(ddId);
+  if (!dd) return;
+  if (!list.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = list.map(v => `
+    <div onmousedown="${selectFn}(${v.id})"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f2f8;font-size:13px;transition:background .1s"
+      onmouseover="this.style.background='#f0f4fc'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;color:#1e2a45">${escHtml(v.name)}</div>
+      ${v.bank_name ? `<div style="font-size:11px;color:#8892a4;margin-top:2px">${escHtml(v.bank_name)}${v.bank_branch?` ${escHtml(v.bank_branch)}`:''}${v.account_holder?` ・ ${escHtml(v.account_holder)}`:''}${v.bank_account?` ・ ${escHtml(v.bank_account)}`:''}</div>` : ''}
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+let _editVendorDropdownHideTimer = null;
+
+function showEditVendorDropdown(val) {
+  const q = (val || '').trim().toLowerCase();
+  const list = q ? _vendors.filter(v => v.name.toLowerCase().includes(q)) : _vendors;
+  _renderVendorDropdownItems(list, 'edit-exp-vendor-dd', 'selectEditExpVendor');
+}
+
+function hideEditVendorDropdown() {
+  _editVendorDropdownHideTimer = setTimeout(() => {
+    const dd = document.getElementById('edit-exp-vendor-dd');
+    if (dd) dd.style.display = 'none';
+  }, 150);
+}
+
+function onEditExpVendorInput(val) {
+  const exact = _vendors.find(x => x.name === val);
+  if (exact) {
+    document.getElementById('edit-exp-bank-name').value      = exact.bank_name      || '';
+    document.getElementById('edit-exp-bank-branch').value    = exact.bank_branch    || '';
+    document.getElementById('edit-exp-account-holder').value = exact.account_holder || '';
+    document.getElementById('edit-exp-bank-account').value   = exact.bank_account   || '';
+  }
+  showEditVendorDropdown(val);
+}
+
+function selectEditExpVendor(vendorId) {
+  clearTimeout(_editVendorDropdownHideTimer);
+  const v = _vendors.find(x => x.id === vendorId);
+  if (!v) return;
+  document.getElementById('edit-exp-vendor').value          = v.name;
+  document.getElementById('edit-exp-bank-name').value       = v.bank_name      || '';
+  document.getElementById('edit-exp-bank-branch').value     = v.bank_branch    || '';
+  document.getElementById('edit-exp-account-holder').value  = v.account_holder || '';
+  document.getElementById('edit-exp-bank-account').value    = v.bank_account   || '';
+  const dd = document.getElementById('edit-exp-vendor-dd');
+  if (dd) dd.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════════════

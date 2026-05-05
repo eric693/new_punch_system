@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
+    ],
+    "additionalDirectories": [
+      "/home/eric/.claude"
     ]
   }
 }

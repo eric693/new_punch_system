@@ -9979,26 +9979,55 @@ let _expCacheYm     = undefined; // 快取對應的 ym
 let _expCacheStatus = undefined; // 快取對應的 status
 let _expLastError   = '';        // 最近一次錯誤訊息
 
+function _expCacheKey(status, ym) { return `expClaims:${status}:${ym}`; }
+
+function _saveExpCache(status, ym, list) {
+  try { localStorage.setItem(_expCacheKey(status, ym), JSON.stringify({ at: Date.now(), data: list })); } catch(e) {}
+}
+
+function _loadExpCache(status, ym) {
+  try {
+    const raw = localStorage.getItem(_expCacheKey(status, ym));
+    if (!raw) return null;
+    const { at, data } = JSON.parse(raw);
+    if (!Array.isArray(data)) return null;
+    return { at, data };
+  } catch(e) { return null; }
+}
+
 async function loadExpenseReview(forceRefresh = false) {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody  = document.getElementById('exp-review-tbody');
   if (!tbody) return;
 
-  // status 或 ym 改變時都要重拉（伺服器依 status 過濾，快取 key 不同）
   const changed = status !== _expCacheStatus || ym !== _expCacheYm;
 
-  // 快取有效：直接渲染，背景靜默更新
+  // 記憶體快取有效：直接渲染，背景靜默更新
   if (_expAllClaims !== null && !forceRefresh && !changed) {
     _renderExpenseFiltered(status);
-    _fetchExpenseFromServer(ym, true);
+    _fetchExpenseFromServer(ym, true, true);
     return;
+  }
+
+  // 沒有記憶體快取但有 localStorage 快取 → 立刻渲染，背景靜默重新拉
+  if (!forceRefresh) {
+    const cached = _loadExpCache(status, ym);
+    if (cached) {
+      _expAllClaims   = cached.data;
+      _expCacheYm     = ym;
+      _expCacheStatus = status;
+      _expClaimsMap   = Object.fromEntries(cached.data.map(c => [c.id, c]));
+      _renderExpenseFiltered(status);
+      _fetchExpenseFromServer(ym, true, true);
+      return;
+    }
   }
 
   if (!tbody.querySelector('tr[data-exp-id]')) {
     tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   }
-  const ok = await _fetchExpenseFromServer(ym, false);
+  const ok = await _fetchExpenseFromServer(ym, false, false);
   if (!ok) {
     tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
     return;
@@ -10006,18 +10035,19 @@ async function loadExpenseReview(forceRefresh = false) {
   _renderExpenseFiltered(status);
 }
 
-async function _fetchExpenseFromServer(ym, reRenderAfter) {
+async function _fetchExpenseFromServer(ym, reRenderAfter, silent = false) {
   const status = document.getElementById('exp-review-status')?.value ?? 'pending';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (ym)     params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
-  const {ok, data} = await api(`/api/expense/claims${qs}`, {});
+  const {ok, data} = await api(`/api/expense/claims${qs}`, {}, silent);
   if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
   _expAllClaims   = Array.isArray(data) ? data : [];
   _expCacheYm     = ym;
   _expCacheStatus = status;
   _expClaimsMap   = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
+  _saveExpCache(status, ym, _expAllClaims);
   if (reRenderAfter) _renderExpenseFiltered(status);
   return true;
 }

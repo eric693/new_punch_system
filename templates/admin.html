@@ -511,6 +511,17 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 員工管理 -->
     <div id="punch-panel-staff" style="display:none">
+      <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="staff-flt-kw" placeholder="🔍 搜尋姓名/代碼…" style="min-width:200px" oninput="renderPunchStaff()">
+        <select class="filter-input" id="staff-flt-dept" style="min-width:120px" onchange="renderPunchStaff()">
+          <option value="">全部部門</option>
+        </select>
+        <select class="filter-input" id="staff-flt-active" style="min-width:110px" onchange="renderPunchStaff()">
+          <option value="">全部狀態</option>
+          <option value="1">在職</option>
+          <option value="0">停用</option>
+        </select>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <div style="display:flex;align-items:center;gap:10px">
           <span id="punch-staff-count" style="font-size:13px;color:var(--muted)"></span>
@@ -539,6 +550,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <option value="pending">待審核</option><option value="">全部</option>
           <option value="approved">已核准</option><option value="rejected">已退回</option>
         </select>
+        <span class="filter-label">月份</span>
+        <input type="month" class="filter-input" id="preq-filter-month" onchange="loadPunchRequests()" style="min-width:140px">
         <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;color:var(--text)">
           <input type="checkbox" id="preq-select-all" onchange="selectAllBatch('punch',this.checked)">全選
         </label>
@@ -601,6 +614,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="punch-panel-resigned" style="display:none">
       <div class="filter-bar" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
         <span class="card-title" style="font-size:15px">離職員工記錄</span>
+        <input type="text" class="filter-input" id="resigned-flt-kw" placeholder="🔍 搜尋姓名/代碼…" style="min-width:200px" oninput="renderResignedStaff()">
+        <select class="filter-input" id="resigned-flt-dept" style="min-width:120px" onchange="renderResignedStaff()">
+          <option value="">全部部門</option>
+        </select>
         <span style="flex:1"></span>
         <button class="btn btn-outline btn-sm" onclick="loadResignedStaff()">重新整理</button>
       </div>
@@ -794,7 +811,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 班別設定 -->
     <div id="sched-panel-shifttypes" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="stype-flt-kw" placeholder="🔍 搜尋名稱/部門…" style="min-width:200px" oninput="renderShiftTypes()">
+        <select class="filter-input" id="stype-flt-active" style="min-width:110px" onchange="renderShiftTypes()">
+          <option value="">全部狀態</option>
+          <option value="1">啟用</option>
+          <option value="0">停用</option>
+        </select>
+        <span style="flex:1"></span>
         <span style="font-size:12px;color:var(--muted)">設定工作班別與時間</span>
         <button class="btn btn-primary" onclick="openShiftTypeModal()">新增班別</button>
       </div>
@@ -978,7 +1002,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 假別設定 -->
     <div id="leave-panel-types" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="ltype-flt-kw" placeholder="🔍 搜尋名稱/代碼…" style="min-width:200px" oninput="renderLeaveTypes()">
+        <select class="filter-input" id="ltype-flt-active" style="min-width:110px" onchange="renderLeaveTypes()">
+          <option value="">全部狀態</option>
+          <option value="1">啟用</option>
+          <option value="0">停用</option>
+        </select>
+        <span style="flex:1"></span>
         <span style="font-size:12px;color:var(--muted)">設定假別名稱、薪資倍率、天數上限</span>
         <button class="btn btn-primary" onclick="openLeaveTypeModal()">新增假別</button>
       </div>
@@ -1018,6 +1049,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="sal-month" onchange="loadSalaryRecords()">
+        <select class="filter-input" id="sal-flt-dept" style="min-width:120px" onchange="renderSalaryRecords()">
+          <option value="">全部部門</option>
+        </select>
+        <select class="filter-input" id="sal-flt-status" style="min-width:110px" onchange="renderSalaryRecords()">
+          <option value="">全部狀態</option>
+          <option value="draft">草稿</option>
+          <option value="confirmed">已確認</option>
+        </select>
         <button class="btn btn-outline btn-sm" onclick="previewSalary()">預覽計算明細</button>
         <button class="btn btn-primary btn-sm" onclick="generateSalary()">確認產生薪資</button>
         <button class="btn btn-outline btn-sm" id="sal-confirm-all-btn" onclick="confirmAllSalary()" style="display:none">全部確認</button>
@@ -1047,6 +1086,17 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 薪資設定 -->
     <div id="salary-panel-settings" style="display:none">
+      <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="salstaff-flt-kw" placeholder="🔍 搜尋姓名…" style="min-width:180px" oninput="renderSalaryStaff()">
+        <select class="filter-input" id="salstaff-flt-dept" style="min-width:120px" onchange="renderSalaryStaff()">
+          <option value="">全部部門</option>
+        </select>
+        <select class="filter-input" id="salstaff-flt-active" style="min-width:110px" onchange="renderSalaryStaff()">
+          <option value="">全部狀態</option>
+          <option value="1">在職</option>
+          <option value="0">停用</option>
+        </select>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <span id="sal-staff-count" style="font-size:13px;color:var(--muted)"></span>
         <a href="#" onclick="showPage('punch',event);switchPunchTab('staff')" style="font-size:12px;color:var(--accent)">管理員工 →</a>
@@ -1063,7 +1113,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 薪資項目 -->
     <div id="salary-panel-items" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="salitem-flt-kw" placeholder="🔍 搜尋名稱/代號（公式）…" style="min-width:240px" oninput="renderSalaryItems()">
+        <span style="flex:1"></span>
         <span style="font-size:12px;color:var(--muted)">設定每月薪資計算時使用的津貼和扣除項目</span>
         <button class="btn btn-primary" onclick="openSalaryItemModal()">新增項目</button>
       </div>
@@ -1451,6 +1503,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <select class="filter-input" id="fin-rec-type" onchange="loadFinRecords()" style="min-width:100px">
           <option value="">全部</option><option value="income">收入</option><option value="expense">支出</option>
         </select>
+        <select class="filter-input" id="fin-rec-cat" onchange="renderFinRecords()" style="min-width:130px">
+          <option value="">全部類別</option>
+        </select>
+        <input type="text" class="filter-input" id="fin-rec-kw" placeholder="🔍 搜尋標題/廠商…" style="min-width:200px" oninput="renderFinRecords()">
         <span style="flex:1"></span>
         <button class="btn btn-primary btn-sm" onclick="openFinRecModal()">新增記錄</button>
       </div>
@@ -1829,6 +1885,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 帳號管理 ── -->
   <div class="page" id="page-adminmgr" style="display:none">
+    <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
+      <input type="text" class="filter-input" id="aacc-flt-kw" placeholder="🔍 搜尋帳號/顯示名稱…" style="min-width:220px" oninput="renderAdminAccounts()">
+      <select class="filter-input" id="aacc-flt-active" style="min-width:110px" onchange="renderAdminAccounts()">
+        <option value="">全部狀態</option>
+        <option value="1">啟用</option>
+        <option value="0">停用</option>
+      </select>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <span style="font-size:13px;color:var(--muted)">管理後台登入帳號，可自由勾選各帳號可存取的模組</span>
       <button class="btn btn-primary" onclick="openAdminAccModal()">新增帳號</button>
@@ -1897,7 +1961,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 人員概覽 -->
     <div id="training-panel-overview">
-      <div class="filter-bar" style="margin-bottom:16px">
+      <div class="filter-bar" style="margin-bottom:16px;gap:10px;flex-wrap:wrap">
+        <input type="text" class="filter-input" id="trsum-flt-kw" placeholder="🔍 搜尋姓名…" style="min-width:180px" oninput="renderTrainingSummary()">
+        <select class="filter-input" id="trsum-flt-dept" style="min-width:120px" onchange="renderTrainingSummary()">
+          <option value="">全部部門</option>
+        </select>
+        <span style="flex:1"></span>
         <button class="btn btn-primary btn-sm" onclick="openTrainingModal()">新增訓練記錄</button>
         <button class="btn btn-outline btn-sm" onclick="loadTrainingSummary()">重新整理</button>
         <button class="btn btn-outline btn-sm" onclick="exportTrainingExcel()">匯出 Excel</button>
@@ -4002,14 +4071,33 @@ async function loadAnomalies() {
 // ══════════════════════════════════════════════════════════════
 // 功能4：離職流程
 // ══════════════════════════════════════════════════════════════
+let _resignedList = [];
 async function loadResignedStaff() {
   const { ok, data } = await api('/api/punch/staff/terminated', {}, true);
+  _resignedList = ok ? data : [];
+  renderResignedStaff();
+}
+function renderResignedStaff() {
   const tb = document.getElementById('resigned-tbody');
-  if (!ok || !data.length) {
-    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無離職員工記錄</div></td></tr>';
+  if (!tb) return;
+  // 同步部門選項
+  const deptSel = document.getElementById('resigned-flt-dept');
+  if (deptSel) {
+    const cur = deptSel.value;
+    const depts = Array.from(new Set(_resignedList.map(s => s.department).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部部門</option>' + depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    if (deptSel.innerHTML !== expected) { deptSel.innerHTML = expected; deptSel.value = cur; }
+  }
+  const kw = (document.getElementById('resigned-flt-kw')?.value || '').trim().toLowerCase();
+  const fltDept = document.getElementById('resigned-flt-dept')?.value || '';
+  let list = _resignedList;
+  if (kw)      list = list.filter(s => (s.name||'').toLowerCase().includes(kw) || (s.employee_code||'').toLowerCase().includes(kw));
+  if (fltDept) list = list.filter(s => (s.department||'') === fltDept);
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無符合離職員工</div></td></tr>';
     return;
   }
-  tb.innerHTML = data.map(s => `<tr>
+  tb.innerHTML = list.map(s => `<tr>
     <td style="font-weight:600">${escHtml(s.name)}</td>
     <td style="color:var(--muted)">${escHtml(s.employee_code||'')}</td>
     <td>${escHtml(s.department||'')}</td>
@@ -5069,9 +5157,24 @@ let _staffSortable = null;
 
 function renderPunchStaff() {
   const tb = document.getElementById('punch-staff-tbody');
-  document.getElementById('punch-staff-count').textContent = `共 ${punchStaffList.length} 位員工`;
-  if (!punchStaffList.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
-  tb.innerHTML = punchStaffList.map(s => {
+  // 同步部門選項
+  const deptSel = document.getElementById('staff-flt-dept');
+  if (deptSel) {
+    const cur = deptSel.value;
+    const depts = Array.from(new Set(punchStaffList.map(s => s.department).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部部門</option>' + depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    if (deptSel.innerHTML !== expected) { deptSel.innerHTML = expected; deptSel.value = cur; }
+  }
+  const kw = (document.getElementById('staff-flt-kw')?.value || '').trim().toLowerCase();
+  const fltDept   = document.getElementById('staff-flt-dept')?.value || '';
+  const fltActive = document.getElementById('staff-flt-active')?.value || '';
+  let list = punchStaffList;
+  if (kw)         list = list.filter(s => (s.name||'').toLowerCase().includes(kw) || (s.employee_code||'').toLowerCase().includes(kw));
+  if (fltDept)    list = list.filter(s => (s.department||'') === fltDept);
+  if (fltActive)  list = list.filter(s => String(s.active ? 1 : 0) === fltActive);
+  document.getElementById('punch-staff-count').textContent = `共 ${list.length} 位員工${list.length !== punchStaffList.length ? `（全部 ${punchStaffList.length}）` : ''}`;
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無符合條件的員工</div></td></tr>'; return; }
+  tb.innerHTML = list.map(s => {
     const bankDisplay = s.bank_account ? (s.bank_name ? `${escHtml(s.bank_name)} ${escHtml(s.bank_account)}` : escHtml(s.bank_account)) : '<span style="color:var(--muted)">—</span>';
     const gripCell = `<td class="staff-grip-cell" style="display:none;cursor:grab;color:var(--muted);text-align:center;font-size:18px;user-select:none">⠿</td>`;
     return `<tr data-staff-id="${s.id}">
@@ -5442,7 +5545,11 @@ const PREQ_COLOR = {pending:'var(--orange)', approved:'var(--green)', rejected:'
 
 async function loadPunchRequests() {
   const status = document.getElementById('preq-filter-status').value;
-  let url = '/api/punch/requests?'; if (status) url += `status=${status}`;
+  const ym     = document.getElementById('preq-filter-month')?.value || '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (ym)     params.set('ym', ym);
+  const url = '/api/punch/requests' + (params.toString() ? '?' + params.toString() : '');
   const { ok, data } = await api(url, {}, true);
   punchReqList = ok ? data : [];
   document.getElementById('preq-count').textContent = `共 ${punchReqList.length} 筆`;
@@ -6003,8 +6110,19 @@ async function loadShiftTypes() {
   const tb = document.getElementById('shift-types-tbody');
   if (tb) tb.innerHTML = skeletonRows(7, 3);
   shiftTypes = await _cachedShiftTypesPromise();
+  renderShiftTypes();
+}
+function renderShiftTypes() {
+  const tb = document.getElementById('shift-types-tbody');
+  if (!tb) return;
   if (!shiftTypes.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無班別</div></td></tr>'; return; }
-  tb.innerHTML = shiftTypes.map(t => `<tr style="opacity:${t.active?1:.5}">
+  const kw = (document.getElementById('stype-flt-kw')?.value || '').trim().toLowerCase();
+  const fltActive = document.getElementById('stype-flt-active')?.value || '';
+  let list = shiftTypes;
+  if (kw)        list = list.filter(t => (t.name||'').toLowerCase().includes(kw) || (t.departments||'').toLowerCase().includes(kw));
+  if (fltActive) list = list.filter(t => String(t.active ? 1 : 0) === fltActive);
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">無符合班別</div></td></tr>'; return; }
+  tb.innerHTML = list.map(t => `<tr style="opacity:${t.active?1:.5}">
     <td style="font-weight:600"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t.color};margin-right:6px;vertical-align:middle"></span>${escHtml(t.name)}</td>
     <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--green)">${t.start_time}</td>
     <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--red)">${t.end_time}</td>
@@ -6666,9 +6784,20 @@ async function loadLeaveTypes() {
   const tb = document.getElementById('leave-types-tbody');
   if (tb) tb.innerHTML = skeletonRows(7, 3);
   leaveTypesList = await _cachedLeaveTypesPromise();
+  renderLeaveTypes();
+}
+function renderLeaveTypes() {
+  const tb = document.getElementById('leave-types-tbody');
+  if (!tb) return;
   if (!leaveTypesList.length) { tb.innerHTML='<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無假別</div></td></tr>'; return; }
+  const kw = (document.getElementById('ltype-flt-kw')?.value || '').trim().toLowerCase();
+  const fltActive = document.getElementById('ltype-flt-active')?.value || '';
+  let list = leaveTypesList;
+  if (kw)        list = list.filter(t => (t.name||'').toLowerCase().includes(kw) || (t.code||'').toLowerCase().includes(kw));
+  if (fltActive) list = list.filter(t => String(t.active ? 1 : 0) === fltActive);
+  if (!list.length) { tb.innerHTML='<tr><td colspan="7" class="empty-state"><div class="empty-state-text">無符合假別</div></td></tr>'; return; }
   const PAY_LABEL = {0:'無薪（事假）',0.5:'半薪（病假）',1:'全薪'};
-  tb.innerHTML = leaveTypesList.map(t=>`<tr style="opacity:${t.active?1:.5}">
+  tb.innerHTML = list.map(t=>`<tr style="opacity:${t.active?1:.5}">
     <td style="font-weight:600"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${t.color};margin-right:6px;vertical-align:middle"></span>${escHtml(t.name)}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(t.code)}</td>
     <td>${PAY_LABEL[t.pay_rate]||t.pay_rate+'倍'}</td>
@@ -6755,18 +6884,39 @@ async function loadSalaryRecords() {
   document.getElementById('sal-tbody').innerHTML = skeletonRows(8);
   const {ok,data} = await api(`/api/salary/records?month=${month}`,{},true);
   salaryRecords = ok?data:[];
-  document.getElementById('sal-count').textContent=`共 ${salaryRecords.length} 筆 | 已確認 ${salaryRecords.filter(r=>r.status==='confirmed').length} 筆`;
+  renderSalaryRecords();
+}
+function renderSalaryRecords() {
   const tb = document.getElementById('sal-tbody');
+  if (!tb) return;
+  // 同步部門選項
+  const deptSel = document.getElementById('sal-flt-dept');
+  if (deptSel) {
+    const cur = deptSel.value;
+    const depts = Array.from(new Set(salaryRecords.map(r => r.department).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部部門</option>' + depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    if (deptSel.innerHTML !== expected) { deptSel.innerHTML = expected; deptSel.value = cur; }
+  }
+  const fltDept   = document.getElementById('sal-flt-dept')?.value || '';
+  const fltStatus = document.getElementById('sal-flt-status')?.value || '';
+  let list = salaryRecords;
+  if (fltDept)   list = list.filter(r => (r.department||'') === fltDept);
+  if (fltStatus) list = list.filter(r => r.status === fltStatus);
+  document.getElementById('sal-count').textContent=`共 ${list.length} 筆 | 已確認 ${list.filter(r=>r.status==='confirmed').length} 筆${list.length !== salaryRecords.length ? `（全部 ${salaryRecords.length}）` : ''}`;
   if (!salaryRecords.length) {
     tb.innerHTML='<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無薪資記錄，請點「自動產生薪資」</div></td></tr>';
     document.getElementById('sal-total-row').style.display='none'; return;
   }
+  if (!list.length) {
+    tb.innerHTML='<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無符合薪資記錄</div></td></tr>';
+    document.getElementById('sal-total-row').style.display='none'; return;
+  }
   let totAllow=0,totDeduct=0,totNet=0;
-  const hasDraft = salaryRecords.some(r=>r.status==='draft');
-  const hasConfirmed = salaryRecords.some(r=>r.status==='confirmed');
+  const hasDraft = list.some(r=>r.status==='draft');
+  const hasConfirmed = list.some(r=>r.status==='confirmed');
   document.getElementById('sal-confirm-all-btn').style.display = hasDraft ? '' : 'none';
   document.getElementById('sal-bulk-print-btn').style.display  = hasConfirmed ? '' : 'none';
-  tb.innerHTML = salaryRecords.map(r=>{
+  tb.innerHTML = list.map(r=>{
     totAllow  += r.allowance_total||0;
     totDeduct += r.deduction_total||0;
     totNet    += r.net_pay||0;
@@ -7124,9 +7274,30 @@ async function loadSalaryStaff() {
   if (tb) tb.innerHTML = skeletonRows(10);
   const {ok,data} = await api('/api/salary/staff',{},true);
   salaryStaffList = ok?data:[];
-  document.getElementById('sal-staff-count').textContent = `共 ${salaryStaffList.length} 位員工（來自打卡系統）`;
+  renderSalaryStaff();
+}
+function renderSalaryStaff() {
+  const tb = document.getElementById('sal-staff-tbody');
+  if (!tb) return;
+  // 同步部門選項
+  const deptSel = document.getElementById('salstaff-flt-dept');
+  if (deptSel) {
+    const cur = deptSel.value;
+    const depts = Array.from(new Set(salaryStaffList.map(s => s.department).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部部門</option>' + depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    if (deptSel.innerHTML !== expected) { deptSel.innerHTML = expected; deptSel.value = cur; }
+  }
+  const kw = (document.getElementById('salstaff-flt-kw')?.value || '').trim().toLowerCase();
+  const fltDept   = document.getElementById('salstaff-flt-dept')?.value || '';
+  const fltActive = document.getElementById('salstaff-flt-active')?.value || '';
+  let list = salaryStaffList;
+  if (kw)        list = list.filter(s => (s.name||'').toLowerCase().includes(kw));
+  if (fltDept)   list = list.filter(s => (s.department||'') === fltDept);
+  if (fltActive) list = list.filter(s => String(s.active ? 1 : 0) === fltActive);
+  document.getElementById('sal-staff-count').textContent = `共 ${list.length} 位員工${list.length !== salaryStaffList.length ? `（全部 ${salaryStaffList.length}）` : '（來自打卡系統）'}`;
   if (!salaryStaffList.length) { tb.innerHTML='<tr><td colspan="10" class="empty-state"><div class="empty-state-text">尚無員工</div></td></tr>'; return; }
-  tb.innerHTML = salaryStaffList.map(s=>`<tr>
+  if (!list.length) { tb.innerHTML='<tr><td colspan="10" class="empty-state"><div class="empty-state-text">無符合員工</div></td></tr>'; return; }
+  tb.innerHTML = list.map(s=>`<tr>
     <td style="font-weight:600">${escHtml(s.name)}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(s.username||'')}</td>
     <td style="color:var(--muted)">${escHtml(s.department||'—')}</td>
@@ -7374,8 +7545,15 @@ async function deleteAdvance(id) {
 // ── 薪資項目 ─────────────────────────────────────────────────
 async function loadSalaryItems() {
   salaryItemsList = await _cachedSalaryItemsPromise();
+  renderSalaryItems();
+}
+function renderSalaryItems() {
   const allowDiv  = document.getElementById('sal-items-allow');
   const deductDiv = document.getElementById('sal-items-deduct');
+  if (!allowDiv || !deductDiv) return;
+  const kw = (document.getElementById('salitem-flt-kw')?.value || '').trim().toLowerCase();
+  let list = salaryItemsList;
+  if (kw) list = list.filter(it => (it.name||'').toLowerCase().includes(kw) || (it.formula||'').toLowerCase().includes(kw) || (it.description||'').toLowerCase().includes(kw));
   const card = (it) => `<div class="card" style="margin-bottom:10px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px;padding:12px 16px">
       <div>
@@ -7390,8 +7568,8 @@ async function loadSalaryItems() {
       </div>
     </div>
   </div>`;
-  allowDiv.innerHTML  = salaryItemsList.filter(i=>i.item_type==='allowance').map(card).join('') || '<div style="color:var(--muted);padding:20px;text-align:center">尚無津貼項目</div>';
-  deductDiv.innerHTML = salaryItemsList.filter(i=>i.item_type==='deduction').map(card).join('') || '<div style="color:var(--muted);padding:20px;text-align:center">尚無扣除項目</div>';
+  allowDiv.innerHTML  = list.filter(i=>i.item_type==='allowance').map(card).join('') || `<div style="color:var(--muted);padding:20px;text-align:center">${kw?'無符合津貼項目':'尚無津貼項目'}</div>`;
+  deductDiv.innerHTML = list.filter(i=>i.item_type==='deduction').map(card).join('') || `<div style="color:var(--muted);padding:20px;text-align:center">${kw?'無符合扣除項目':'尚無扣除項目'}</div>`;
 }
 
 function openSalaryItemModal(id=null) {
@@ -8035,14 +8213,37 @@ async function loadFinRecords() {
   if (type)  params.set('type', type);
   document.getElementById('fin-rec-tbody').innerHTML = skeletonRows(9);
   const {ok, data} = await api('/api/finance/records?' + params, {}, true);
+  window._finRecords = ok ? data : [];
+  renderFinRecords();
+}
+
+function renderFinRecords() {
   const tb = document.getElementById('fin-rec-tbody');
-  if (!ok || !data.length) {
+  if (!tb) return;
+  const all = window._finRecords || [];
+  // 同步類別選項
+  const catSel = document.getElementById('fin-rec-cat');
+  if (catSel) {
+    const cur = catSel.value;
+    const cats = Array.from(new Set(all.map(r => r.category_name).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部類別</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    if (catSel.innerHTML !== expected) { catSel.innerHTML = expected; catSel.value = cur; }
+  }
+  const fltCat = document.getElementById('fin-rec-cat')?.value || '';
+  const kw     = (document.getElementById('fin-rec-kw')?.value || '').trim().toLowerCase();
+  let list = all;
+  if (fltCat) list = list.filter(r => (r.category_name||'') === fltCat);
+  if (kw)     list = list.filter(r => (r.title||'').toLowerCase().includes(kw) || (r.vendor||'').toLowerCase().includes(kw));
+  if (!all.length) {
     tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">無記錄</div></td></tr>';
     document.getElementById('fin-rec-footer').style.display = 'none'; return;
   }
-  window._finRecords = data;
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">無符合記錄</div></td></tr>';
+    document.getElementById('fin-rec-footer').style.display = 'none'; return;
+  }
   let totalIncome=0, totalExpense=0;
-  tb.innerHTML = data.map(r => {
+  tb.innerHTML = list.map(r => {
     if (r.type==='income') totalIncome+=r.amount; else totalExpense+=r.amount;
     const typeBadge = r.type==='income'
       ? '<span class="badge badge-ok">收入</span>'
@@ -8068,7 +8269,7 @@ async function loadFinRecords() {
   }).join('');
   const footer = document.getElementById('fin-rec-footer');
   footer.style.display='';
-  footer.innerHTML=`共 ${data.length} 筆　收入合計：<strong style="color:var(--green)">$${totalIncome.toLocaleString()}</strong>　支出合計：<strong style="color:var(--red)">$${totalExpense.toLocaleString()}</strong>　淨損益：<strong style="color:${totalIncome-totalExpense>=0?'var(--green)':'var(--red)'}">$${(totalIncome-totalExpense).toLocaleString()}</strong>`;
+  footer.innerHTML=`共 ${list.length} 筆${list.length !== all.length ? `（全部 ${all.length}）` : ''}　收入合計：<strong style="color:var(--green)">$${totalIncome.toLocaleString()}</strong>　支出合計：<strong style="color:var(--red)">$${totalExpense.toLocaleString()}</strong>　淨損益：<strong style="color:${totalIncome-totalExpense>=0?'var(--green)':'var(--red)'}">$${(totalIncome-totalExpense).toLocaleString()}</strong>`;
 }
 
 function renderFinCatOptions() {
@@ -9690,11 +9891,23 @@ let adminAccList = [];
 async function loadAdminAccounts() {
   const { ok, data } = await api('/api/admin/accounts', {}, true);
   adminAccList = ok ? data : [];
+  renderAdminAccounts();
+}
+function renderAdminAccounts() {
   const tb = document.getElementById('adminacc-tbody');
+  if (!tb) return;
   if (!adminAccList.length) {
     tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無帳號</div></td></tr>'; return;
   }
-  tb.innerHTML = adminAccList.map(a => {
+  const kw = (document.getElementById('aacc-flt-kw')?.value || '').trim().toLowerCase();
+  const fltActive = document.getElementById('aacc-flt-active')?.value || '';
+  let list = adminAccList;
+  if (kw)        list = list.filter(a => (a.username||'').toLowerCase().includes(kw) || (a.display_name||'').toLowerCase().includes(kw));
+  if (fltActive) list = list.filter(a => String(a.active ? 1 : 0) === fltActive);
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">無符合帳號</div></td></tr>'; return;
+  }
+  tb.innerHTML = list.map(a => {
     const modLabels = a.is_super
       ? '<span style="color:var(--green);font-size:12px">全部模組</span>'
       : (a.permissions||[]).map(m => {
@@ -11400,15 +11613,21 @@ async function loadTrainingStaffFilter() {
   }
 }
 
+let _trainingSummaryList = [];
 async function loadTrainingSummary() {
   const tbody = document.getElementById('training-summary-tbody');
-  const alertBar = document.getElementById('training-alert-bar');
   tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   const r = await api('/api/training/summary');
   if (!r.ok) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--red)">載入失敗</td></tr>'; return; }
-  const data = r.data;
-
-  // Show alert if any expiring soon / expired
+  _trainingSummaryList = r.data || [];
+  renderTrainingSummary();
+}
+function renderTrainingSummary() {
+  const tbody = document.getElementById('training-summary-tbody');
+  const alertBar = document.getElementById('training-alert-bar');
+  if (!tbody) return;
+  const data = _trainingSummaryList;
+  // 警示條（基於全部資料）
   const urgentCount = data.reduce((s, d) => s + d.expiring_soon + d.expired, 0);
   if (urgentCount > 0) {
     alertBar.style.display = '';
@@ -11418,9 +11637,22 @@ async function loadTrainingSummary() {
   } else {
     alertBar.style.display = 'none';
   }
-
+  // 同步部門選項
+  const deptSel = document.getElementById('trsum-flt-dept');
+  if (deptSel) {
+    const cur = deptSel.value;
+    const depts = Array.from(new Set(data.map(d => d.department).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const expected = '<option value="">全部部門</option>' + depts.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+    if (deptSel.innerHTML !== expected) { deptSel.innerHTML = expected; deptSel.value = cur; }
+  }
+  const kw = (document.getElementById('trsum-flt-kw')?.value || '').trim().toLowerCase();
+  const fltDept = document.getElementById('trsum-flt-dept')?.value || '';
+  let list = data;
+  if (kw)      list = list.filter(d => (d.name||'').toLowerCase().includes(kw));
+  if (fltDept) list = list.filter(d => (d.department||'') === fltDept);
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無員工資料</div></td></tr>'; return; }
-  tbody.innerHTML = data.map(d => `
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">無符合員工</div></td></tr>'; return; }
+  tbody.innerHTML = list.map(d => `
     <tr>
       <td>${escHtml(d.name)}</td>
       <td style="color:var(--muted)">${escHtml(d.department||'')}</td>

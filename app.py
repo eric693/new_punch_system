@@ -1947,8 +1947,19 @@ def api_punch_req_my():
 @login_required
 def api_punch_reqs_list():
     status = request.args.get('status', '')
+    ym     = request.args.get('ym', '')
     conds, params = ['TRUE'], []
     if status: conds.append('pr.status=%s'); params.append(status)
+    if ym:
+        try:
+            y, m = ym.split('-'); y, m = int(y), int(m)
+            start = f"{y:04d}-{m:02d}-01"
+            ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+            end = f"{ny:04d}-{nm:02d}-01"
+            conds.append('pr.requested_at >= %s AND pr.requested_at < %s')
+            params.extend([start, end])
+        except Exception:
+            pass
     with get_db() as conn:
         rows = conn.execute(f"""
             SELECT pr.*, ps.name as staff_name, ps.role as staff_role

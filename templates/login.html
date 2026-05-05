@@ -152,6 +152,12 @@
         btn.disabled = false; btn.textContent = '登入';
         return;
       }
+      // 提前 prefetch /admin（讓伺服器把 HTML 放進 cache，瀏覽器同時開始下載）
+      try {
+        const lk = document.createElement('link');
+        lk.rel = 'prefetch'; lk.href = d.redirect || '/admin'; lk.as = 'document';
+        document.head.appendChild(lk);
+      } catch(_) {}
       // 顯示過渡畫面，避免白屏等待
       document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f4f6fa;gap:16px"><div style="width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#4a7bda;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:#1e2a45;font-size:15px;font-weight:500">正在載入後台...</div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
       window.location.href = d.redirect || '/admin';

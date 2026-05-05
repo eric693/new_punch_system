@@ -10319,8 +10319,8 @@ function _renderAdminExpenseRows(c) {
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
     <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
-    <td style="min-width:110px">
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
+    <td style="white-space:nowrap">
+      <div style="display:inline-flex;flex-wrap:nowrap;gap:4px;align-items:center">
         ${c.status === 'pending' ? `
           <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
           <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff" onclick="promptRejectExpense(${c.id})">拒絕</button>

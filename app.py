@@ -179,7 +179,7 @@ _LABOR_TTL      = 120.0  # 2 分鐘
 
 # 管理員帳號快取 —— 登入時免 DB 查詢（帳號異動時立即清除）
 _admin_acct_cache: dict = {'by_username': None, 'by_id': None, 'at': 0.0}
-_ADMIN_ACCT_TTL = 30.0   # 30 秒
+_ADMIN_ACCT_TTL = 300.0   # 5 分鐘（帳號異動會主動清除）
 
 def _invalidate_admin_cache():
     _admin_acct_cache['by_username'] = None
@@ -878,6 +878,42 @@ def _set_admin_session(row):
     session['admin_permissions']  = perms
     session['admin_is_super']     = bool(row['is_super'])
     threading.Thread(target=_update_last_login, args=(row['id'],), daemon=True).start()
+    # 預先暖機 admin.html 快取，登入後跳轉時可直接命中（背景執行緒，不拖慢登入回應）
+    threading.Thread(
+        target=_prewarm_admin_html,
+        args=(row['id'], row['display_name'] or row['username'], perms, bool(row['is_super'])),
+        daemon=True,
+    ).start()
+
+
+def _prewarm_admin_html(admin_id, display_name, perms, is_super):
+    """登入後背景預先 render admin.html 並寫入 cache，避免使用者首次 GET /admin 時等待 render。"""
+    try:
+        now = time.time()
+        tc  = _admin_tmtime_cache
+        if now - tc['at'] > 30:
+            template_path = os.path.join(app.template_folder or 'templates', 'admin.html')
+            try:
+                tc['mtime'] = int(os.path.getmtime(template_path))
+            except OSError:
+                tc['mtime'] = 0
+            tc['at'] = now
+        tmtime = tc['mtime']
+        etag_src = f"{tmtime}:{admin_id}:{sorted(perms)}:{is_super}:{display_name}"
+        etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:16] + '"'
+        if etag in _admin_html_cache:
+            return
+        with app.app_context():
+            html = render_template('admin.html',
+                admin_display_name=display_name,
+                admin_permissions=perms,
+                admin_is_super=is_super,
+            )
+        if len(_admin_html_cache) >= 20:
+            _admin_html_cache.clear()
+        _admin_html_cache[etag] = html
+    except Exception as e:
+        print(f"[prewarm admin html] {e}")
 
 @app.route('/')
 def index():

@@ -4191,6 +4191,7 @@ def api_ot_delete(rid):
     if old['status'] == 'approved':
         extra += "\n（已核准紀錄已移除）"
     _notify_review_result(old['staff_id'], '加班申請', 'cancelled', extra)
+    _badges_cache.clear()
     return jsonify({'deleted': rid})
 
 
@@ -6463,8 +6464,9 @@ def _notify_review_result(staff_id, category, action, extra_info=''):
     """
     Send a formatted LINE notification for review results.
     category: '補打卡申請', '排休申請', '加班申請', '請假申請', '薪資確認'
-    action:   'approved', 'rejected', 'confirmed', 'cancelled'
+    action:   'approve'/'approved', 'reject'/'rejected', 'confirmed', 'cancelled'
     """
+    action = {'approve': 'approved', 'reject': 'rejected'}.get(action, action)
     ACTION_LABEL = {'approved': '核准', 'rejected': '退回', 'confirmed': '確認', 'cancelled': '取消'}
     ACTION_ICON  = {'approved': '[核准]', 'rejected': '[退回]', 'confirmed': '[確認]', 'cancelled': '[取消]'}
     label = ACTION_LABEL.get(action, action)
@@ -8725,6 +8727,7 @@ def api_ot_batch():
                     extra += f"\n審核意見：{note}"
                 _notify_review_result(row['staff_id'], '加班申請', action, extra)
                 done += 1
+    _badges_cache.clear()
     return jsonify({'ok': True, 'done': done})
 
 

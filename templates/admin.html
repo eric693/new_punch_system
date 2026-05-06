@@ -2366,7 +2366,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div class="exp-row col2">
           <div class="exp-field">
             <label>費用類別</label>
-            <input class="fi" type="text" id="edit-exp-category">
+            <select class="fi" id="edit-exp-category"></select>
           </div>
           <div class="exp-field" style="position:relative">
             <label>廠商名稱</label>
@@ -10391,7 +10391,7 @@ function promptRejectExpense(id) {
   reviewExpense(id, 'reject', note);
 }
 
-function switchEditExpType(type) {
+function switchEditExpType(type, keepCategory) {
   document.getElementById('edit-exp-type').value = type;
   ['支出','收入'].forEach(t => {
     const btn = document.getElementById('edit-exp-type-btn-' + t);
@@ -10399,6 +10399,11 @@ function switchEditExpType(type) {
     btn.style.background = t === type ? '#1e2a45' : '#fff';
     btn.style.color = t === type ? '#fff' : '#8892a4';
   });
+  const catSel = document.getElementById('edit-exp-category');
+  if (catSel) {
+    const prev = keepCategory || catSel.value;
+    catSel.innerHTML = (_EXP_CATEGORIES[type] || []).map(c => `<option value="${c}"${c === prev ? ' selected' : ''}>${c}</option>`).join('');
+  }
 }
 
 function _fillEditStaffSelect(staffList, selectedId) {
@@ -10424,7 +10429,6 @@ function openExpEditModal(id) {
   }
   document.getElementById('edit-exp-date').value = c.expense_date || '';
   document.getElementById('edit-exp-amount').value = c.amount ?? 0;
-  document.getElementById('edit-exp-category').value = c.category || '';
   document.getElementById('edit-exp-vendor').value = c.vendor || '';
   document.getElementById('edit-exp-note').value = c.note || '';
   document.getElementById('edit-exp-reimburse-method').value = c.reimbursement_method || '匯款';
@@ -10432,7 +10436,7 @@ function openExpEditModal(id) {
   document.getElementById('edit-exp-bank-branch').value      = c.bank_branch  || '';
   document.getElementById('edit-exp-account-holder').value   = c.account_holder || '';
   document.getElementById('edit-exp-bank-account').value     = c.bank_account || '';
-  switchEditExpType(c.expense_type || '支出');
+  switchEditExpType(c.expense_type || '支出', c.category || '');
   document.getElementById('modal-edit-expense').style.display = 'flex';
 }
 

@@ -11506,7 +11506,7 @@ def api_expense_review(cid):
 @login_required
 def api_expense_claim_edit(cid):
     b = request.get_json(force=True)
-    allowed = ['expense_date', 'expense_type', 'category', 'vendor', 'amount',
+    allowed = ['staff_id', 'expense_date', 'expense_type', 'category', 'vendor', 'amount',
                'note', 'reimbursement_method', 'bank_name', 'bank_branch',
                'bank_account', 'account_holder', 'title']
     sets, vals = [], []

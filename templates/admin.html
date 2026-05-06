@@ -2337,7 +2337,7 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div class="exp-modal-header">
         <div>
           <div class="exp-modal-title">編輯費用申請</div>
-          <div class="exp-modal-sub" id="edit-exp-staff-label"></div>
+          <select class="fi" id="edit-exp-staff" style="margin-top:6px;font-size:13px"><option value="">— 選擇員工 —</option></select>
         </div>
         <button class="exp-modal-close" onclick="closeExpEditModal()">✕</button>
       </div>
@@ -10401,11 +10401,27 @@ function switchEditExpType(type) {
   });
 }
 
+function _fillEditStaffSelect(staffList, selectedId) {
+  const sel = document.getElementById('edit-exp-staff');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— 選擇員工 —</option>'
+    + staffList.map(s => `<option value="${s.id}"${s.id == selectedId ? ' selected' : ''}>${escHtml(s.name)} (${escHtml(s.employee_code||'')})</option>`).join('');
+}
+
 function openExpEditModal(id) {
   const c = _expClaimsMap[id];
   if (!c) { showToast('找不到申請記錄，請點「重新整理」後再試', 'error'); return; }
   document.getElementById('edit-exp-id').value = id;
-  document.getElementById('edit-exp-staff-label').textContent = c.staff_name || '';
+  if (_expenseStaffCache && _expenseStaffCache.length > 0) {
+    _fillEditStaffSelect(_expenseStaffCache, c.staff_id);
+  } else {
+    _cachedAllStaff().then(data => {
+      _expenseStaffCache = data.filter(s => s.active !== false);
+      _fillEditStaffSelect(_expenseStaffCache, c.staff_id);
+    });
+    const sel = document.getElementById('edit-exp-staff');
+    if (sel) { sel.innerHTML = `<option value="${c.staff_id||''}">${escHtml(c.staff_name||'')}</option>`; }
+  }
   document.getElementById('edit-exp-date').value = c.expense_date || '';
   document.getElementById('edit-exp-amount').value = c.amount ?? 0;
   document.getElementById('edit-exp-category').value = c.category || '';
@@ -10426,7 +10442,10 @@ function closeExpEditModal() {
 
 async function saveExpEdit() {
   const id   = parseInt(document.getElementById('edit-exp-id').value);
+  const staffId = parseInt(document.getElementById('edit-exp-staff').value);
+  if (!staffId) { showToast('請選擇申請人', 'error'); return; }
   const body = {
+    staff_id:             staffId,
     expense_date:         document.getElementById('edit-exp-date').value,
     amount:               parseFloat(document.getElementById('edit-exp-amount').value) || 0,
     expense_type:         document.getElementById('edit-exp-type').value,

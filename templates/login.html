@@ -91,6 +91,9 @@
   .bio-msg { font-size: 12px; text-align: center; margin-top: 6px; min-height: 16px; }
   .bio-msg.err { color: var(--red); }
   .bio-msg.ok  { color: #2e9e6b; }
+  .remember-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .remember-row input[type="checkbox"] { width:15px; height:15px; accent-color:var(--accent); cursor:pointer; margin:0; }
+  .remember-row label { font-size:12px; color:var(--muted); cursor:pointer; margin:0; letter-spacing:0; text-transform:none; }
 </style>
 </head>
 <body>
@@ -118,6 +121,10 @@
     <input type="text" id="un" name="username" placeholder="輸入帳號" autofocus autocomplete="username" autocapitalize="none">
     <label for="pw">密碼</label>
     <input type="password" id="pw" name="password" placeholder="輸入密碼" autocomplete="current-password">
+    <div class="remember-row">
+      <input type="checkbox" id="remember-me">
+      <label for="remember-me">記住帳號密碼</label>
+    </div>
     <div class="error-msg" id="login-err" style="display:none">{% if error %}{{ error }}{% endif %}</div>
     <button type="submit" id="login-btn">登入</button>
   </form>
@@ -126,7 +133,20 @@
 </div>
 
 <script>
-// ── AJAX 表單登入 ──────────────────────────────────���─────────────
+// ── 記住帳號密碼 ──────────────────────────────────────────────
+(function() {
+  try {
+    const saved = localStorage.getItem('_adm_cred');
+    if (saved) {
+      const { u, p } = JSON.parse(atob(saved));
+      document.getElementById('un').value = u || '';
+      document.getElementById('pw').value = p || '';
+      document.getElementById('remember-me').checked = true;
+    }
+  } catch(_) {}
+})();
+
+// ── AJAX 表單登入 ──────────────────────────────────────────────
 (function() {
   // 若有伺服器端錯誤（表單 fallback），顯示錯誤訊息
   const errEl = document.getElementById('login-err');
@@ -134,9 +154,10 @@
 
   document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const btn  = document.getElementById('login-btn');
-    const user = document.getElementById('un').value.trim();
-    const pass = document.getElementById('pw').value;
+    const btn      = document.getElementById('login-btn');
+    const user     = document.getElementById('un').value.trim();
+    const pass     = document.getElementById('pw').value;
+    const remember = document.getElementById('remember-me').checked;
     errEl.style.display = 'none';
     if (!user || !pass) { errEl.textContent = '請輸入帳號與密碼'; errEl.style.display = ''; return; }
     btn.disabled = true; btn.textContent = '登入中...';
@@ -151,6 +172,12 @@
         errEl.textContent = d.error || '登入失敗'; errEl.style.display = '';
         btn.disabled = false; btn.textContent = '登入';
         return;
+      }
+      // 儲存或清除記住的帳號密碼
+      if (remember) {
+        localStorage.setItem('_adm_cred', btoa(JSON.stringify({ u: user, p: pass })));
+      } else {
+        localStorage.removeItem('_adm_cred');
       }
       // 提前 prefetch /admin（讓伺服器把 HTML 放進 cache，瀏覽器同時開始下載）
       try {

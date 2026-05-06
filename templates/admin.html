@@ -5274,11 +5274,11 @@ function openPunchStaffModal(id=null) {
     document.getElementById('psm-active').value  = '1';
     document.getElementById('psm-gender').value  = '';
     document.getElementById('psm-pw-hint').textContent = '新增員工請輸入密碼';
-    // 新增員工時，姓名自動填入帳號欄
+    // 新增員工時，員工代碼自動填入帳號欄
     setTimeout(() => {
-      const nameEl = document.getElementById('psm-name');
+      const codeEl = document.getElementById('psm-code');
       const userEl = document.getElementById('psm-username');
-      nameEl.oninput = () => { if (!userEl._touched) userEl.value = nameEl.value.trim(); };
+      codeEl.oninput = () => { if (!userEl._touched) userEl.value = codeEl.value.trim(); };
       userEl.oninput = () => { userEl._touched = !!userEl.value; };
       userEl._touched = false;
     }, 0);

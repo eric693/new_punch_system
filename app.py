@@ -11113,6 +11113,19 @@ def _init_vendors_db():
         except Exception as e:
             print(f"[vendors_init] {e}")
 
+    # migration: add account_label, migrate unique constraint
+    migrations = [
+        "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_label TEXT NOT NULL DEFAULT ''",
+        "DROP INDEX IF EXISTS idx_vendors_name",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_name_label ON vendors(name, account_label)",
+    ]
+    for sql in migrations:
+        try:
+            with get_db() as conn:
+                conn.execute(sql)
+        except Exception as e:
+            print(f"[vendors_migrate] {e}")
+
 _init_vendors_db()
 
 
@@ -11131,18 +11144,20 @@ def api_vendors_create():
     name = (b.get('name') or '').strip()
     if not name:
         return jsonify({'error': '廠商名稱為必填'}), 400
+    account_label = (b.get('account_label') or '').strip()
     with get_db() as conn:
         try:
             row = conn.execute(
-                """INSERT INTO vendors (name, bank_name, bank_branch, account_holder, bank_account, contact, note)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
-                (name, (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
+                """INSERT INTO vendors (name, account_label, bank_name, bank_branch, account_holder, bank_account, contact, note)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
+                (name, account_label,
+                 (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
                  (b.get('account_holder') or '').strip(), (b.get('bank_account') or '').strip(),
                  (b.get('contact') or '').strip(), (b.get('note') or '').strip())
             ).fetchone()
         except Exception as e:
             if 'unique' in str(e).lower():
-                return jsonify({'error': '廠商名稱已存在'}), 409
+                return jsonify({'error': '此廠商與帳戶標籤組合已存在'}), 409
             raise
     return jsonify(dict(row)), 201
 
@@ -11154,19 +11169,21 @@ def api_vendors_update(vid):
     name = (b.get('name') or '').strip()
     if not name:
         return jsonify({'error': '廠商名稱為必填'}), 400
+    account_label = (b.get('account_label') or '').strip()
     with get_db() as conn:
         try:
             row = conn.execute(
-                """UPDATE vendors SET name=%s, bank_name=%s, bank_branch=%s,
+                """UPDATE vendors SET name=%s, account_label=%s, bank_name=%s, bank_branch=%s,
                    account_holder=%s, bank_account=%s, contact=%s, note=%s
                    WHERE id=%s RETURNING *""",
-                (name, (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
+                (name, account_label,
+                 (b.get('bank_name') or '').strip(), (b.get('bank_branch') or '').strip(),
                  (b.get('account_holder') or '').strip(), (b.get('bank_account') or '').strip(),
                  (b.get('contact') or '').strip(), (b.get('note') or '').strip(), vid)
             ).fetchone()
         except Exception as e:
             if 'unique' in str(e).lower():
-                return jsonify({'error': '廠商名稱已存在'}), 409
+                return jsonify({'error': '此廠商與帳戶標籤組合已存在'}), 409
             raise
     if not row:
         return jsonify({'error': '找不到廠商'}), 404

@@ -2080,10 +2080,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>廠商名稱</th><th>銀行</th><th>分行</th><th>戶名</th><th>帳號</th><th>聯絡人</th><th>備註</th><th>操作</th>
+            <th>廠商名稱</th><th>帳戶標籤</th><th>銀行</th><th>分行</th><th>戶名</th><th>帳號</th><th>聯絡人</th><th>備註</th><th>操作</th>
           </tr></thead>
           <tbody id="vendor-tbody">
-            <tr><td colspan="8" class="empty-state"><div class="empty-state-text">載入中…</div></td></tr>
+            <tr><td colspan="9" class="empty-state"><div class="empty-state-text">載入中…</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -2099,9 +2099,15 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
       <div style="padding:20px 24px;display:grid;gap:14px">
         <input type="hidden" id="vm-id">
-        <div>
-          <label class="form-label">廠商名稱 <span style="color:#d64242">*</span></label>
-          <input class="form-input" id="vm-name" placeholder="廠商全名" style="width:100%">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="form-label">廠商名稱 <span style="color:#d64242">*</span></label>
+            <input class="form-input" id="vm-name" placeholder="廠商全名" style="width:100%">
+          </div>
+          <div>
+            <label class="form-label">帳戶標籤 <span style="color:#8892a4;font-weight:400">（同廠商多帳戶時填寫）</span></label>
+            <input class="form-input" id="vm-account-label" placeholder="例：台新-信義、主帳戶" style="width:100%">
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div>
@@ -10520,12 +10526,13 @@ function renderVendorTable() {
   const tbody = document.getElementById('vendor-tbody');
   if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無廠商資料</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><div class="empty-state-text">尚無廠商資料</div></td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(v => `
     <tr data-vid="${v.id}">
       <td style="font-weight:600">${escHtml(v.name)}</td>
+      <td style="font-size:12px;color:${v.account_label?'#4a7bda':'var(--muted)'}">${escHtml(v.account_label||'—')}</td>
       <td style="font-size:12px">${escHtml(v.bank_name||'—')}</td>
       <td style="font-size:12px">${escHtml(v.bank_branch||'—')}</td>
       <td style="font-size:12px">${escHtml(v.account_holder||'—')}</td>
@@ -10544,6 +10551,7 @@ function openVendorModal(id) {
   document.getElementById('vendor-modal-title').textContent = v ? '編輯廠商' : '新增廠商';
   document.getElementById('vm-id').value             = v ? v.id : '';
   document.getElementById('vm-name').value           = v ? v.name          : '';
+  document.getElementById('vm-account-label').value  = v ? (v.account_label || '') : '';
   document.getElementById('vm-bank-name').value      = v ? (v.bank_name    || '') : '';
   document.getElementById('vm-bank-branch').value    = v ? (v.bank_branch  || '') : '';
   document.getElementById('vm-account-holder').value = v ? (v.account_holder || '') : '';
@@ -10562,6 +10570,7 @@ async function saveVendor() {
   const id   = document.getElementById('vm-id').value;
   const body = {
     name:           document.getElementById('vm-name').value.trim(),
+    account_label:  document.getElementById('vm-account-label').value.trim(),
     bank_name:      document.getElementById('vm-bank-name').value.trim(),
     bank_branch:    document.getElementById('vm-bank-branch').value.trim(),
     account_holder: document.getElementById('vm-account-holder').value.trim(),
@@ -10610,8 +10619,8 @@ function _fillVendorBank(v) {
 }
 
 function onExpVendorInput(val) {
-  const exact = _vendors.find(x => x.name === val);
-  if (exact) _fillVendorBank(exact);
+  const matches = _vendors.filter(x => x.name === val);
+  if (matches.length === 1) _fillVendorBank(matches[0]);
   showVendorDropdown(val);
 }
 
@@ -10655,7 +10664,7 @@ function _renderVendorDropdownItems(list, ddId, selectFn) {
     <div onmousedown="${selectFn}(${v.id})"
       style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f2f8;font-size:13px;transition:background .1s"
       onmouseover="this.style.background='#f0f4fc'" onmouseout="this.style.background=''">
-      <div style="font-weight:600;color:#1e2a45">${escHtml(v.name)}</div>
+      <div style="font-weight:600;color:#1e2a45">${escHtml(v.name)}${v.account_label ? `<span style="margin-left:6px;font-size:11px;font-weight:500;color:#4a7bda;background:#eef3ff;padding:1px 7px;border-radius:8px">${escHtml(v.account_label)}</span>` : ''}</div>
       ${v.bank_name ? `<div style="font-size:11px;color:#8892a4;margin-top:2px">${escHtml(v.bank_name)}${v.bank_branch?` ${escHtml(v.bank_branch)}`:''}${v.account_holder?` ・ ${escHtml(v.account_holder)}`:''}${v.bank_account?` ・ ${escHtml(v.bank_account)}`:''}</div>` : ''}
     </div>`).join('');
   dd.style.display = 'block';
@@ -10677,12 +10686,12 @@ function hideEditVendorDropdown() {
 }
 
 function onEditExpVendorInput(val) {
-  const exact = _vendors.find(x => x.name === val);
-  if (exact) {
-    document.getElementById('edit-exp-bank-name').value      = exact.bank_name      || '';
-    document.getElementById('edit-exp-bank-branch').value    = exact.bank_branch    || '';
-    document.getElementById('edit-exp-account-holder').value = exact.account_holder || '';
-    document.getElementById('edit-exp-bank-account').value   = exact.bank_account   || '';
+  const matches = _vendors.filter(x => x.name === val);
+  if (matches.length === 1) {
+    document.getElementById('edit-exp-bank-name').value      = matches[0].bank_name      || '';
+    document.getElementById('edit-exp-bank-branch').value    = matches[0].bank_branch    || '';
+    document.getElementById('edit-exp-account-holder').value = matches[0].account_holder || '';
+    document.getElementById('edit-exp-bank-account').value   = matches[0].bank_account   || '';
   }
   showEditVendorDropdown(val);
 }

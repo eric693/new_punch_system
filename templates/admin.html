@@ -10471,7 +10471,9 @@ async function saveExpEdit() {
   };
 
   // Optimistic：立即關 modal、更新 row
-  const optimistic = { ...(_expClaimsMap[id] || {}), ...body, id };
+  const _newStaff = (_expenseStaffCache || []).find(s => s.id === staffId);
+  const optimistic = { ...(_expClaimsMap[id] || {}), ...body, id,
+    staff_name: _newStaff ? _newStaff.name : (_expClaimsMap[id] || {}).staff_name };
   closeExpEditModal();
   showToast('已更新', 'success');
   _expUpdateCache(optimistic);

@@ -4181,7 +4181,16 @@ def api_ot_review(rid):
 @login_required
 def api_ot_delete(rid):
     with get_db() as conn:
+        old = conn.execute("SELECT * FROM overtime_requests WHERE id=%s", (rid,)).fetchone()
+        if not old: return ('', 404)
         conn.execute("DELETE FROM overtime_requests WHERE id=%s", (rid,))
+    time_str = (f"{old['start_time']}～{old['end_time']}"
+                if old.get('start_time') and old.get('end_time')
+                else f"{float(old['ot_hours'])} 小時")
+    extra = f"{old['request_date']} {time_str}"
+    if old['status'] == 'approved':
+        extra += "\n（已核准紀錄已移除）"
+    _notify_review_result(old['staff_id'], '加班申請', 'cancelled', extra)
     return jsonify({'deleted': rid})
 
 
@@ -4764,6 +4773,10 @@ def api_leave_request_delete(rid):
         if old['status'] == 'approved':
             _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
                                   str(old['start_date'])[:4], -float(old['total_days']))
+    extra = f"{str(old['start_date'])} ~ {str(old['end_date'])} 共 {float(old['total_days'])} 天"
+    if old['status'] == 'approved':
+        extra += "\n（已核准，假別額度已歸還）"
+    _notify_review_result(old['staff_id'], '請假申請', 'cancelled', extra)
     _badges_cache.clear()
     return jsonify({'deleted': rid})
 
@@ -6450,13 +6463,14 @@ def _notify_review_result(staff_id, category, action, extra_info=''):
     """
     Send a formatted LINE notification for review results.
     category: '補打卡申請', '排休申請', '加班申請', '請假申請', '薪資確認'
-    action:   'approved', 'rejected', 'confirmed'
+    action:   'approved', 'rejected', 'confirmed', 'cancelled'
     """
-    ACTION_LABEL = {'approved': '核准', 'rejected': '退回', 'confirmed': '確認'}
-    ACTION_ICON  = {'approved': '[核准]', 'rejected': '[退回]', 'confirmed': '[確認]'}
+    ACTION_LABEL = {'approved': '核准', 'rejected': '退回', 'confirmed': '確認', 'cancelled': '取消'}
+    ACTION_ICON  = {'approved': '[核准]', 'rejected': '[退回]', 'confirmed': '[確認]', 'cancelled': '[取消]'}
     label = ACTION_LABEL.get(action, action)
     icon  = ACTION_ICON.get(action, '')
-    msg   = f"{icon} {category}{label}\n{extra_info}\n\n請至員工系統查看詳情。"
+    detail = f"\n{extra_info}" if extra_info else ''
+    msg    = f"{icon} {category}{label}{detail}\n\n請至員工系統查看詳情。"
     _notify_staff_line(staff_id, msg.strip())
 
 
@@ -8694,13 +8708,22 @@ def api_ot_batch():
                 WHERE id=%s AND status='pending' RETURNING *
             """, (new_status, by, note, rid)).fetchone()
             if row:
+                pay = 0
                 if action == 'approve':
                     pay, _ = _calc_ot_pay(dict(row), float(row['ot_hours']),
                                           row.get('day_type','weekday'))
                     conn.execute("""
                         UPDATE overtime_requests SET ot_pay=%s WHERE id=%s
                     """, (pay, rid))
-                _notify_review_result(row['staff_id'], '加班申請', action, '')
+                time_str = (f"{row['start_time']}～{row['end_time']}"
+                            if row.get('start_time') and row.get('end_time')
+                            else f"{float(row['ot_hours'])} 小時")
+                extra = f"{row['request_date']} {time_str}"
+                if action == 'approve' and pay > 0:
+                    extra += f"\n加班費：${float(pay):,.0f}"
+                if note:
+                    extra += f"\n審核意見：{note}"
+                _notify_review_result(row['staff_id'], '加班申請', action, extra)
                 done += 1
     return jsonify({'ok': True, 'done': done})
 
@@ -8763,7 +8786,10 @@ def api_leave_batch():
                 if action == 'approve':
                     _update_leave_balance(conn, old['staff_id'], old['leave_type_id'],
                                           str(old['start_date'])[:4], float(old['total_days']))
-                _notify_review_result(old['staff_id'], '請假申請', action, '')
+                extra = f"{str(old['start_date'])} ~ {str(old['end_date'])} 共 {float(old['total_days'])} 天"
+                if note:
+                    extra += f"\n審核意見：{note}"
+                _notify_review_result(old['staff_id'], '請假申請', action, extra)
                 done += 1
     _badges_cache.clear()
     return jsonify({'ok': True, 'done': done})

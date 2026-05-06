@@ -10392,9 +10392,10 @@ async function reviewExpense(id, action, review_note='') {
 }
 
 function promptRejectExpense(id) {
-  const note = prompt('拒絕原因（選填）', '');
+  const note = prompt('請填寫拒絕原因（必填）', '');
   if (note === null) return; // cancelled
-  reviewExpense(id, 'reject', note);
+  if (!note.trim()) { alert('拒絕原因不可為空白'); return; }
+  reviewExpense(id, 'reject', note.trim());
 }
 
 function switchEditExpType(type, keepCategory) {

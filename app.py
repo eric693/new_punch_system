@@ -11559,14 +11559,17 @@ def api_expense_review(cid):
             note_parts = [f"報帳申請 #{cid}"]
             if claim.get('note'): note_parts.append(claim['note'])
             if claim.get('document_id2'): note_parts.append(f"附件2 doc#{claim['document_id2']}")
+            # 費用申請的公司名稱 → finance_records 的 company_unit
+            _co_name_map = {'AD影像事務所': 'ad', '進光設計': 'jm', 'AD': 'ad', 'JM': 'jm'}
+            company_unit = _co_name_map.get((claim.get('company') or '').strip(), 'ad')
             frec = conn.execute("""
                 INSERT INTO finance_records
-                  (record_date, category_id, type, title, amount, note, document_id, created_by)
-                VALUES (%s,%s,'expense',%s,%s,%s,%s,'expense-claim') RETURNING id
+                  (record_date, category_id, type, title, amount, note, document_id, created_by, company_unit)
+                VALUES (%s,%s,'expense',%s,%s,%s,%s,'expense-claim',%s) RETURNING id
             """, (claim['expense_date'], cat['id'] if cat else None,
                   claim['title'], claim['amount'],
                   '：'.join(note_parts),
-                  claim['document_id'])).fetchone()
+                  claim['document_id'], company_unit)).fetchone()
             finance_rid = frec['id']
 
         row = conn.execute("""

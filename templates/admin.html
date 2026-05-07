@@ -19,166 +19,200 @@
   --bg: #f0f2f8; --surface: #ffffff; --text: #1e2a45; --muted: #8892a4; --border: #dde3ef;
   --red: #d64242; --red-light: #fdf0f0; --green: #2e9e6b; --green-light: #edfaf4;
   --sidebar-w: 220px;
+  --radius-sm: 6px; --radius: 8px; --radius-lg: 12px; --radius-xl: 16px;
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-sm: 0 1px 4px rgba(15,28,58,.06), 0 1px 2px rgba(15,28,58,.04);
+  --shadow:    0 4px 16px rgba(15,28,58,.08), 0 1px 4px rgba(15,28,58,.05);
+  --shadow-lg: 0 12px 40px rgba(15,28,58,.14), 0 4px 12px rgba(15,28,58,.06);
+  --shadow-xl: 0 24px 80px rgba(15,28,58,.22);
+  --tr: 0.15s ease;
 }
 html, body { height: 100%; }
 body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); display: flex; overflow: hidden; }
 
-/* Sidebar */
+/* ── Sidebar ── */
 .sidebar { width: var(--sidebar-w); background: var(--navy); height: 100vh; display: flex; flex-direction: column; flex-shrink: 0; position: fixed; left: 0; top: 0; z-index: 100; }
 .sidebar-brand { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .sidebar-brand-title { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.04em; }
 .sidebar-brand-sub { font-size: 10px; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
-.sidebar-brand-bar { width: 24px; height: 2px; background: var(--gold); margin-top: 10px; }
-.sidebar-nav { flex: 1; padding: 20px 0; overflow-y: auto; }
-.nav-label { font-size: 10px; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; padding: 0 24px; margin-bottom: 8px; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 24px; font-size: 13px; color: rgba(255,255,255,0.6); cursor: pointer; transition: all 0.15s; border-left: 3px solid transparent; text-decoration: none; }
+.sidebar-brand-bar { width: 28px; height: 2px; background: var(--gold); margin-top: 10px; border-radius: 1px; }
+.sidebar-nav { flex: 1; padding: 16px 0; overflow-y: auto; }
+.nav-label { font-size: 10px; color: rgba(255,255,255,0.28); letter-spacing: 0.14em; text-transform: uppercase; padding: 0 24px; margin-bottom: 6px; margin-top: 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 24px; font-size: 13px; color: rgba(255,255,255,0.58); cursor: pointer; transition: all var(--tr); border-left: 3px solid transparent; text-decoration: none; }
 .nav-badge { display: inline-flex; align-items: center; justify-content: center; background: #e53e3e; color: #fff; font-size: 10px; font-weight: 800; font-family: 'DM Mono', monospace; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; margin-left: auto; animation: badge-pop .2s ease; pointer-events: none; }
 @keyframes badge-pop { from { transform: scale(0); } to { transform: scale(1); } }
-.nav-item:hover, .nav-item.active { color: #fff; background: rgba(255,255,255,0.06); border-left-color: var(--gold); }
+.nav-item:hover { color: rgba(255,255,255,0.88); background: rgba(255,255,255,0.05); }
+.nav-item.active { color: #fff; background: rgba(255,255,255,0.08); border-left-color: var(--gold); font-weight: 600; }
 .sidebar-bottom { padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.07); }
-.logout-btn { font-size: 12px; color: rgba(255,255,255,0.4); cursor: pointer; text-decoration: none; letter-spacing: 0.05em; transition: color 0.15s; }
+.logout-btn { font-size: 12px; color: rgba(255,255,255,0.38); cursor: pointer; text-decoration: none; letter-spacing: 0.05em; transition: color var(--tr); }
 .logout-btn:hover { color: rgba(255,255,255,0.8); }
 
-/* Main */
+/* ── Main Layout ── */
 .main { margin-left: var(--sidebar-w); flex: 1; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
-.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 50; }
-.topbar-title { font-size: 16px; font-weight: 700; color: var(--navy); letter-spacing: 0.03em; }
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; height: 56px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 50; box-shadow: var(--shadow-xs); }
+.topbar-title { font-size: 16px; font-weight: 700; color: var(--navy); letter-spacing: 0.02em; }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
-
-/* Buttons */
-.btn { padding: 8px 16px; border-radius: 7px; font-family: 'Noto Sans TC', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; letter-spacing: 0.03em; }
-.btn-primary { background: var(--navy); color: #fff; }
-.btn-primary:hover { background: var(--navy-light); }
-.btn-outline { background: transparent; color: var(--navy); border: 1.5px solid var(--border); }
-.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-.btn-danger { background: var(--red); color: #fff; }
-.btn-danger:hover { background: #c03636; }
-.btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--border); font-family: 'Noto Sans TC', sans-serif; }
-.btn-ghost:hover { color: var(--text); border-color: #aaa; }
-.btn-sm { padding: 5px 12px; font-size: 12px; }
-
-/* ── Punch/Sched module ── */
-.inv-tab { padding: 9px 18px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans TC', sans-serif; background: transparent; border: none; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; margin-bottom: -2px; white-space:nowrap; }
-.inv-tab:hover { color: var(--text); }
-.inv-tab.active { color: var(--navy); border-bottom-color: var(--accent); font-weight: 700; }
-.inv-tab-bar { display:flex; gap:0; margin-bottom:20px; border-bottom:2px solid var(--border); overflow-x:auto; }
-.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
-.badge-warn  { background:var(--red-light);   color:var(--red);   }
-.badge-ok    { background:var(--green-light);  color:var(--green); }
-
-/* ── Punch module ── */
-.punch-status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
-.punch-status-in  { background:var(--green); }
-.punch-status-out { background:var(--red); }
-.punch-manual-badge { font-size:10px; padding:1px 6px; background:#f0f4ff; color:var(--accent); border-radius:8px; margin-left:4px; }
-
-/* Page */
 .page { padding: 28px 32px; flex: 1; }
 
-/* Filter Bar */
-.filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* ── Page Header ── */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+.page-header-left { display: flex; flex-direction: column; gap: 2px; }
+.page-header-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+.page-header-desc  { font-size: 12px; color: var(--muted); }
+.page-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Buttons ── */
+.btn { padding: 8px 18px; border-radius: var(--radius); font-family: 'Noto Sans TC', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all var(--tr); letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; }
+.btn-primary { background: var(--navy); color: #fff; box-shadow: var(--shadow-xs); }
+.btn-primary:hover { background: var(--navy-light); box-shadow: var(--shadow-sm); }
+.btn-success { background: var(--green); color: #fff; box-shadow: var(--shadow-xs); }
+.btn-success:hover { background: #268a5b; box-shadow: var(--shadow-sm); }
+.btn-outline { background: var(--surface); color: var(--navy); border: 1.5px solid var(--border); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.btn-danger { background: var(--red); color: #fff; box-shadow: var(--shadow-xs); }
+.btn-danger:hover { background: #bf3838; box-shadow: var(--shadow-sm); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--border); font-family: 'Noto Sans TC', sans-serif; }
+.btn-ghost:hover { color: var(--text); border-color: var(--muted); background: var(--bg); }
+.btn-sm { padding: 5px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+.btn-xs { padding: 3px 9px; font-size: 11px; border-radius: var(--radius-sm); }
+
+/* ── Tabs ── */
+.inv-tab { padding: 10px 18px; font-size: 12px; font-weight: 500; font-family: 'Noto Sans TC', sans-serif; background: transparent; border: none; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; transition: all var(--tr); margin-bottom: -2px; white-space: nowrap; }
+.inv-tab:hover { color: var(--text); }
+.inv-tab.active { color: var(--navy); border-bottom-color: var(--accent); font-weight: 700; }
+.inv-tab-bar { display: flex; gap: 0; margin-bottom: 22px; border-bottom: 2px solid var(--border); overflow-x: auto; }
+.tab-badge { display: inline-flex; align-items: center; justify-content: center; background: var(--red); color: #fff; font-size: 9px; font-weight: 800; font-family: 'DM Mono', monospace; min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px; margin-left: 5px; vertical-align: middle; animation: badge-pop .2s ease; }
+
+/* ── Badges ── */
+.badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.badge-warn  { background: var(--red-light);   color: var(--red);   }
+.badge-ok    { background: var(--green-light);  color: var(--green); }
+.badge-info  { background: var(--accent-light); color: var(--accent); }
+.badge-neutral { background: #f0f2f8; color: var(--muted); }
+
+/* ── Filter Bar ── */
+.filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 13px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: var(--shadow-xs); }
 .filter-group { display: flex; align-items: center; gap: 8px; }
 .filter-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .filter-sep { color: var(--muted); font-size: 13px; }
-.filter-divider { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
-.filter-input { padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-family: 'Noto Sans TC', sans-serif; font-size: 13px; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.15s; }
-.filter-input:focus { border-color: var(--accent); background: #fff; }
-.filter-mode-btn { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--muted); transition: all 0.15s; font-family: 'Noto Sans TC', sans-serif; }
+.filter-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.filter-spacer { flex: 1; min-width: 8px; }
+.filter-input { padding: 6px 11px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-family: 'Noto Sans TC', sans-serif; font-size: 13px; color: var(--text); background: var(--bg); outline: none; transition: border-color var(--tr), box-shadow var(--tr); }
+.filter-input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(74,123,218,0.1); }
+.filter-mode-btn { padding: 6px 13px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--muted); transition: all var(--tr); font-family: 'Noto Sans TC', sans-serif; }
 .filter-mode-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
-.filter-spacer { flex: 1; }
 
-/* Stats */
+/* ── Stats ── */
 .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-.stat-card { background: var(--surface); border-radius: 10px; padding: 20px 24px; border: 1px solid var(--border); }
-.stat-label { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-.stat-value { font-family: 'DM Mono', monospace; font-size: 24px; font-weight: 500; color: var(--navy); }
-.stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.stat-card { background: var(--surface); border-radius: var(--radius-lg); padding: 20px 24px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: box-shadow var(--tr); }
+.stat-card:hover { box-shadow: var(--shadow); }
+.stat-label { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+.stat-value { font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 500; color: var(--navy); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
 .stat-value.positive { color: var(--green); }
 
-/* Card & Table */
-.card { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
-.card-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+/* ── Card ── */
+.card { background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow-sm); }
+.card-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: linear-gradient(180deg,var(--surface) 0%,rgba(247,249,253,0.5) 100%); }
 .card-title { font-size: 14px; font-weight: 700; color: var(--navy); }
+.card-body { padding: 20px 24px; }
+.card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* ── Table ── */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-thead th { background: #f7f9fd; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
-tbody tr { border-bottom: 1px solid #f0f2f8; transition: background 0.12s; }
-tbody tr:hover { background: #f7f9fd; }
+thead th { background: linear-gradient(180deg,#f7f9fd 0%,#f3f6fc 100%); color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 11px 16px; text-align: left; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #eef0f6; transition: background var(--tr); }
+tbody tr:hover { background: #f5f7fc; }
 tbody tr:last-child { border-bottom: none; }
-tbody td { padding: 12px 16px; color: var(--text); white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 13px; }
-tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; }
-.action-btns { display: flex; gap: 6px; }
+tbody td { padding: 11px 16px; color: var(--text); white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 13px; vertical-align: middle; }
+tbody td.tc { font-family: 'Noto Sans TC', sans-serif; }
+.action-btns { display: flex; gap: 5px; align-items: center; }
 
-/* Modal */
-.modal-overlay { position: fixed; inset: 0; background: rgba(10,20,45,0.55); backdrop-filter: blur(2px); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+/* ── Punch module ── */
+.punch-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+.punch-status-in  { background: var(--green); }
+.punch-status-out { background: var(--red); }
+.punch-manual-badge { font-size: 10px; padding: 1px 7px; background: var(--accent-light); color: var(--accent); border-radius: 20px; margin-left: 4px; font-weight: 600; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(10,20,45,0.52); backdrop-filter: blur(3px); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
 .modal-overlay.open { display: flex; }
-.modal { background: var(--surface); border-radius: 12px; width: 100%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,0.25); overflow: hidden; }
-.modal-header { padding: 20px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.modal { background: var(--surface); border-radius: var(--radius-xl); width: 100%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); overflow: hidden; }
+.modal-header { padding: 20px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: linear-gradient(180deg,var(--surface) 0%,rgba(247,249,253,0.6) 100%); }
 .modal-title { font-size: 16px; font-weight: 700; color: var(--navy); }
-.modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 6px; color: var(--muted); font-size: 18px; font-weight: 300; transition: all 0.15s; background: none; border: none; }
+.modal-close { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: var(--radius-sm); color: var(--muted); font-size: 18px; font-weight: 300; transition: all var(--tr); background: none; border: none; }
 .modal-close:hover { background: var(--bg); color: var(--text); }
 .modal-body { padding: 24px 28px; overflow-y: auto; flex: 1; }
-.modal-footer { padding: 16px 28px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; background: #fafbfd; }
+.modal-footer { padding: 14px 28px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; background: linear-gradient(0deg,#f7f9fd 0%,var(--surface) 100%); }
+.modal-section { margin-bottom: 20px; }
+.modal-section:last-child { margin-bottom: 0; }
+.modal-section-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 
-/* Form */
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+/* ── Form ── */
+.form-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group.full-width { grid-column: 1 / -1; }
-.form-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
-.form-input { padding: 10px 13px; border: 1.5px solid var(--border); border-radius: 7px; font-family: 'DM Mono', monospace; font-size: 14px; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
-.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,123,218,0.1); background: var(--surface); }
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+.form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.form-field:last-child { margin-bottom: 0; }
+.form-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+.form-label .req { color: var(--red); margin-left: 2px; }
+.form-hint  { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+.form-input { padding: 9px 13px; border: 1.5px solid var(--border); border-radius: var(--radius); font-family: 'Noto Sans TC', sans-serif; font-size: 13px; color: var(--text); background: var(--bg); outline: none; transition: border-color var(--tr), box-shadow var(--tr), background var(--tr); width: 100%; }
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,123,218,0.1); background: #fff; }
+.form-input::placeholder { color: #b0baca; }
+select.form-input { cursor: pointer; }
+textarea.form-input { resize: vertical; font-family: 'DM Mono', monospace; font-size: 12px; line-height: 1.6; }
+.form-row  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-input-prefix { position: relative; }
+.form-input-prefix .prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; font-family: 'DM Mono', monospace; pointer-events: none; }
+.form-input-prefix .form-input { padding-left: 40px; }
 
-/* Toast */
+/* Info box */
+.info-box { background: var(--accent-light); border: 1px solid #c9d9f5; border-radius: var(--radius); padding: 12px 16px; font-size: 12px; color: var(--accent); line-height: 1.7; }
+.warn-box  { background: var(--red-light);   border: 1px solid #f5c5c5; border-radius: var(--radius); padding: 12px 16px; font-size: 12px; color: var(--red);   line-height: 1.7; }
+
+/* ── Toast ── */
 .toast-wrap { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
-.toast { padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,0.15); animation: toastIn 0.25s ease; min-width: 200px; }
+.toast { padding: 12px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; box-shadow: var(--shadow); animation: toastIn 0.25s ease; min-width: 200px; }
 .toast-success { background: var(--green); color: #fff; }
 .toast-error   { background: var(--red);   color: #fff; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Empty */
-.tab-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: #e53e3e; color: #fff;
-  font-size: 9px; font-weight: 800; font-family: 'DM Mono', monospace;
-  min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
-  margin-left: 5px; vertical-align: middle;
-  animation: badge-pop .2s ease;
-}
-.empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
-.sort-ghost { opacity: .4; background: var(--accent-light, #eff6ff) !important; }
-.empty-state-text { font-size: 14px; margin-top: 8px; }
-
-/* Skeleton loading */
-@keyframes skeleton-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+/* ── Empty / Skeleton ── */
+.empty-state { text-align: center; padding: 56px 24px; color: var(--muted); }
+.empty-state-icon { font-size: 40px; margin-bottom: 10px; opacity: .6; }
+.empty-state-text { font-size: 14px; margin-top: 6px; }
+.sort-ghost { opacity: .4; background: var(--accent-light) !important; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease infinite; display: inline-block; width: 100%; }
 .skel-sm { width: 60%; }
 .skel-xs { width: 35%; }
 
-/* Confirm */
-.confirm-overlay { position: fixed; inset: 0; background: rgba(10,20,45,0.55); backdrop-filter: blur(2px); z-index: 300; display: none; align-items: center; justify-content: center; }
+/* ── Confirm ── */
+.confirm-overlay { position: fixed; inset: 0; background: rgba(10,20,45,0.52); backdrop-filter: blur(3px); z-index: 300; display: none; align-items: center; justify-content: center; }
 .confirm-overlay.open { display: flex; }
-.confirm-box { background: var(--surface); border-radius: 12px; padding: 28px 32px; max-width: 360px; width: 90%; box-shadow: 0 24px 60px rgba(0,0,0,0.2); text-align: center; }
-.confirm-title { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
-.confirm-msg { font-size: 13px; color: var(--muted); margin-bottom: 24px; line-height: 1.6; }
+.confirm-box { background: var(--surface); border-radius: var(--radius-xl); padding: 32px; max-width: 380px; width: 90%; box-shadow: var(--shadow-xl); text-align: center; }
+.confirm-title { font-size: 17px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+.confirm-msg { font-size: 13px; color: var(--muted); margin-bottom: 24px; line-height: 1.65; }
 .confirm-actions { display: flex; gap: 10px; justify-content: center; }
 
-/* Misc */
-.search-box { padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 7px; font-family: 'Noto Sans TC', sans-serif; font-size: 13px; color: var(--text); background: var(--bg); outline: none; width: 200px; transition: border-color 0.15s; }
-.search-box:focus { border-color: var(--accent); background: #fff; }
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* ── Misc ── */
+.search-box { padding: 8px 14px; border: 1.5px solid var(--border); border-radius: var(--radius); font-family: 'Noto Sans TC', sans-serif; font-size: 13px; color: var(--text); background: var(--bg); outline: none; width: 200px; transition: border-color var(--tr); }
+.search-box:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(74,123,218,0.1); }
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c8d0e0; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #a0abbe; }
+::-webkit-scrollbar-thumb { background: #c4cedf; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9aabc0; }
 
-/* Mobile */
+/* ── Mobile ── */
 .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 99; }
 .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 8px; border: none; background: transparent; }
 .hamburger span { display: block; width: 22px; height: 2px; background: var(--navy); border-radius: 2px; transition: all 0.2s; }
-
 @media (max-width: 768px) {
   body { overflow: hidden; }
   .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; z-index: 200; box-shadow: 4px 0 24px rgba(0,0,0,.25); }
@@ -188,13 +222,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   .hamburger { display: flex; }
   .topbar { padding: 0 16px; }
   .stats-row { grid-template-columns: repeat(2,1fr); gap: 10px; }
-  .form-grid { grid-template-columns: 1fr; }
+  .form-grid, .form-row, .form-2col { grid-template-columns: 1fr; }
   .page { padding: 14px 16px; }
   .filter-bar { gap: 8px; padding: 10px 14px; }
   .card-header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .topbar-title { font-size: 15px; }
   .btn { font-size: 12px; padding: 7px 13px; }
+  .page-header { margin-bottom: 16px; }
 }
 </style>
 </head>
@@ -368,9 +403,11 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
 
       <!-- 待審申請分類 -->
-      <div class="card" style="padding:20px">
-        <div class="card-title" style="padding:0;margin-bottom:16px">待審申請</div>
-        <div id="ds-pending-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">待審申請</span></div>
+        <div class="card-body" style="padding-top:16px">
+          <div id="ds-pending-list" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
       </div>
 
       <!-- 今日出勤明細表 -->
@@ -482,20 +519,39 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- 補打卡 -->
     <div id="punch-panel-manual" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" id="manual-grid">
-        <div class="card" style="padding:24px">
-          <div class="card-title" style="margin-bottom:6px;padding:0">代補打卡（代員工新增打卡記錄）</div><div style="font-size:12px;color:var(--muted);margin-bottom:16px">此功能供管理員直接幫員工補齊漏打的打卡記錄，不需員工申請。</div>
-          <div style="margin-bottom:14px"><label class="form-label">員工</label><select class="form-input" id="man-staff" style="width:100%"></select></div>
-          <div style="margin-bottom:14px">
-            <label class="form-label">打卡類型</label>
-            <select class="form-input" id="man-type" style="width:100%">
-              <option value="in">上班打卡</option><option value="out">下班打卡</option>
-              <option value="break_out">休息開始</option><option value="break_in">休息結束</option>
-            </select>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">代補打卡</div>
+              <div class="card-desc">代員工新增打卡記錄，不需員工申請</div>
+            </div>
           </div>
-          <div style="margin-bottom:14px"><label class="form-label">補打時間</label><input class="form-input" type="datetime-local" id="man-time" style="width:100%"></div>
-          <div style="margin-bottom:14px"><label class="form-label">操作人員</label><input class="form-input" id="man-by" placeholder="管理員姓名" style="width:100%"></div>
-          <div style="margin-bottom:20px"><label class="form-label">補打原因</label><input class="form-input" id="man-note" placeholder="例：忘記打卡" style="width:100%"></div>
-          <button class="btn btn-primary" style="width:100%" onclick="submitManualPunch()">送出補打卡</button>
+          <div class="card-body">
+            <div class="form-field">
+              <label class="form-label">員工</label>
+              <select class="form-input" id="man-staff"></select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">打卡類型</label>
+              <select class="form-input" id="man-type">
+                <option value="in">上班打卡</option><option value="out">下班打卡</option>
+                <option value="break_out">休息開始</option><option value="break_in">休息結束</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">補打時間</label>
+              <input class="form-input" type="datetime-local" id="man-time">
+            </div>
+            <div class="form-field">
+              <label class="form-label">操作人員</label>
+              <input class="form-input" id="man-by" placeholder="管理員姓名">
+            </div>
+            <div class="form-field">
+              <label class="form-label">補打原因</label>
+              <input class="form-input" id="man-note" placeholder="例：忘記打卡">
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="submitManualPunch()">送出補打卡</button>
+          </div>
         </div>
         <div class="card">
           <div class="card-header"><span class="card-title">近期補打記錄</span></div>
@@ -522,14 +578,16 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <option value="0">停用</option>
         </select>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="punch-staff-count" style="font-size:13px;color:var(--muted)"></span>
-          <button class="btn btn-ghost btn-sm" id="staff-sort-toggle" onclick="toggleStaffSortMode()" title="調整員工順序">⇅ 調整順序</button>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left" style="flex-direction:row;align-items:center;gap:10px">
+          <span id="punch-staff-count" class="badge-neutral" style="font-size:13px;padding:3px 10px"></span>
+          <button class="btn btn-ghost btn-sm" id="staff-sort-toggle" onclick="toggleStaffSortMode()">⇅ 調整順序</button>
           <button class="btn btn-primary btn-sm" id="staff-sort-save" style="display:none" onclick="saveStaffOrder()">儲存順序</button>
           <button class="btn btn-outline btn-sm" id="staff-sort-cancel" style="display:none" onclick="cancelStaffSortMode()">取消</button>
         </div>
-        <button class="btn btn-primary" onclick="openPunchStaffModal()">新增員工</button>
+        <div class="page-header-actions">
+          <button class="btn btn-primary" onclick="openPunchStaffModal()">新增員工</button>
+        </div>
       </div>
       <div id="staff-sort-hint" style="display:none;margin-bottom:10px;padding:8px 12px;background:#eff6ff;border-radius:8px;font-size:12px;color:var(--accent)">拖曳列即可調整順序，完成後點「儲存順序」</div>
       <div class="card">
@@ -613,12 +671,13 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- 離職員工 -->
     <div id="punch-panel-resigned" style="display:none">
       <div class="filter-bar" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
-        <span class="card-title" style="font-size:15px">離職員工記錄</span>
+        <span class="filter-label">離職員工記錄</span>
+        <div class="filter-divider"></div>
         <input type="text" class="filter-input" id="resigned-flt-kw" placeholder="🔍 搜尋姓名/代碼…" style="min-width:200px" oninput="renderResignedStaff()">
         <select class="filter-input" id="resigned-flt-dept" style="min-width:120px" onchange="renderResignedStaff()">
           <option value="">全部部門</option>
         </select>
-        <span style="flex:1"></span>
+        <span class="filter-spacer"></span>
         <button class="btn btn-outline btn-sm" onclick="loadResignedStaff()">重新整理</button>
       </div>
       <div class="card">
@@ -646,77 +705,78 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </select>
         <span style="font-size:12px;color:var(--muted)">變更後自動儲存</span>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <span id="gps-loc-count" style="font-size:13px;color:var(--muted)">載入中...</span>
-        <button class="btn btn-primary" onclick="openLocModal()">新增地點</button>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span id="gps-loc-count" style="font-size:13px;color:var(--muted)">載入中...</span></div>
+        <div class="page-header-actions"><button class="btn btn-primary" onclick="openLocModal()">新增地點</button></div>
       </div>
       <div id="gps-loc-list" style="margin-bottom:20px"></div>
-      <div class="card" style="padding:16px 20px;background:var(--bg)">
-        <div style="font-size:12px;color:var(--muted);line-height:2">
-          <strong style="color:var(--text)">如何取得 GPS 座標：</strong><br>
-          1. 在新增/編輯地點視窗中點擊「取得目前位置」，瀏覽器自動填入<br>
-          2. 或至 Google Maps 找到地點，右鍵點擊地圖 → 座標顯示在選單第一行
-        </div>
+      <div class="info-box">
+        <strong style="color:var(--navy)">如何取得 GPS 座標：</strong><br>
+        1. 在新增/編輯地點視窗中點擊「取得目前位置」，瀏覽器自動填入<br>
+        2. 或至 Google Maps 找到地點，右鍵點擊地圖 → 座標顯示在選單第一行
       </div>
     </div>
 
     <!-- LINE 打卡 -->
     <div id="punch-panel-line" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
-        <div class="card" style="padding:24px">
-          <div class="card-title" style="padding:0;margin-bottom:6px">LINE 官方帳號打卡設定</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:20px">員工透過 LINE 傳送位置訊息即可打卡</div>
-          <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px">
-            <label class="form-label" style="margin:0">啟用 LINE 打卡</label>
-            <select class="form-input" id="lp-enabled" style="width:auto"><option value="0">停用</option><option value="1">啟用</option></select>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">LINE 官方帳號打卡設定</div><div class="card-desc">員工透過 LINE 傳送位置訊息即可打卡</div></div>
           </div>
-          <div style="margin-bottom:14px"><label class="form-label">Channel Access Token</label><input class="form-input" id="lp-token" placeholder="長效 Token（Messaging API）" style="width:100%;font-family:'DM Mono',monospace;font-size:12px"></div>
-          <div style="margin-bottom:20px"><label class="form-label">Channel Secret</label><input class="form-input" id="lp-secret" placeholder="Channel Secret" style="width:100%;font-family:'DM Mono',monospace;font-size:12px"></div>
-          <button class="btn btn-primary" onclick="saveLinePunchConfig()" style="width:100%">儲存設定</button>
-          <div id="lp-save-msg" style="font-size:12px;color:var(--green);margin-top:10px;min-height:16px"></div>
-          <div style="margin-top:20px;padding:14px;background:var(--bg);border-radius:8px">
-            <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">Webhook URL</div>
-            <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);word-break:break-all;padding:8px;background:#fff;border-radius:6px;border:1px solid var(--border)" id="lp-webhook-url">載入中...</div>
+          <div class="card-body">
+            <div class="form-field" style="flex-direction:row;align-items:center;gap:12px">
+              <label class="form-label" style="margin:0;white-space:nowrap">啟用 LINE 打卡</label>
+              <select class="form-input" id="lp-enabled" style="width:auto"><option value="0">停用</option><option value="1">啟用</option></select>
+            </div>
+            <div class="form-field"><label class="form-label">Channel Access Token</label><input class="form-input" id="lp-token" placeholder="長效 Token（Messaging API）" style="font-family:'DM Mono',monospace;font-size:12px"></div>
+            <div class="form-field"><label class="form-label">Channel Secret</label><input class="form-input" id="lp-secret" placeholder="Channel Secret" style="font-family:'DM Mono',monospace;font-size:12px"></div>
+            <button class="btn btn-primary" onclick="saveLinePunchConfig()" style="width:100%">儲存設定</button>
+            <div id="lp-save-msg" style="font-size:12px;color:var(--green);margin-top:10px;min-height:16px"></div>
+            <div class="info-box" style="margin-top:16px">
+              <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">Webhook URL</div>
+              <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);word-break:break-all;padding:8px;background:#fff;border-radius:6px;border:1px solid var(--border)" id="lp-webhook-url">載入中...</div>
+            </div>
           </div>
         </div>
         <div>
-          <div class="card" style="padding:20px;margin-bottom:14px">
-            <div class="card-title" style="padding:0;margin-bottom:12px">圖文選單</div>
-            <!-- Google Drive image URL -->
-            <div style="margin-bottom:10px">
-              <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px">Google Drive 圖片連結（選填）</label>
-              <input id="rm-gdrive-url" type="text" class="filter-input" placeholder="https://drive.google.com/file/d/…/view" style="width:100%;font-size:12px">
-              <div style="font-size:11px;color:var(--muted);margin-top:3px">貼上 Google Drive 分享連結，系統會自動下載並上傳至 LINE。留空則使用預設色塊圖。</div>
-            </div>
-            <!-- Button text mapping: 2x2 grid -->
-            <div style="margin-bottom:12px">
-              <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">按鈕觸發文字（對應四個區域，留空使用預設值）</label>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                <div>
-                  <div style="font-size:10px;color:var(--muted);margin-bottom:2px">左上（打卡上班）</div>
-                  <input id="rm-text-0" type="text" class="filter-input" placeholder="上班" style="width:100%;font-size:12px">
-                </div>
-                <div>
-                  <div style="font-size:10px;color:var(--muted);margin-bottom:2px">右上（打卡下班）</div>
-                  <input id="rm-text-1" type="text" class="filter-input" placeholder="下班" style="width:100%;font-size:12px">
-                </div>
-                <div>
-                  <div style="font-size:10px;color:var(--muted);margin-bottom:2px">左下（請假）</div>
-                  <input id="rm-text-2" type="text" class="filter-input" placeholder="請假" style="width:100%;font-size:12px">
-                </div>
-                <div>
-                  <div style="font-size:10px;color:var(--muted);margin-bottom:2px">右下（加班）</div>
-                  <input id="rm-text-3" type="text" class="filter-input" placeholder="加班" style="width:100%;font-size:12px">
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-header"><span class="card-title">圖文選單</span></div>
+            <div class="card-body">
+              <div class="form-field">
+                <label class="form-label">Google Drive 圖片連結（選填）</label>
+                <input id="rm-gdrive-url" type="text" class="form-input" placeholder="https://drive.google.com/file/d/…/view" style="font-size:12px">
+                <span class="form-hint">貼上 Google Drive 分享連結，系統自動下載並上傳至 LINE。留空則使用預設色塊圖。</span>
+              </div>
+              <div class="form-field">
+                <label class="form-label">按鈕觸發文字（對應四個區域，留空使用預設值）</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <div>
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px">左上（打卡上班）</div>
+                    <input id="rm-text-0" type="text" class="filter-input" placeholder="上班" style="width:100%;font-size:12px">
+                  </div>
+                  <div>
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px">右上（打卡下班）</div>
+                    <input id="rm-text-1" type="text" class="filter-input" placeholder="下班" style="width:100%;font-size:12px">
+                  </div>
+                  <div>
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px">左下（請假）</div>
+                    <input id="rm-text-2" type="text" class="filter-input" placeholder="請假" style="width:100%;font-size:12px">
+                  </div>
+                  <div>
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px">右下（加班）</div>
+                    <input id="rm-text-3" type="text" class="filter-input" placeholder="加班" style="width:100%;font-size:12px">
+                  </div>
                 </div>
               </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-primary btn-sm" onclick="createRichMenu()">建立圖文選單</button>
+                <button class="btn btn-outline btn-sm" onclick="loadRichMenus()">查看現有選單</button>
+                <button class="btn btn-ghost btn-sm" onclick="unsetRichMenu()">取消預設選單</button>
+              </div>
+              <div id="rm-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+              <div id="rm-list" style="display:none"><div id="rm-list-body"></div></div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-              <button class="btn btn-primary btn-sm" onclick="createRichMenu()">建立圖文選單</button>
-              <button class="btn btn-outline btn-sm" onclick="loadRichMenus()">查看現有選單</button>
-              <button class="btn btn-ghost btn-sm" onclick="unsetRichMenu()">取消預設選單</button>
-            </div>
-            <div id="rm-msg" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
-            <div id="rm-list" style="display:none"><div id="rm-list-body"></div></div>
           </div>
           <div class="card">
             <div class="card-header"><span class="card-title">員工 LINE 綁定狀態</span><button class="btn btn-outline btn-sm" onclick="loadLinePunchStaff()">重新整理</button></div>
@@ -892,16 +952,18 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- 月份設定 -->
     <div id="sched-panel-config" style="display:none">
       <div style="max-width:440px">
-        <div class="card" style="padding:24px">
-          <div class="card-title" style="padding:0;margin-bottom:18px">月份排班設定</div>
-          <div style="margin-bottom:14px"><label class="form-label">設定月份</label><input class="filter-input" type="month" id="cfg-month" onchange="loadSchedConfig()" style="width:100%"></div>
-          <div class="form-row">
-            <div><label class="form-label">每日最多休假人數</label><input class="form-input" type="number" id="cfg-max-off" min="1" max="20" value="2"></div>
-            <div><label class="form-label">每人每月休假配額（天）</label><input class="form-input" type="number" id="cfg-quota" min="1" max="31" value="8"></div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">月份排班設定</span></div>
+          <div class="card-body">
+            <div class="form-field"><label class="form-label">設定月份</label><input class="filter-input" type="month" id="cfg-month" onchange="loadSchedConfig()" style="width:100%"></div>
+            <div class="form-row">
+              <div><label class="form-label">每日最多休假人數</label><input class="form-input" type="number" id="cfg-max-off" min="1" max="20" value="2"></div>
+              <div><label class="form-label">每人每月休假配額（天）</label><input class="form-input" type="number" id="cfg-quota" min="1" max="31" value="8"></div>
+            </div>
+            <div class="form-field"><label class="form-label">備註</label><input class="form-input" id="cfg-notes" placeholder="選填"></div>
+            <button class="btn btn-primary" onclick="saveSchedConfig()" style="width:100%">儲存設定</button>
+            <div id="cfg-msg" style="font-size:12px;color:var(--green);margin-top:10px;min-height:16px"></div>
           </div>
-          <div style="margin-bottom:18px"><label class="form-label">備註</label><input class="form-input" id="cfg-notes" placeholder="選填" style="width:100%"></div>
-          <button class="btn btn-primary" onclick="saveSchedConfig()" style="width:100%">儲存設定</button>
-          <div id="cfg-msg" style="font-size:12px;color:var(--green);margin-top:10px;min-height:16px"></div>
         </div>
       </div>
     </div>
@@ -910,31 +972,36 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
 
         <!-- 人力需求設定 -->
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:4px">各班每日人力需求</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">設定每個班別在各星期幾需要多少人（0 = 不需要）</div>
-          <div id="requirements-grid" style="overflow-x:auto"></div>
-          <div style="margin-top:14px;display:flex;gap:8px">
-            <button class="btn btn-primary" onclick="saveStaffingRequirements()">儲存需求</button>
-            <button class="btn btn-outline btn-sm" onclick="loadStaffingRequirements()">重新整理</button>
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">各班每日人力需求</div><div class="card-desc">設定每個班別在各星期幾需要多少人（0 = 不需要）</div></div>
           </div>
-          <div id="req-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:16px"></div>
+          <div class="card-body">
+            <div id="requirements-grid" style="overflow-x:auto"></div>
+            <div style="margin-top:14px;display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="saveStaffingRequirements()">儲存需求</button>
+              <button class="btn btn-outline btn-sm" onclick="loadStaffingRequirements()">重新整理</button>
+            </div>
+            <div id="req-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:16px"></div>
+          </div>
         </div>
 
         <!-- 自動產生控制 -->
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px">產生班表建議</div>
-          <div style="margin-bottom:12px">
-            <label class="form-label">排班月份</label>
-            <input type="month" id="autogen-month" class="form-input" style="width:100%">
+        <div class="card">
+          <div class="card-header"><span class="card-title">產生班表建議</span></div>
+          <div class="card-body">
+            <div class="form-field">
+              <label class="form-label">排班月份</label>
+              <input type="month" id="autogen-month" class="form-input">
+            </div>
+            <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="autogen-overwrite" style="width:16px;height:16px">
+              <label for="autogen-overwrite" style="font-size:13px;cursor:pointer">覆蓋現有班表（相同員工相同日期）</label>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="runAutoGenerate()">🔄 產生班表建議</button>
+            <div id="autogen-summary" style="display:none;background:var(--bg);border-radius:6px;padding:12px;font-size:13px;margin-bottom:10px"></div>
+            <div id="autogen-conflicts" style="display:none"></div>
           </div>
-          <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
-            <input type="checkbox" id="autogen-overwrite" style="width:16px;height:16px">
-            <label for="autogen-overwrite" style="font-size:13px;cursor:pointer">覆蓋現有班表（相同員工相同日期）</label>
-          </div>
-          <button class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="runAutoGenerate()">🔄 產生班表建議</button>
-          <div id="autogen-summary" style="display:none;background:var(--bg);border-radius:6px;padding:12px;font-size:13px;margin-bottom:10px"></div>
-          <div id="autogen-conflicts" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -1021,14 +1088,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           </table>
         </div>
       </div>
-      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
-        <div style="font-size:12px;color:var(--muted);line-height:2">
-          <strong style="color:var(--text)">2026 勞基法假別說明：</strong><br>
-          特休：1年10天、2年15天、3~5年+1天/年、滿5年20天（上限）｜
-          病假：年30天半薪（住院另計）｜事假：年14天無薪｜
-          生理假：月1天（年12天）半薪｜婚假：8天全薪｜
-          喪假：父母/配偶8天；祖父母6天；曾祖父母3天
-        </div>
+      <div class="info-box" style="margin-top:12px;line-height:2">
+        <strong style="color:var(--navy)">2026 勞基法假別說明：</strong><br>
+        特休：1年10天、2年15天、3~5年+1天/年、滿5年20天（上限）｜
+        病假：年30天半薪（住院另計）｜事假：年14天無薪｜
+        生理假：月1天（年12天）半薪｜婚假：8天全薪｜
+        喪假：父母/配偶8天；祖父母6天；曾祖父母3天
       </div>
     </div>
   </div><!-- end page-leave -->
@@ -1097,9 +1162,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           <option value="0">停用</option>
         </select>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <span id="sal-staff-count" style="font-size:13px;color:var(--muted)"></span>
-        <a href="#" onclick="showPage('punch',event);switchPunchTab('staff')" style="font-size:12px;color:var(--accent)">管理員工 →</a>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span id="sal-staff-count" style="font-size:13px;color:var(--muted)"></span></div>
+        <div class="page-header-actions"><a href="#" onclick="showPage('punch',event);switchPunchTab('staff')" class="btn btn-ghost btn-sm">管理員工 →</a></div>
       </div>
       <div class="card">
         <div class="table-wrap">
@@ -1123,16 +1188,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <div><div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:12px">津貼項目（加項）</div><div id="sal-items-allow"></div></div>
         <div><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:12px">扣除項目（減項）</div><div id="sal-items-deduct"></div></div>
       </div>
-      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
-        <div style="font-size:12px;color:var(--muted);line-height:2">
-          <strong style="color:var(--text)">公式說明：</strong>可用變數：
-          <code>base_salary</code>（底薪）
-          <code>insured_salary</code>（投保薪資）
-          <code>service_years</code>（年資）<br>
-          範例：勞保 <code>insured_salary*0.125*0.2</code>　
-          健保 <code>insured_salary*0.0517*0.3</code>　
-          勞退6% <code>base_salary*0.06</code>
-        </div>
+      <div class="info-box" style="margin-top:12px;line-height:2">
+        <strong style="color:var(--navy)">公式說明：</strong>可用變數：
+        <code>base_salary</code>（底薪）
+        <code>insured_salary</code>（投保薪資）
+        <code>service_years</code>（年資）<br>
+        範例：勞保 <code>insured_salary*0.125*0.2</code>
+        健保 <code>insured_salary*0.0517*0.3</code>
+        勞退6% <code>base_salary*0.06</code>
       </div>
     </div>
     <!-- 扣繳憑單 -->
@@ -1143,16 +1206,18 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         <button class="btn btn-outline btn-sm" onclick="openWithholdingReport('html')">產生報表（列印）</button>
         <button class="btn btn-outline btn-sm" onclick="openWithholdingReport('xlsx')">匯出 Excel</button>
       </div>
-      <div class="card" style="padding:20px">
-        <div class="card-title" style="padding:0;margin-bottom:12px">統一編號與公司資訊（用於憑單表頭）</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px">
-          <div><label class="form-label">公司名稱</label><input class="form-input" id="wh-company-name" style="width:100%"></div>
-          <div><label class="form-label">統一編號</label><input class="form-input" id="wh-tax-id" style="width:100%"></div>
-          <div style="grid-column:1/-1"><label class="form-label">公司地址</label><input class="form-input" id="wh-company-addr" style="width:100%"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">統一編號與公司資訊（用於憑單表頭）</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px">
+            <div class="form-field"><label class="form-label">公司名稱</label><input class="form-input" id="wh-company-name"></div>
+            <div class="form-field"><label class="form-label">統一編號</label><input class="form-input" id="wh-tax-id"></div>
+            <div class="form-field" style="grid-column:1/-1"><label class="form-label">公司地址</label><input class="form-input" id="wh-company-addr"></div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:4px" onclick="saveWhSettings()">儲存公司資訊</button>
+          <div id="wh-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
+          <div class="info-box" style="margin-top:12px">※ 員工身分證字號與地址請至薪資設定→各員工薪資設定中填入。扣繳稅額請在各月薪資紀錄中填入「扣繳稅額」欄位。</div>
         </div>
-        <button class="btn btn-primary" style="margin-top:12px" onclick="saveWhSettings()">儲存公司資訊</button>
-        <div id="wh-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
-        <div style="font-size:12px;color:var(--muted);margin-top:10px">※ 員工身分證字號與地址請至薪資設定→各員工薪資設定中填入。扣繳稅額請在各月薪資紀錄中填入「扣繳稅額」欄位。</div>
       </div>
     </div>
 
@@ -1160,39 +1225,39 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="salary-panel-edi" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
         <!-- 投保單位設定 -->
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:12px">投保單位設定</div>
-          <div style="display:grid;gap:10px">
-            <div><label class="form-label">勞保證號（8 碼）</label><input class="form-input" id="edi-labor-no" style="width:100%"></div>
-            <div><label class="form-label">健保費類代號</label><input class="form-input" id="edi-health-no" style="width:100%"></div>
-            <div><label class="form-label">投保單位名稱</label><input class="form-input" id="edi-employer-name" style="width:100%"></div>
-            <div><label class="form-label">統一編號</label><input class="form-input" id="edi-employer-id" style="width:100%"></div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">投保單位設定</span></div>
+          <div class="card-body">
+            <div class="form-field"><label class="form-label">勞保證號（8 碼）</label><input class="form-input" id="edi-labor-no"></div>
+            <div class="form-field"><label class="form-label">健保費類代號</label><input class="form-input" id="edi-health-no"></div>
+            <div class="form-field"><label class="form-label">投保單位名稱</label><input class="form-input" id="edi-employer-name"></div>
+            <div class="form-field"><label class="form-label">統一編號</label><input class="form-input" id="edi-employer-id"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="saveEdiSettings()">儲存設定</button>
+            <div id="edi-cfg-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
           </div>
-          <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="saveEdiSettings()">儲存設定</button>
-          <div id="edi-cfg-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:14px"></div>
         </div>
 
         <!-- 申報產生 -->
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:12px">產生申報檔</div>
-          <div style="display:grid;gap:10px;margin-bottom:14px">
-            <div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">產生申報檔</span></div>
+          <div class="card-body">
+            <div class="form-field">
               <label class="form-label">員工（多選，空=全部）</label>
-              <select id="edi-staff-sel" class="form-input" multiple style="width:100%;height:100px"></select>
+              <select id="edi-staff-sel" class="form-input" multiple style="height:100px"></select>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div><label class="form-label">事件日期</label><input type="date" id="edi-event-date" class="form-input" style="width:100%"></div>
-              <div><label class="form-label">薪資調整月份</label><input type="month" id="edi-salary-month" class="form-input" style="width:100%"></div>
+            <div class="form-2col" style="margin-bottom:14px">
+              <div class="form-field"><label class="form-label">事件日期</label><input type="date" id="edi-event-date" class="form-input"></div>
+              <div class="form-field"><label class="form-label">薪資調整月份</label><input type="month" id="edi-salary-month" class="form-input"></div>
             </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn btn-primary btn-sm" onclick="downloadEdi('labor-enroll','in')">勞保 加保申報 (.edi)</button>
+              <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-enroll','out')">勞保 退保申報 (.edi)</button>
+              <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-salary','')">勞保 投保薪資調整 (.edi)</button>
+              <button class="btn btn-primary btn-sm" onclick="downloadEdi('health-enroll','in')">健保 加保申報 (.edi)</button>
+              <button class="btn btn-outline btn-sm" onclick="downloadEdi('health-enroll','out')">健保 退保申報 (.edi)</button>
+            </div>
+            <div class="form-hint" style="margin-top:10px">※ EDI 為 Big5 固定寬度格式，產出後請以勞保局網路申報系統驗證後再送出。</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn btn-primary btn-sm" onclick="downloadEdi('labor-enroll','in')">勞保 加保申報 (.edi)</button>
-            <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-enroll','out')">勞保 退保申報 (.edi)</button>
-            <button class="btn btn-outline btn-sm" onclick="downloadEdi('labor-salary','')">勞保 投保薪資調整 (.edi)</button>
-            <button class="btn btn-primary btn-sm" onclick="downloadEdi('health-enroll','in')">健保 加保申報 (.edi)</button>
-            <button class="btn btn-outline btn-sm" onclick="downloadEdi('health-enroll','out')">健保 退保申報 (.edi)</button>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:10px">※ EDI 為 Big5 固定寬度格式，產出後請以勞保局網路申報系統驗證後再送出。</div>
         </div>
       </div>
     </div>
@@ -1219,10 +1284,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
           </table>
         </div>
       </div>
-      <div class="card" style="padding:14px 20px;background:var(--bg);margin-top:12px">
-        <div style="font-size:12px;color:var(--muted);line-height:2">
-          ℹ️ 預支記錄在「自動產生薪資」時會自動列入當月扣除項目。薪資確認後，對應的預支記錄會自動標記為「已扣」。
-        </div>
+      <div class="info-box" style="margin-top:12px">
+        ℹ️ 預支記錄在「自動產生薪資」時會自動列入當月扣除項目。薪資確認後，對應的預支記錄會自動標記為「已扣」。
       </div>
     </div>
 
@@ -1230,23 +1293,24 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 公告管理 ── -->
   <div class="page" id="page-ann" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <select class="filter-input" id="ann-filter-cat" onchange="loadAnnList()" style="min-width:120px">
-          <option value="">全部類別</option>
-          <option value="general">一般公告</option>
-          <option value="hr">人事公告</option>
-          <option value="event">活動通知</option>
-          <option value="urgent">緊急公告</option>
-          <option value="policy">制度政策</option>
-        </select>
-        <select class="filter-input" id="ann-filter-status" onchange="loadAnnList()" style="min-width:110px">
-          <option value="">全部狀態</option>
-          <option value="active">上架中</option>
-          <option value="inactive">已下架</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" onclick="openAnnModal()">＋ 新增公告</button>
+    <div class="filter-bar">
+      <span class="filter-label">類別</span>
+      <select class="filter-input" id="ann-filter-cat" onchange="loadAnnList()" style="min-width:120px">
+        <option value="">全部類別</option>
+        <option value="general">一般公告</option>
+        <option value="hr">人事公告</option>
+        <option value="event">活動通知</option>
+        <option value="urgent">緊急公告</option>
+        <option value="policy">制度政策</option>
+      </select>
+      <span class="filter-label">狀態</span>
+      <select class="filter-input" id="ann-filter-status" onchange="loadAnnList()" style="min-width:110px">
+        <option value="">全部狀態</option>
+        <option value="active">上架中</option>
+        <option value="inactive">已下架</option>
+      </select>
+      <span class="filter-spacer"></span>
+      <button class="btn btn-primary btn-sm" onclick="openAnnModal()">＋ 新增公告</button>
     </div>
     <div id="ann-list">
       <div class="empty-state"><div class="empty-state-text">載入中...</div></div>
@@ -1273,21 +1337,23 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
       <div>
-        <div class="card" style="padding:18px 20px;margin-bottom:14px">
-          <div class="card-title" style="padding:0;margin-bottom:12px">假日影響說明</div>
-          <div style="font-size:12px;color:var(--muted);line-height:2.2">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header"><span class="card-title">假日影響說明</span></div>
+          <div class="card-body" style="font-size:12px;color:var(--muted);line-height:2.2">
             <div><strong style="color:var(--navy)">薪資計算</strong><br>國定假日加班費率 × 2.0 倍（全薪）</div>
             <div style="margin-top:8px"><strong style="color:var(--navy)">排班顯示</strong><br>月曆上國定假日自動標記紅色邊框</div>
             <div style="margin-top:8px"><strong style="color:var(--navy)">加班申請</strong><br>員工申請時自動偵測日期類型</div>
             <div style="margin-top:8px"><strong style="color:var(--navy)">出勤報表</strong><br>匯出 CSV 時標記假日欄位</div>
           </div>
         </div>
-        <div class="card" style="padding:18px 20px">
-          <div class="card-title" style="padding:0;margin-bottom:10px">批次匯入</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">貼上 JSON 格式批次新增假日</div>
-          <textarea class="form-input" id="holiday-batch-json" rows="6" style="width:100%;font-family:'DM Mono',monospace;font-size:11px;resize:vertical"
-            placeholder='[{"date":"2026-01-01","name":"元旦"},{"date":"2026-02-17","name":"春節"}]'></textarea>
-          <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="importHolidayJSON()">批次匯入</button>
+        <div class="card">
+          <div class="card-header"><span class="card-title">批次匯入</span></div>
+          <div class="card-body">
+            <div class="card-desc" style="margin-bottom:10px">貼上 JSON 格式批次新增假日</div>
+            <textarea class="form-input" id="holiday-batch-json" rows="6" style="font-family:'DM Mono',monospace;font-size:11px;resize:vertical"
+              placeholder='[{"date":"2026-01-01","name":"元旦"},{"date":"2026-02-17","name":"春節"}]'></textarea>
+            <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="importHolidayJSON()">批次匯入</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1296,11 +1362,11 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   <!-- ── 財務管理 ── -->
   <div class="page" id="page-finance" style="display:none">
     <!-- 公司切換 -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:4px">財務單位</span>
+    <div class="filter-bar" style="margin-bottom:14px">
+      <span class="filter-label">財務單位</span>
       <button id="fin-co-ad" class="filter-mode-btn active" onclick="setFinCompany('ad')">AD影像事務所</button>
       <button id="fin-co-jm" class="filter-mode-btn"        onclick="setFinCompany('jm')">進光設計</button>
-      <span id="fin-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:8px">AD影像事務所</span>
+      <span id="fin-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:4px">AD影像事務所</span>
     </div>
     <div class="inv-tab-bar">
       <button class="inv-tab active" id="fintab-dash"     onclick="switchFinTab('dash')">損益儀表板</button>
@@ -1345,13 +1411,13 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
       <!-- 圖表 -->
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px">
-        <div class="card" style="padding:16px">
-          <div class="card-title" style="padding:0;margin-bottom:12px;font-size:13px">近6個月趨勢</div>
-          <canvas id="fin-trend-chart" height="120"></canvas>
+        <div class="card">
+          <div class="card-header"><span class="card-title">近6個月趨勢</span></div>
+          <div class="card-body"><canvas id="fin-trend-chart" height="120"></canvas></div>
         </div>
-        <div class="card" style="padding:16px">
-          <div class="card-title" style="padding:0;margin-bottom:12px;font-size:13px">支出分類佔比</div>
-          <canvas id="fin-cat-chart" height="160"></canvas>
+        <div class="card">
+          <div class="card-header"><span class="card-title">支出分類佔比</span></div>
+          <div class="card-body"><canvas id="fin-cat-chart" height="160"></canvas></div>
         </div>
       </div>
       <!-- 類別明細 -->
@@ -1404,29 +1470,31 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
       <!-- 圖表區（月趨勢 + 收支比 + 累積） -->
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px">
-        <div class="card" style="padding:20px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <span class="card-title" style="padding:0;font-size:13px">月收入趨勢（柱狀）</span>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">月收入趨勢（柱狀）</span>
             <span id="rev-chart-total-label" style="font-size:12px;color:var(--muted)"></span>
           </div>
-          <canvas id="rev-chart" height="110"></canvas>
+          <div class="card-body"><canvas id="rev-chart" height="110"></canvas></div>
         </div>
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">收支占比</div>
-          <canvas id="rev-pie-chart" height="160"></canvas>
-          <div id="rev-pie-legend" style="margin-top:10px;font-size:12px"></div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">收支占比</span></div>
+          <div class="card-body">
+            <canvas id="rev-pie-chart" height="160"></canvas>
+            <div id="rev-pie-legend" style="margin-top:10px;font-size:12px"></div>
+          </div>
         </div>
       </div>
 
       <!-- 累積折線圖 + 收支淨額趨勢 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">年度累積收入</div>
-          <canvas id="rev-cumulative-chart" height="120"></canvas>
+        <div class="card">
+          <div class="card-header"><span class="card-title">年度累積收入</span></div>
+          <div class="card-body"><canvas id="rev-cumulative-chart" height="120"></canvas></div>
         </div>
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">每月收支淨額</div>
-          <canvas id="rev-net-chart" height="120"></canvas>
+        <div class="card">
+          <div class="card-header"><span class="card-title">每月收支淨額</span></div>
+          <div class="card-body"><canvas id="rev-net-chart" height="120"></canvas></div>
         </div>
       </div>
 
@@ -1523,9 +1591,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 類別設定 -->
     <div id="fin-panel-cats" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <span style="font-size:12px;color:var(--muted)">管理收支類別</span>
-        <button class="btn btn-primary" onclick="openFinCatModal()">新增類別</button>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span class="card-desc">管理收支類別</span></div>
+        <div class="page-header-actions"><button class="btn btn-primary" onclick="openFinCatModal()">新增類別</button></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div class="card">
@@ -1548,25 +1616,27 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- OCR辨識 -->
     <div id="fin-panel-ocr" style="display:none">
       <!-- 拖曳上傳區 -->
-      <div class="card" style="padding:20px;margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <span class="card-title" style="padding:0">AI 批次辨識發票 / 收據 / 報帳單</span>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">AI 批次辨識發票 / 收據 / 報帳單</span>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" id="ocr-run-btn" onclick="runOcrQueue()" style="display:none">開始辨識</button>
             <button class="btn btn-outline btn-sm" onclick="clearOcrQueue()" id="ocr-clear-btn" style="display:none">清除全部</button>
           </div>
         </div>
-        <div id="fin-ocr-drop"
-             style="border:2px dashed var(--border);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s"
-             onclick="document.getElementById('fin-ocr-file').click()"
-             ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
-             ondragleave="this.style.borderColor='var(--border)'"
-             ondrop="handleOcrDrop(event)">
-          <div style="font-size:28px;margin-bottom:6px">🧾</div>
-          <div style="font-size:13px;color:var(--muted)">點擊選取或拖曳圖片到此（可多選）</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">支援 JPG、PNG、WEBP、HEIC</div>
+        <div class="card-body">
+          <div id="fin-ocr-drop"
+               style="border:2px dashed var(--border);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s"
+               onclick="document.getElementById('fin-ocr-file').click()"
+               ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+               ondragleave="this.style.borderColor='var(--border)'"
+               ondrop="handleOcrDrop(event)">
+            <div style="font-size:28px;margin-bottom:6px">🧾</div>
+            <div style="font-size:13px;color:var(--muted)">點擊選取或拖曳圖片到此（可多選）</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">支援 JPG、PNG、WEBP、HEIC</div>
+          </div>
+          <input type="file" id="fin-ocr-file" accept="image/*,image/heic" multiple style="display:none" onchange="addToOcrQueue(this.files)">
         </div>
-        <input type="file" id="fin-ocr-file" accept="image/*,image/heic" multiple style="display:none" onchange="addToOcrQueue(this.files)">
       </div>
 
       <!-- 批次佇列 -->
@@ -1595,9 +1665,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 定期分錄 -->
     <div id="fin-panel-recurring" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-weight:600;font-size:15px">定期自動分錄</div>
-        <div style="display:flex;gap:8px">
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span class="page-header-title">定期自動分錄</span></div>
+        <div class="page-header-actions">
           <button class="btn btn-outline btn-sm" onclick="generateRecurring()">產生本月分錄</button>
           <button class="btn btn-primary btn-sm" onclick="openRecurringModal()">+ 新增定期項目</button>
         </div>
@@ -1611,14 +1681,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 銀行對帳 -->
     <div id="fin-panel-bank" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div style="font-weight:600;font-size:15px">銀行對帳</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input class="filter-input" type="month" id="bank-month" onchange="loadBankStatements()">
-          <button class="btn btn-outline btn-sm" onclick="document.getElementById('bank-csv-file').click()">匯入對帳單 CSV</button>
-          <input type="file" id="bank-csv-file" accept=".csv" style="display:none" onchange="importBankCSV(this)">
-          <button class="btn btn-outline btn-sm" id="bank-auto-btn" onclick="bankAutoMatch()">自動比對</button>
-        </div>
+      <div class="filter-bar" style="margin-bottom:14px">
+        <span class="page-header-title">銀行對帳</span>
+        <div class="filter-divider"></div>
+        <input class="filter-input" type="month" id="bank-month" onchange="loadBankStatements()">
+        <span class="filter-spacer"></span>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('bank-csv-file').click()">匯入對帳單 CSV</button>
+        <input type="file" id="bank-csv-file" accept=".csv" style="display:none" onchange="importBankCSV(this)">
+        <button class="btn btn-outline btn-sm" id="bank-auto-btn" onclick="bankAutoMatch()">自動比對</button>
       </div>
       <!-- 對帳摘要 -->
       <div id="bank-summary-bar" style="display:none;margin-bottom:12px;padding:12px 16px;background:#fff;border-radius:8px;border:1px solid var(--border);display:flex;gap:24px;flex-wrap:wrap;font-size:13px"></div>
@@ -1666,25 +1736,25 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 應收付款 -->
     <div id="fin-panel-ap" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-outline btn-sm" id="ap-tab-list" onclick="switchApView('list')" style="background:var(--navy);color:#fff">清單</button>
+      <div class="filter-bar" style="margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" id="ap-tab-list" onclick="switchApView('list')" style="background:var(--navy);color:#fff;border:none">清單</button>
           <button class="btn btn-outline btn-sm" id="ap-tab-aging" onclick="switchApView('aging')">老化分析</button>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select class="filter-input" id="ap-type-filter" onchange="loadApList()" style="min-width:110px">
-            <option value="">全部</option>
-            <option value="payable">應付帳款</option>
-            <option value="receivable">應收帳款</option>
-          </select>
-          <select class="filter-input" id="ap-status-filter" onchange="loadApList()" style="min-width:100px">
-            <option value="">全部狀態</option>
-            <option value="open">未結清</option>
-            <option value="overdue">逾期</option>
-            <option value="paid">已結清</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="openApModal()">+ 新增</button>
-        </div>
+        <div class="filter-divider"></div>
+        <select class="filter-input" id="ap-type-filter" onchange="loadApList()" style="min-width:110px">
+          <option value="">全部</option>
+          <option value="payable">應付帳款</option>
+          <option value="receivable">應收帳款</option>
+        </select>
+        <select class="filter-input" id="ap-status-filter" onchange="loadApList()" style="min-width:100px">
+          <option value="">全部狀態</option>
+          <option value="open">未結清</option>
+          <option value="overdue">逾期</option>
+          <option value="paid">已結清</option>
+        </select>
+        <span class="filter-spacer"></span>
+        <button class="btn btn-primary btn-sm" onclick="openApModal()">+ 新增</button>
       </div>
       <!-- 老化摘要卡 -->
       <div id="ap-aging-cards" style="display:none;margin-bottom:14px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px"></div>
@@ -1714,8 +1784,8 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 薪資連動 -->
     <div id="fin-panel-payroll" style="display:none">
-      <div style="margin-bottom:14px;font-weight:600;font-size:15px">薪資費用連動財務</div>
-      <div class="card" style="margin-bottom:14px;padding:14px 18px;font-size:13px;color:var(--muted);line-height:1.8">
+      <div class="page-header" style="margin-bottom:14px"><div class="page-header-left"><span class="page-header-title">薪資費用連動財務</span></div></div>
+      <div class="info-box" style="margin-bottom:14px;line-height:1.8">
         將已確認的薪資記錄一鍵寫入財務「支出」，科目自動歸類至「薪資支出」。每筆薪資只會同步一次，重複點擊不會重複建立。
       </div>
       <div class="card">
@@ -1769,49 +1839,53 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <!-- 財務設定 -->
     <div id="fin-panel-settings" style="display:none">
       <div style="max-width:560px">
-        <div class="card" style="padding:20px;margin-bottom:16px">
-          <div class="card-title" style="padding:0;margin-bottom:16px">基本設定</div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">公司／店鋪名稱</label>
-              <input class="form-input" id="fset-company" placeholder="顯示於報表抬頭">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><span class="card-title">基本設定</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">公司／店鋪名稱</label>
+                <input class="form-input" id="fset-company" placeholder="顯示於報表抬頭">
+              </div>
+              <div class="form-group">
+                <label class="form-label">期初現金餘額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　啟用系統前的現金</span></label>
+                <input class="form-input" type="number" id="fset-cash" min="0" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">資本額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　投入資本</span></label>
+                <input class="form-input" type="number" id="fset-equity" min="0" placeholder="0">
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">期初現金餘額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　啟用系統前的現金</span></label>
-              <input class="form-input" type="number" id="fset-cash" min="0" placeholder="0">
-            </div>
-            <div class="form-group">
-              <label class="form-label">資本額（元）<span style="font-size:11px;color:var(--muted);font-weight:400">　投入資本</span></label>
-              <input class="form-input" type="number" id="fset-equity" min="0" placeholder="0">
-            </div>
+            <button class="btn btn-primary" style="margin-top:8px" onclick="saveFinSettings()">儲存設定</button>
           </div>
-          <button class="btn btn-primary" style="margin-top:8px" onclick="saveFinSettings()">儲存設定</button>
         </div>
-        <div class="card" style="padding:20px">
-          <div class="card-title" style="padding:0;margin-bottom:6px">報表科目對照說明</div>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">請在「類別設定」→ 編輯類別 → 選擇「報表科目」，才能正確產生三大財務報表。</p>
-          <table style="width:100%;font-size:12px;border-collapse:collapse">
-            <thead><tr style="background:var(--bg)">
-              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">科目代碼</th>
-              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">報表項目</th>
-              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">類型</th>
-            </tr></thead>
-            <tbody>
-              <tr><td style="padding:5px 10px">operating_revenue</td><td style="padding:5px 10px">營業收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
-              <tr style="background:var(--bg)"><td style="padding:5px 10px">other_revenue</td><td style="padding:5px 10px">營業外收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
-              <tr><td style="padding:5px 10px">cogs</td><td style="padding:5px 10px">營業成本（食材等直接成本）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
-              <tr style="background:var(--bg)"><td style="padding:5px 10px">operating_expense</td><td style="padding:5px 10px">營業費用（薪資、租金、水電等）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
-              <tr><td style="padding:5px 10px">other_expense</td><td style="padding:5px 10px">營業外費用</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
-            </tbody>
-          </table>
+        <div class="card">
+          <div class="card-header"><span class="card-title">報表科目對照說明</span></div>
+          <div class="card-body">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:12px">請在「類別設定」→ 編輯類別 → 選擇「報表科目」，才能正確產生三大財務報表。</p>
+            <table style="width:100%;font-size:12px;border-collapse:collapse">
+              <thead><tr style="background:var(--bg)">
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">科目代碼</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">報表項目</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)">類型</th>
+              </tr></thead>
+              <tbody>
+                <tr><td style="padding:5px 10px">operating_revenue</td><td style="padding:5px 10px">營業收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
+                <tr style="background:var(--bg)"><td style="padding:5px 10px">other_revenue</td><td style="padding:5px 10px">營業外收入</td><td style="padding:5px 10px;color:var(--green)">收入</td></tr>
+                <tr><td style="padding:5px 10px">cogs</td><td style="padding:5px 10px">營業成本（食材等直接成本）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+                <tr style="background:var(--bg)"><td style="padding:5px 10px">operating_expense</td><td style="padding:5px 10px">營業費用（薪資、租金、水電等）</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+                <tr><td style="padding:5px 10px">other_expense</td><td style="padding:5px 10px">營業外費用</td><td style="padding:5px 10px;color:var(--red)">支出</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
     <!-- 部門類別設定 -->
     <div id="fin-panel-deptcats" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <span style="font-size:13px;color:var(--muted)">依部門設定員工可見的支出／收入類別。未特別設定的部門使用「預設」設定。</span>
-        <button class="btn btn-primary" onclick="openDeptCatModal()">新增部門設定</button>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span class="card-desc">依部門設定員工可見的支出／收入類別。未特別設定的部門使用「預設」設定。</span></div>
+        <div class="page-header-actions"><button class="btn btn-primary" onclick="openDeptCatModal()">新增部門設定</button></div>
       </div>
       <div class="card">
         <div class="table-wrap">
@@ -1885,17 +1959,16 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 帳號管理 ── -->
   <div class="page" id="page-adminmgr" style="display:none">
-    <div class="filter-bar" style="margin-bottom:14px;gap:10px;flex-wrap:wrap">
-      <input type="text" class="filter-input" id="aacc-flt-kw" placeholder="🔍 搜尋帳號/顯示名稱…" style="min-width:220px" oninput="renderAdminAccounts()">
+    <div class="filter-bar">
+      <input type="text" class="filter-input" id="aacc-flt-kw" placeholder="搜尋帳號／顯示名稱…" style="min-width:220px" oninput="renderAdminAccounts()">
       <select class="filter-input" id="aacc-flt-active" style="min-width:110px" onchange="renderAdminAccounts()">
         <option value="">全部狀態</option>
         <option value="1">啟用</option>
         <option value="0">停用</option>
       </select>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <span style="font-size:13px;color:var(--muted)">管理後台登入帳號，可自由勾選各帳號可存取的模組</span>
-      <button class="btn btn-primary" onclick="openAdminAccModal()">新增帳號</button>
+      <span class="filter-spacer"></span>
+      <span style="font-size:12px;color:var(--muted)">可自由勾選各帳號可存取的模組</span>
+      <button class="btn btn-primary btn-sm" onclick="openAdminAccModal()">新增帳號</button>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -1909,9 +1982,14 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 門市管理 ── -->
   <div class="page" id="page-stores" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <span style="font-size:13px;color:var(--muted)">管理多個門市，並為員工指派所屬門市</span>
-      <button class="btn btn-primary btn-sm" onclick="openStoreModal()">新增門市</button>
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-header-title">門市管理</div>
+        <div class="page-header-desc">管理多個門市，並為員工指派所屬門市</div>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn btn-primary btn-sm" onclick="openStoreModal()">新增門市</button>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <!-- 門市列表 -->
@@ -1925,21 +2003,23 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
         </div>
       </div>
       <!-- 員工門市指派 -->
-      <div class="card" style="padding:20px">
-        <div class="card-title" style="padding:0;margin-bottom:12px">員工門市指派</div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <select id="store-assign-store" class="filter-input" style="flex:1">
-            <option value="">選擇門市</option>
-          </select>
-          <button class="btn btn-outline btn-sm" onclick="loadStoreStaff()">查看員工</button>
-        </div>
-        <div id="store-staff-list" style="font-size:13px;color:var(--muted)">請選擇門市</div>
-        <div style="margin-top:14px">
-          <div class="form-label" style="margin-bottom:6px">調整員工門市</div>
-          <div style="display:flex;gap:8px">
-            <select id="store-assign-staff" class="filter-input" style="flex:1"><option value="">選擇員工</option></select>
-            <select id="store-assign-target" class="filter-input" style="width:120px"><option value="">選擇門市</option></select>
-            <button class="btn btn-primary btn-sm" onclick="assignStaffStore()">指派</button>
+      <div class="card">
+        <div class="card-header"><span class="card-title">員工門市指派</span></div>
+        <div class="card-body">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <select id="store-assign-store" class="filter-input" style="flex:1">
+              <option value="">選擇門市</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="loadStoreStaff()">查看員工</button>
+          </div>
+          <div id="store-staff-list" style="font-size:13px;color:var(--muted)">請選擇門市</div>
+          <div style="margin-top:14px">
+            <label class="form-label" style="margin-bottom:6px">調整員工門市</label>
+            <div style="display:flex;gap:8px">
+              <select id="store-assign-staff" class="filter-input" style="flex:1"><option value="">選擇員工</option></select>
+              <select id="store-assign-target" class="filter-input" style="width:120px"><option value="">選擇門市</option></select>
+              <button class="btn btn-primary btn-sm" onclick="assignStaffStore()">指派</button>
+            </div>
           </div>
         </div>
       </div>
@@ -2042,19 +2122,21 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 費用審核 ── -->
   <div class="page" id="page-expense-review" style="display:none">
-    <div class="filter-bar" style="margin-bottom:20px">
+    <div class="filter-bar">
       <span class="filter-label">狀態</span>
-      <select id="exp-review-status" class="filter-input" style="min-width:100px" onchange="loadExpenseReview()">
+      <select id="exp-review-status" class="filter-input" style="min-width:110px" onchange="loadExpenseReview()">
         <option value="pending">待審核</option>
         <option value="approved">已核准</option>
         <option value="rejected">已拒絕</option>
         <option value="">全部</option>
       </select>
+      <div class="filter-divider"></div>
       <span class="filter-label">年月</span>
-      <input type="month" id="exp-review-ym" class="filter-input" style="min-width:130px" onchange="loadExpenseReview()">
-      <button class="btn btn-outline btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
+      <input type="month" id="exp-review-ym" class="filter-input" onchange="loadExpenseReview()">
+      <span class="filter-spacer"></span>
+      <button class="btn btn-ghost btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
       <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>
-      <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">+ 新增費用申請</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddExpenseModal()">＋ 新增費用申請</button>
     </div>
     <div class="card">
       <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow-y:auto">
@@ -2072,9 +2154,10 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 廠商名冊 ── -->
   <div class="page" id="page-vendor-mgr" style="display:none">
-    <div class="filter-bar" style="margin-bottom:20px">
-      <input type="text" class="filter-input" id="vendor-search" placeholder="搜尋廠商名稱…" oninput="renderVendorTable()" style="min-width:200px">
-      <button class="btn btn-primary btn-sm" onclick="openVendorModal()">+ 新增廠商</button>
+    <div class="filter-bar">
+      <input type="text" class="filter-input" id="vendor-search" placeholder="搜尋廠商名稱…" oninput="renderVendorTable()" style="min-width:220px">
+      <span class="filter-spacer"></span>
+      <button class="btn btn-primary btn-sm" onclick="openVendorModal()">＋ 新增廠商</button>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -2092,53 +2175,54 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 廠商 CRUD Modal ── -->
   <div class="modal-overlay" id="vendor-modal" style="display:none" onclick="if(event.target===this)closeVendorModal()">
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:500px">
       <div class="modal-header">
         <span class="modal-title" id="vendor-modal-title">新增廠商</span>
         <button class="modal-close" onclick="closeVendorModal()">✕</button>
       </div>
-      <div style="padding:20px 24px;display:grid;gap:14px">
+      <div class="modal-body">
         <input type="hidden" id="vm-id">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <label class="form-label">廠商名稱 <span style="color:#d64242">*</span></label>
-            <input class="form-input" id="vm-name" placeholder="廠商全名" style="width:100%">
+        <div class="form-2col" style="margin-bottom:14px">
+          <div class="form-field" style="margin-bottom:0">
+            <label class="form-label">廠商名稱 <span class="req">*</span></label>
+            <input class="form-input" id="vm-name" placeholder="廠商全名">
           </div>
-          <div>
-            <label class="form-label">帳戶標籤 <span style="color:#8892a4;font-weight:400">（同廠商多帳戶時填寫）</span></label>
-            <input class="form-input" id="vm-account-label" placeholder="例：台新-信義、主帳戶" style="width:100%">
+          <div class="form-field" style="margin-bottom:0">
+            <label class="form-label">帳戶標籤 <span style="font-weight:400;text-transform:none;font-size:10px">（多帳戶時填）</span></label>
+            <input class="form-input" id="vm-account-label" placeholder="例：台新-信義、主帳戶">
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
+        <div class="modal-section-title">銀行資訊</div>
+        <div class="form-2col" style="margin-bottom:14px">
+          <div class="form-field" style="margin-bottom:0">
             <label class="form-label">銀行名稱</label>
-            <input class="form-input" id="vm-bank-name" placeholder="玉山銀行" style="width:100%">
+            <input class="form-input" id="vm-bank-name" placeholder="玉山銀行">
           </div>
-          <div>
+          <div class="form-field" style="margin-bottom:0">
             <label class="form-label">分行</label>
-            <input class="form-input" id="vm-bank-branch" placeholder="信義分行" style="width:100%">
+            <input class="form-input" id="vm-bank-branch" placeholder="信義分行">
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
+        <div class="form-2col" style="margin-bottom:14px">
+          <div class="form-field" style="margin-bottom:0">
             <label class="form-label">戶名</label>
-            <input class="form-input" id="vm-account-holder" placeholder="帳戶持有人" style="width:100%">
+            <input class="form-input" id="vm-account-holder" placeholder="帳戶持有人">
           </div>
-          <div>
+          <div class="form-field" style="margin-bottom:0">
             <label class="form-label">帳號</label>
-            <input class="form-input" id="vm-bank-account" placeholder="銀行帳號" style="width:100%">
+            <input class="form-input" id="vm-bank-account" placeholder="銀行帳號">
           </div>
         </div>
-        <div>
+        <div class="form-field">
           <label class="form-label">聯絡人</label>
-          <input class="form-input" id="vm-contact" placeholder="聯絡人姓名或電話" style="width:100%">
+          <input class="form-input" id="vm-contact" placeholder="聯絡人姓名或電話">
         </div>
-        <div>
+        <div class="form-field">
           <label class="form-label">備註</label>
-          <input class="form-input" id="vm-note" placeholder="其他說明" style="width:100%">
+          <input class="form-input" id="vm-note" placeholder="其他說明">
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 24px 20px;border-top:1px solid var(--border)">
+      <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeVendorModal()">取消</button>
         <button class="btn btn-primary" onclick="saveVendor()">儲存</button>
       </div>
@@ -2432,11 +2516,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
   <!-- ── 工作日誌 ── -->
   <div class="page" id="page-worklog" style="display:none">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
-      <select class="filter-input" id="wla-staff" style="width:160px" onchange="loadAdminWorklog()">
+    <div class="filter-bar" style="margin-bottom:18px">
+      <select class="filter-input" id="wla-staff" style="min-width:160px" onchange="loadAdminWorklog()">
         <option value="">全部員工</option>
       </select>
-      <input type="month" class="filter-input" id="wla-month" onchange="loadAdminWorklog()" style="width:148px">
+      <input type="month" class="filter-input" id="wla-month" onchange="loadAdminWorklog()" style="min-width:148px">
+      <span class="filter-spacer"></span>
       <button class="btn btn-outline btn-sm" onclick="loadAdminWorklog()">重新整理</button>
     </div>
     <div id="wla-calendar"></div>
@@ -2493,40 +2578,40 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="perf-panel-new" style="display:none">
       <div class="card" style="max-width:640px">
         <div class="card-header"><span class="card-title">新增考核記錄</span></div>
-        <div style="padding:20px 24px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-            <div>
-              <label class="filter-label" style="display:block;margin-bottom:6px">員工</label>
-              <select id="pf-staff" class="form-input" style="width:100%">
+        <div class="card-body">
+          <div class="form-2col" style="margin-bottom:16px">
+            <div class="form-field" style="margin-bottom:0">
+              <label class="form-label">員工</label>
+              <select id="pf-staff" class="form-input">
                 <option value="">選擇員工</option>
               </select>
             </div>
-            <div>
-              <label class="filter-label" style="display:block;margin-bottom:6px">考核範本</label>
-              <select id="pf-template" class="form-input" style="width:100%" onchange="loadPerfTemplateItems()">
+            <div class="form-field" style="margin-bottom:0">
+              <label class="form-label">考核範本</label>
+              <select id="pf-template" class="form-input" onchange="loadPerfTemplateItems()">
                 <option value="">選擇範本</option>
               </select>
             </div>
-            <div>
-              <label class="filter-label" style="display:block;margin-bottom:6px">考核期間</label>
-              <input type="month" id="pf-period" class="form-input" style="width:100%">
+            <div class="form-field" style="margin-bottom:0">
+              <label class="form-label">考核期間</label>
+              <input type="month" id="pf-period" class="form-input">
             </div>
-            <div>
-              <label class="filter-label" style="display:block;margin-bottom:6px">考核人</label>
-              <input type="text" id="pf-reviewer" class="form-input" style="width:100%" placeholder="考核人姓名">
+            <div class="form-field" style="margin-bottom:0">
+              <label class="form-label">考核人</label>
+              <input type="text" id="pf-reviewer" class="form-input" placeholder="考核人姓名">
             </div>
           </div>
           <div id="pf-items-section" style="margin-bottom:16px;display:none">
-            <div class="filter-label" style="margin-bottom:8px">評分項目</div>
+            <div class="form-label" style="margin-bottom:8px">評分項目</div>
             <div id="pf-items-list"></div>
             <div style="display:flex;justify-content:flex-end;margin-top:8px;font-size:13px;color:var(--muted)">
               總分：<span id="pf-score-display" style="font-weight:700;color:var(--navy);margin-left:4px">0</span> / <span id="pf-max-display">0</span>
               &nbsp;→&nbsp; 等級：<span id="pf-grade-display" style="font-weight:700;color:var(--accent)">-</span>
             </div>
           </div>
-          <div style="margin-bottom:16px">
-            <label class="filter-label" style="display:block;margin-bottom:6px">備註</label>
-            <textarea id="pf-comments" class="form-input" rows="3" placeholder="考核備註（可選）" style="width:100%;resize:vertical"></textarea>
+          <div class="form-field">
+            <label class="form-label">備註</label>
+            <textarea id="pf-comments" class="form-input" rows="3" placeholder="考核備註（可選）" style="resize:vertical"></textarea>
           </div>
           <button class="btn btn-primary" onclick="submitPerfReview()">送出考核</button>
         </div>
@@ -2535,8 +2620,9 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- 考核範本 tab -->
     <div id="perf-panel-templates" style="display:none">
-      <div style="margin-bottom:14px">
-        <button class="btn btn-primary" onclick="openPerfTemplateModal()">+ 新增範本</button>
+      <div class="page-header" style="margin-bottom:14px">
+        <div class="page-header-left"><span class="card-desc">建立考核評分範本，新增考核時選擇套用</span></div>
+        <div class="page-header-actions"><button class="btn btn-primary" onclick="openPerfTemplateModal()">+ 新增範本</button></div>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -2554,12 +2640,12 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
     <div id="perf-panel-config" style="display:none">
       <div class="card" style="max-width:560px">
         <div class="card-header"><span class="card-title">評級門檻設定</span></div>
-        <div style="padding:20px 24px">
-          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">設定各等級的代碼、顯示標籤與最低分數門檻。必須有一個等級門檻為 0%。</p>
+        <div class="card-body">
+          <p class="card-desc" style="margin-bottom:16px">設定各等級的代碼、顯示標籤與最低分數門檻。必須有一個等級門檻為 0%。</p>
           <div style="display:grid;grid-template-columns:72px 1fr 140px 36px;gap:8px;align-items:center;margin-bottom:6px;padding:0 2px">
-            <span class="filter-label" style="text-align:center">代碼</span>
-            <span class="filter-label">標籤</span>
-            <span class="filter-label" style="text-align:center">最低門檻</span>
+            <span class="form-label" style="text-align:center">代碼</span>
+            <span class="form-label">標籤</span>
+            <span class="form-label" style="text-align:center">最低門檻</span>
             <span></span>
           </div>
           <div id="perf-config-grades"></div>
@@ -2577,11 +2663,11 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
   <!-- ── 財報模組 ── -->
   <div class="page" id="page-quotation" style="display:none">
     <!-- 公司切換 -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:4px">公司單位</span>
+    <div class="filter-bar" style="margin-bottom:14px">
+      <span class="filter-label">公司單位</span>
       <button id="q-co-ad" class="filter-mode-btn active" onclick="setQCompany('ad')">AD影像事務所</button>
       <button id="q-co-jm" class="filter-mode-btn"        onclick="setQCompany('jm')">進光設計</button>
-      <span id="q-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:8px">AD影像事務所</span>
+      <span id="q-co-label" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:4px">AD影像事務所</span>
     </div>
 
     <div class="inv-tab-bar">
@@ -2627,56 +2713,59 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- ── 新增/編輯報價單 ── -->
     <div id="qpanel-create" style="display:none">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-        <span id="q-form-title" style="font-size:15px;font-weight:700;color:var(--navy)">新增報價單</span>
-        <span id="q-form-no" style="font-size:12px;color:var(--muted);background:var(--bg);padding:3px 10px;border-radius:12px"></span>
-        <span style="flex:1"></span>
-        <button class="btn btn-outline btn-sm" onclick="switchQTab('list')">← 返回列表</button>
+      <div class="page-header" style="margin-bottom:16px">
+        <div class="page-header-left" style="flex-direction:row;align-items:center;gap:10px">
+          <span id="q-form-title" class="page-header-title">新增報價單</span>
+          <span id="q-form-no" class="badge-neutral" style="font-size:12px"></span>
+        </div>
+        <div class="page-header-actions">
+          <button class="btn btn-outline btn-sm" onclick="switchQTab('list')">← 返回列表</button>
+        </div>
       </div>
 
       <!-- 客戶資訊 & 訂單資訊 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card" style="padding:18px 20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">客戶資訊</div>
-          <div style="display:grid;gap:10px">
-            <div>
-              <label class="form-label">客戶姓名 *</label>
-              <div style="display:flex;gap:6px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">客戶資訊</span></div>
+          <div class="card-body">
+            <div class="form-field">
+              <label class="form-label">客戶姓名 <span class="req">*</span></label>
+              <div style="display:flex;gap:6px;position:relative">
                 <input class="form-input" id="qf-client-name" placeholder="請輸入客戶姓名" style="flex:1" oninput="searchClientSuggest(this.value)">
                 <button class="btn btn-outline btn-sm" type="button" onclick="openClientPicker()" title="從客戶資料庫選取">📋</button>
               </div>
               <div id="qf-client-suggest" style="display:none;position:absolute;z-index:999;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.12);max-height:200px;overflow-y:auto;min-width:220px"></div>
             </div>
-            <div><label class="form-label">聯絡電話</label><input class="form-input" id="qf-client-phone" placeholder="0912-345-678" style="width:100%"></div>
-            <div><label class="form-label">Line ID</label><input class="form-input" id="qf-client-line" placeholder="LINE ID" style="width:100%"></div>
-            <div><label class="form-label">客戶地址</label><input class="form-input" id="qf-client-addr" placeholder="地址" style="width:100%"></div>
-            <div><label class="form-label">業務人員</label><input class="form-input" id="qf-sales-rep" placeholder="業務姓名" style="width:100%"></div>
+            <div class="form-field"><label class="form-label">聯絡電話</label><input class="form-input" id="qf-client-phone" placeholder="0912-345-678"></div>
+            <div class="form-field"><label class="form-label">Line ID</label><input class="form-input" id="qf-client-line" placeholder="LINE ID"></div>
+            <div class="form-field"><label class="form-label">客戶地址</label><input class="form-input" id="qf-client-addr" placeholder="地址"></div>
+            <div class="form-field"><label class="form-label">業務人員</label><input class="form-input" id="qf-sales-rep" placeholder="業務姓名"></div>
           </div>
         </div>
-        <div class="card" style="padding:18px 20px">
-          <div class="card-title" style="padding:0;margin-bottom:14px;font-size:13px">訂單資訊</div>
-          <div style="display:grid;gap:10px">
-            <div><label class="form-label">報價日期 *</label><input class="form-input" type="date" id="qf-quote-date" style="width:100%"></div>
-            <div><label class="form-label">影像編號</label><input class="form-input" id="qf-image-no" placeholder="例：WD-2024-001" style="width:100%"></div>
-            <div><label class="form-label">影像日期</label><input class="form-input" type="date" id="qf-image-date" style="width:100%"></div>
-            <div><label class="form-label">付款方式</label>
-              <select class="form-input" id="qf-payment-method" style="width:100%">
+        <div class="card">
+          <div class="card-header"><span class="card-title">訂單資訊</span></div>
+          <div class="card-body">
+            <div class="form-field"><label class="form-label">報價日期 <span class="req">*</span></label><input class="form-input" type="date" id="qf-quote-date"></div>
+            <div class="form-field"><label class="form-label">影像編號</label><input class="form-input" id="qf-image-no" placeholder="例：WD-2024-001"></div>
+            <div class="form-field"><label class="form-label">影像日期</label><input class="form-input" type="date" id="qf-image-date"></div>
+            <div class="form-field"><label class="form-label">付款方式</label>
+              <select class="form-input" id="qf-payment-method">
                 <option value="轉帳">轉帳</option>
                 <option value="現金">現金</option>
                 <option value="信用卡">信用卡</option>
                 <option value="支票">支票</option>
               </select>
             </div>
-            <div><label class="form-label">狀態</label>
-              <select class="form-input" id="qf-status" style="width:100%">
+            <div class="form-field"><label class="form-label">狀態</label>
+              <select class="form-input" id="qf-status">
                 <option value="draft">草稿</option>
                 <option value="sent">已發送</option>
                 <option value="accepted">已接受</option>
                 <option value="rejected">已拒絕</option>
               </select>
             </div>
-            <div><label class="form-label">訂金比例</label>
-              <select class="form-input" id="qf-deposit-rate" style="width:100%">
+            <div class="form-field"><label class="form-label">訂金比例</label>
+              <select class="form-input" id="qf-deposit-rate">
                 <option value="100">100%（全額）</option>
                 <option value="50">50%</option>
                 <option value="30">30%</option>
@@ -2729,9 +2818,11 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
       </div>
 
       <!-- 備註 -->
-      <div class="card" style="margin-bottom:16px;padding:18px 20px">
-        <div class="card-title" style="padding:0;margin-bottom:10px;font-size:13px">備註</div>
-        <textarea id="qf-notes" class="form-input" rows="3" placeholder="付款說明、注意事項..." style="width:100%;resize:vertical"></textarea>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">備註</span></div>
+        <div class="card-body">
+          <textarea id="qf-notes" class="form-input" rows="3" placeholder="付款說明、注意事項..." style="resize:vertical"></textarea>
+        </div>
       </div>
 
       <!-- 操作按鈕 -->
@@ -2786,35 +2877,42 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
     <!-- ── 公司設定 ── -->
     <div id="qpanel-settings" style="display:none">
-      <div class="card" style="max-width:700px;padding:24px">
-        <div class="card-title" style="padding:0;margin-bottom:18px">公司資訊設定</div>
-        <div style="display:grid;gap:12px">
-          <div><label class="form-label">公司名稱</label><input class="form-input" id="qs-company-name" style="width:100%"></div>
-          <div><label class="form-label">公司地址</label><input class="form-input" id="qs-company-address" style="width:100%"></div>
-          <div><label class="form-label">聯絡電話</label><input class="form-input" id="qs-company-phone" style="width:100%"></div>
-          <div><label class="form-label">電子郵件</label><input class="form-input" id="qs-company-email" style="width:100%"></div>
-        </div>
+      <div class="card" style="max-width:700px">
+        <div class="card-header"><span class="card-title">公司資訊設定</span></div>
+        <div class="card-body">
+          <div class="form-field"><label class="form-label">公司名稱</label><input class="form-input" id="qs-company-name"></div>
+          <div class="form-field"><label class="form-label">公司地址</label><input class="form-input" id="qs-company-address"></div>
+          <div class="form-2col">
+            <div class="form-field"><label class="form-label">聯絡電話</label><input class="form-input" id="qs-company-phone"></div>
+            <div class="form-field"><label class="form-label">電子郵件</label><input class="form-input" id="qs-company-email"></div>
+          </div>
 
-        <!-- 常用收款帳戶 -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 12px">
-          <div class="card-title" style="padding:0;font-size:13px;margin:0">常用收款帳戶</div>
-          <button class="btn btn-outline btn-sm" onclick="addFreqAccount()">＋ 新增帳戶</button>
-        </div>
-        <div id="qs-freq-accounts" style="display:grid;gap:10px;margin-bottom:4px"></div>
+          <div class="divider"></div>
 
-        <div class="card-title" style="padding:0;margin:20px 0 14px;font-size:13px">當前匯款資訊（列印於報價單）</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div><label class="form-label">銀行名稱</label><input class="form-input" id="qs-bank-name" style="width:100%"></div>
-          <div><label class="form-label">分行</label><input class="form-input" id="qs-bank-branch" style="width:100%"></div>
-          <div><label class="form-label">戶名</label><input class="form-input" id="qs-account-name" style="width:100%"></div>
-          <div><label class="form-label">帳號</label><input class="form-input" id="qs-account-no" style="width:100%"></div>
-          <div><label class="form-label">統一編號</label><input class="form-input" id="qs-tax-id" style="width:100%"></div>
-        </div>
-        <div style="margin-top:12px"><label class="form-label">付款說明（列印於報價單）</label>
-          <textarea class="form-input" id="qs-payment-notes" rows="4" style="width:100%;resize:vertical" placeholder="例：請於報價單日期起30日內完成付款..."></textarea>
-        </div>
-        <div style="margin-top:16px;text-align:right">
-          <button class="btn btn-primary" onclick="saveQSettings()">儲存設定</button>
+          <!-- 常用收款帳戶 -->
+          <div class="page-header" style="margin-bottom:12px">
+            <div class="page-header-left"><span class="modal-section-title" style="margin:0;border:none;padding:0">常用收款帳戶</span></div>
+            <div class="page-header-actions"><button class="btn btn-outline btn-sm" onclick="addFreqAccount()">＋ 新增帳戶</button></div>
+          </div>
+          <div id="qs-freq-accounts" style="display:grid;gap:10px;margin-bottom:4px"></div>
+
+          <div class="divider"></div>
+
+          <div class="modal-section-title">當前匯款資訊（列印於報價單）</div>
+          <div class="form-2col">
+            <div class="form-field"><label class="form-label">銀行名稱</label><input class="form-input" id="qs-bank-name"></div>
+            <div class="form-field"><label class="form-label">分行</label><input class="form-input" id="qs-bank-branch"></div>
+            <div class="form-field"><label class="form-label">戶名</label><input class="form-input" id="qs-account-name"></div>
+            <div class="form-field"><label class="form-label">帳號</label><input class="form-input" id="qs-account-no"></div>
+            <div class="form-field"><label class="form-label">統一編號</label><input class="form-input" id="qs-tax-id"></div>
+          </div>
+          <div class="form-field">
+            <label class="form-label">付款說明（列印於報價單）</label>
+            <textarea class="form-input" id="qs-payment-notes" rows="4" style="resize:vertical" placeholder="例：請於報價單日期起30日內完成付款..."></textarea>
+          </div>
+          <div style="text-align:right;margin-top:4px">
+            <button class="btn btn-primary" onclick="saveQSettings()">儲存設定</button>
+          </div>
         </div>
       </div>
     </div>

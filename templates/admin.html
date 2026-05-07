@@ -2125,10 +2125,10 @@ textarea.form-input { resize: vertical; font-family: 'DM Mono', monospace; font-
     <div class="filter-bar">
       <span class="filter-label">狀態</span>
       <select id="exp-review-status" class="filter-input" style="min-width:110px" onchange="loadExpenseReview()">
+        <option value="">全部</option>
         <option value="pending">待審核</option>
         <option value="approved">已核准</option>
         <option value="rejected">已拒絕</option>
-        <option value="">全部</option>
       </select>
       <div class="filter-divider"></div>
       <span class="filter-label">年月</span>
@@ -10354,51 +10354,48 @@ async function submitAdminExpense() {
   }
 }
 
-let _expClaimsMap   = {};
-let _expAllClaims   = null;      // 目前 (status, ym) 下的筆數
-let _expCacheYm     = undefined; // 快取對應的 ym
-let _expCacheStatus = undefined; // 快取對應的 status
-let _expLastError   = '';        // 最近一次錯誤訊息
+let _expClaimsMap = {};
+let _expAllClaims = null;      // 目前 ym 下的全部記錄（不分狀態）
+let _expCacheYm   = undefined; // 快取對應的 ym
+let _expLastError = '';
 
-function _expCacheKey(status, ym) { return `expClaims:${status}:${ym}`; }
-
-function _saveExpCache(status, ym, list) {
-  try { localStorage.setItem(_expCacheKey(status, ym), JSON.stringify({ at: Date.now(), data: list })); } catch(e) {}
+// 快取 key 只依 ym，不含 status（全部記錄一次抓完）
+function _expCacheKey(ym) { return `expClaims2:${ym}`; }
+function _saveExpCache(ym, list) {
+  try { localStorage.setItem(_expCacheKey(ym), JSON.stringify({ at: Date.now(), data: list })); } catch(e) {}
 }
-
-function _loadExpCache(status, ym) {
+function _loadExpCache(ym) {
   try {
-    const raw = localStorage.getItem(_expCacheKey(status, ym));
+    const raw = localStorage.getItem(_expCacheKey(ym));
     if (!raw) return null;
     const { at, data } = JSON.parse(raw);
-    if (!Array.isArray(data)) return null;
+    if (!Array.isArray(data) || Date.now() - at > 120000) return null; // 2 min TTL
     return { at, data };
   } catch(e) { return null; }
 }
 
 async function loadExpenseReview(forceRefresh = false) {
-  const status = document.getElementById('exp-review-status')?.value ?? 'pending';
+  const status = document.getElementById('exp-review-status')?.value ?? '';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const tbody  = document.getElementById('exp-review-tbody');
   if (!tbody) return;
 
-  const changed = status !== _expCacheStatus || ym !== _expCacheYm;
+  const ymChanged = ym !== _expCacheYm;
 
-  // 記憶體快取有效：直接渲染，背景靜默更新
-  if (_expAllClaims !== null && !forceRefresh && !changed) {
+  // 記憶體快取有效（ym 未變）：立刻依 status 重新渲染，背景靜默更新
+  if (_expAllClaims !== null && !forceRefresh && !ymChanged) {
     _renderExpenseFiltered(status);
     _fetchExpenseFromServer(ym, true, true);
     return;
   }
 
-  // 沒有記憶體快取但有 localStorage 快取 → 立刻渲染，背景靜默重新拉
+  // localStorage 快取：立刻渲染，背景重新拉
   if (!forceRefresh) {
-    const cached = _loadExpCache(status, ym);
+    const cached = _loadExpCache(ym);
     if (cached) {
-      _expAllClaims   = cached.data;
-      _expCacheYm     = ym;
-      _expCacheStatus = status;
-      _expClaimsMap   = Object.fromEntries(cached.data.map(c => [c.id, c]));
+      _expAllClaims = cached.data;
+      _expCacheYm   = ym;
+      _expClaimsMap = Object.fromEntries(cached.data.map(c => [c.id, c]));
       _renderExpenseFiltered(status);
       _fetchExpenseFromServer(ym, true, true);
       return;
@@ -10417,19 +10414,20 @@ async function loadExpenseReview(forceRefresh = false) {
 }
 
 async function _fetchExpenseFromServer(ym, reRenderAfter, silent = false) {
-  const status = document.getElementById('exp-review-status')?.value ?? 'pending';
+  // 永遠不帶 status，一次拉回該月份全部記錄，client 端依狀態篩選
   const params = new URLSearchParams();
-  if (status) params.set('status', status);
-  if (ym)     params.set('ym', ym);
+  if (ym) params.set('ym', ym);
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, silent);
   if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
-  _expAllClaims   = Array.isArray(data) ? data : [];
-  _expCacheYm     = ym;
-  _expCacheStatus = status;
-  _expClaimsMap   = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
-  _saveExpCache(status, ym, _expAllClaims);
-  if (reRenderAfter) _renderExpenseFiltered(status);
+  _expAllClaims = Array.isArray(data) ? data : [];
+  _expCacheYm   = ym;
+  _expClaimsMap = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
+  _saveExpCache(ym, _expAllClaims);
+  if (reRenderAfter) {
+    const status = document.getElementById('exp-review-status')?.value ?? '';
+    _renderExpenseFiltered(status);
+  }
   return true;
 }
 
@@ -10438,6 +10436,8 @@ function _renderExpenseFiltered(status) {
   if (!tbody || _expAllClaims === null) return;
   const kw = (document.getElementById('staff-search-input')?.value || '').trim().toLowerCase();
   let list = _expAllClaims;
+  // client-side status filter（status='' 表示全部）
+  if (status) list = list.filter(c => c.status === status);
   if (kw) {
     list = list.filter(c =>
       (c.staff_name  || '').toLowerCase().includes(kw) ||

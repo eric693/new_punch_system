@@ -4822,7 +4822,7 @@ function _cachedFinCatsPromise() {
   _finCatCacheAt  = now;
   _finCatCacheKey = key;
   const qs = key ? `?company=${encodeURIComponent(key)}` : '';
-  _finCatCacheP = api('/api/finance/categories' + qs, {}, true).then(r => r.ok ? r.data : []);
+  _finCatCacheP = api('/api/finance/categories' + qs, {}, true, 45000).then(r => r.ok ? r.data : []);
   return _finCatCacheP;
 }
 function _invalidateFinCatCache() { _finCatCacheP = null; }
@@ -8555,23 +8555,33 @@ function openFinCatModal(id=null) {
   document.getElementById('fin-cat-modal').style.display='flex';
 }
 function closeFinCatModal() { document.getElementById('fin-cat-modal').style.display='none'; }
+let _savingFinCat = false;
 async function saveFinCat() {
-  const id = document.getElementById('fcm-id').value;
-  const body = {
-    name:              document.getElementById('fcm-name').value.trim(),
-    type:              document.getElementById('fcm-type').value,
-    color:             document.getElementById('fcm-color').value,
-    sort_order:        parseInt(document.getElementById('fcm-sort').value)||0,
-    active:            document.getElementById('fcm-active').value==='1',
-    statement_section: document.getElementById('fcm-section').value,
-    company_unit:      window._finCompany || 'ad',
-  };
-  if (!body.name) { showToast('請填寫名稱','error'); return; }
-  const url = id ? `/api/finance/categories/${id}` : '/api/finance/categories';
-  const {ok} = await api(url, {method:id?'PUT':'POST', body:JSON.stringify(body)});
-  if (!ok) return;
-  _invalidateFinCatCache();
-  closeFinCatModal(); showToast(id?'已更新':'已新增','success'); await loadFinCats();
+  if (_savingFinCat) return;
+  _savingFinCat = true;
+  const saveBtn = document.querySelector('#fin-cat-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '儲存中...'; }
+  try {
+    const id = document.getElementById('fcm-id').value;
+    const body = {
+      name:              document.getElementById('fcm-name').value.trim(),
+      type:              document.getElementById('fcm-type').value,
+      color:             document.getElementById('fcm-color').value,
+      sort_order:        parseInt(document.getElementById('fcm-sort').value)||0,
+      active:            document.getElementById('fcm-active').value==='1',
+      statement_section: document.getElementById('fcm-section').value,
+      company_unit:      window._finCompany || 'ad',
+    };
+    if (!body.name) { showToast('請填寫名稱','error'); return; }
+    const url = id ? `/api/finance/categories/${id}` : '/api/finance/categories';
+    const {ok} = await api(url, {method:id?'PUT':'POST', body:JSON.stringify(body)}, false, 45000);
+    _invalidateFinCatCache();
+    if (!ok) { await loadFinCats(); return; }
+    closeFinCatModal(); showToast(id?'已更新':'已新增','success'); await loadFinCats();
+  } finally {
+    _savingFinCat = false;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '儲存'; }
+  }
 }
 async function deleteFinCat(id) {
   if (!confirm('確定刪除此類別？')) return;

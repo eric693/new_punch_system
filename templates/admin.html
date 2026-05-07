@@ -3500,32 +3500,77 @@ tbody td.date-cell { font-family: 'Noto Sans TC', sans-serif; font-weight: 500; 
 
 <!-- Finance Record Modal -->
 <div class="modal-overlay" id="fin-rec-modal" style="display:none">
-  <div class="modal" style="max-width:560px">
-    <div class="modal-header"><span class="modal-title" id="frm-title">新增收支記錄</span><button class="modal-close" onclick="closeFinRecModal()">&times;</button></div>
-    <div class="modal-body">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <span class="modal-title" id="frm-title">新增收支記錄</span>
+      <button class="modal-close" onclick="closeFinRecModal()">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:24px 28px 20px">
       <input type="hidden" id="frm-id">
-      <div class="form-row">
-        <div><label class="form-label">日期 *</label><input class="form-input" type="date" id="frm-date"></div>
-        <div><label class="form-label">類型</label>
-          <select class="form-input" id="frm-type" onchange="renderFinCatOptions()">
-            <option value="income">收入</option><option value="expense">支出</option>
-          </select>
+      <input type="hidden" id="frm-type" value="expense">
+
+      <!-- Type toggle -->
+      <div style="margin-bottom:22px">
+        <div style="display:inline-flex;border-radius:8px;overflow:hidden;border:1.5px solid var(--border);gap:0">
+          <button type="button" id="frm-type-expense-btn" onclick="_setFinType('expense')"
+            style="padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s">支出</button>
+          <button type="button" id="frm-type-income-btn" onclick="_setFinType('income')"
+            style="padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s">收入</button>
         </div>
       </div>
-      <div class="form-row">
-        <div><label class="form-label">類別</label><select class="form-input" id="frm-cat"></select></div>
-        <div><label class="form-label">金額 *</label><input class="form-input" type="number" id="frm-amount" min="0" step="1" placeholder="0"></div>
+
+      <!-- Row: date + amount -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">日期 <span style="color:var(--red);font-weight:700">*</span></label>
+          <input class="form-input" type="date" id="frm-date" style="width:100%">
+        </div>
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">金額 <span style="color:var(--red);font-weight:700">*</span></label>
+          <div style="position:relative">
+            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;pointer-events:none">NT$</span>
+            <input class="form-input" type="number" id="frm-amount" min="0" step="1" placeholder="0" style="width:100%;padding-left:44px;font-family:'DM Mono',monospace;font-size:15px;font-weight:600">
+          </div>
+        </div>
       </div>
-      <div class="form-row">
-        <div class="full-width"><label class="form-label">標題 *</label><input class="form-input" id="frm-title-input" placeholder="例：食材採購、客桌消費"></div>
+
+      <!-- Row: category + title -->
+      <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">類別</label>
+          <select class="form-input" id="frm-cat" style="width:100%"></select>
+        </div>
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">標題 <span style="color:var(--red);font-weight:700">*</span></label>
+          <input class="form-input" id="frm-title-input" placeholder="例：食材採購、客桌消費" style="width:100%">
+        </div>
       </div>
-      <div class="form-row">
-        <div><label class="form-label">廠商/店家</label><input class="form-input" id="frm-vendor" placeholder="選填"></div>
-        <div><label class="form-label">發票/單據號碼</label><input class="form-input" id="frm-invoice" placeholder="選填"></div>
+
+      <!-- Row: vendor + invoice -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">廠商／店家</label>
+          <input class="form-input" id="frm-vendor" placeholder="選填" style="width:100%">
+        </div>
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">發票／單據號碼</label>
+          <input class="form-input" id="frm-invoice" placeholder="選填" style="width:100%">
+        </div>
       </div>
-      <div class="form-row">
-        <div><label class="form-label">稅額</label><input class="form-input" type="number" id="frm-tax" min="0" step="1" value="0"></div>
-        <div><label class="form-label">備註</label><input class="form-input" id="frm-note" placeholder="選填"></div>
+
+      <!-- Row: tax + note -->
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:16px">
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">稅額</label>
+          <div style="position:relative">
+            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;pointer-events:none">NT$</span>
+            <input class="form-input" type="number" id="frm-tax" min="0" step="1" value="0" style="width:100%;padding-left:44px">
+          </div>
+        </div>
+        <div>
+          <label class="form-label" style="margin-bottom:6px;display:block">備註</label>
+          <input class="form-input" id="frm-note" placeholder="選填" style="width:100%">
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -8285,45 +8330,54 @@ function renderFinCatOptions() {
     finCatList.filter(c=>c.type===type&&c.active).map(c=>`<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
 }
 
-function openFinRecModal(id=null) {
-  document.getElementById('frm-id').value = id||'';
-  document.getElementById('frm-title').textContent = id ? '編輯記錄' : '新增收支記錄';
-  if (id) {
-    // Find from table data via API - simpler: re-fetch
-    api(`/api/finance/records?`, {}, true); // preload not strictly needed
-    // We'll use the table rows since we have them; find by iterating
-    const rows = document.querySelectorAll('#fin-rec-tbody tr');
-    // fallback: open blank and let user edit - better to find from finRecords cache
+function _setFinType(type) {
+  document.getElementById('frm-type').value = type;
+  const eBtn = document.getElementById('frm-type-expense-btn');
+  const iBtn = document.getElementById('frm-type-income-btn');
+  if (type === 'expense') {
+    eBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--red);color:#fff';
+    iBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:transparent;color:var(--muted)';
+  } else {
+    iBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--green);color:#fff';
+    eBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:transparent;color:var(--muted)';
   }
-  const today = new Date().toISOString().slice(0,10);
-  document.getElementById('frm-date').value    = today;
-  document.getElementById('frm-type').value    = 'expense';
-  document.getElementById('frm-amount').value  = '';
-  document.getElementById('frm-title-input').value = '';
-  document.getElementById('frm-vendor').value  = '';
-  document.getElementById('frm-invoice').value = '';
-  document.getElementById('frm-tax').value     = '0';
-  document.getElementById('frm-note').value    = '';
   renderFinCatOptions();
+}
+
+async function openFinRecModal(id=null) {
+  document.getElementById('frm-id').value = id || '';
+  document.getElementById('frm-title').textContent = id ? '編輯收支記錄' : '新增收支記錄';
+  const today = new Date().toISOString().slice(0, 10);
+  // Reset to defaults
+  document.getElementById('frm-date').value = today;
+  _setFinType('expense');
+  document.getElementById('frm-cat').value = '';
+  document.getElementById('frm-amount').value = '';
+  document.getElementById('frm-title-input').value = '';
+  document.getElementById('frm-vendor').value = '';
+  document.getElementById('frm-invoice').value = '';
+  document.getElementById('frm-tax').value = '0';
+  document.getElementById('frm-note').value = '';
   if (id) {
-    // Load record data
-    api(`/api/finance/records?`, {}, true).then(()=>{});
-    // Use finRecords cache
-    const r = (window._finRecords||[]).find(x=>x.id===id);
+    // Try cache first, fallback to API
+    let r = (window._finRecords || []).find(x => x.id === id);
+    if (!r) {
+      const {ok, data} = await api(`/api/finance/records/${id}`, {}, true);
+      if (ok && data) r = data;
+    }
     if (r) {
-      document.getElementById('frm-date').value    = r.record_date;
-      document.getElementById('frm-type').value    = r.type;
-      renderFinCatOptions();
-      document.getElementById('frm-cat').value    = r.category_id||'';
-      document.getElementById('frm-amount').value  = r.amount;
-      document.getElementById('frm-title-input').value = r.title;
-      document.getElementById('frm-vendor').value  = r.vendor||'';
-      document.getElementById('frm-invoice').value = r.invoice_no||'';
-      document.getElementById('frm-tax').value     = r.tax_amount||0;
-      document.getElementById('frm-note').value    = r.note||'';
+      document.getElementById('frm-date').value = r.record_date || today;
+      _setFinType(r.type || 'expense');
+      document.getElementById('frm-cat').value = r.category_id || '';
+      document.getElementById('frm-amount').value = r.amount != null ? r.amount : '';
+      document.getElementById('frm-title-input').value = r.title || '';
+      document.getElementById('frm-vendor').value = r.vendor || '';
+      document.getElementById('frm-invoice').value = r.invoice_no || '';
+      document.getElementById('frm-tax').value = r.tax_amount || 0;
+      document.getElementById('frm-note').value = r.note || '';
     }
   }
-  document.getElementById('fin-rec-modal').style.display='flex';
+  document.getElementById('fin-rec-modal').style.display = 'flex';
 }
 function closeFinRecModal() { document.getElementById('fin-rec-modal').style.display='none'; }
 async function saveFinRec() {

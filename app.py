@@ -9370,6 +9370,23 @@ def api_finance_record_create():
               b.get('company_unit','ad'))).fetchone()
     return jsonify(_finance_rec_row(row)), 201
 
+@app.route('/api/finance/records/<int:rid>', methods=['GET'])
+@require_module('finance')
+def api_finance_record_get(rid):
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT fr.*, fc.name as category_name, fc.color as category_color
+            FROM finance_records fr
+            LEFT JOIN finance_categories fc ON fc.id=fr.category_id
+            WHERE fr.id=%s
+        """, (rid,)).fetchone()
+    if not row: return ('', 404)
+    d = _finance_rec_row(row)
+    d['category_name']  = row['category_name']
+    d['category_color'] = row['category_color']
+    return jsonify(d)
+
+
 @app.route('/api/finance/records/<int:rid>', methods=['PUT'])
 @require_module('finance')
 def api_finance_record_update(rid):

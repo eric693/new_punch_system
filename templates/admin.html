@@ -10482,7 +10482,7 @@ function _renderAdminExpenseRows(c) {
     <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
     <td>${escHtml(c.category||'—')}</td>
     <td style="font-size:12px;background:#f0f2f8">${escHtml(c.vendor||'—')}</td>
-    <td style="font-family:'DM Mono',monospace;text-align:right">NT$ ${fmtNum(c.amount)}</td>
+    <td style="font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;text-align:right;font-weight:600">${fmtNum(c.amount)}</td>
     <td style="min-width:160px;white-space:normal;word-break:break-word;font-size:12px;background:#f0f2f8">${escHtml(c.note||'—')}</td>
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
     <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
@@ -10492,7 +10492,9 @@ function _renderAdminExpenseRows(c) {
         ${c.status === 'pending' ? `
           <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
           <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff" onclick="promptRejectExpense(${c.id})">拒絕</button>
-        ` : ''}
+        ` : `
+          <button type="button" class="btn btn-sm" style="background:var(--orange,#f59e0b);color:#fff" onclick="revertExpense(${c.id})">打回待審</button>
+        `}
         <button type="button" class="btn btn-sm btn-outline" onclick="openExpEditModal(${c.id})">編輯</button>
         <button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff" onclick="deleteExpenseClaim(${c.id})">刪除</button>
       </div>
@@ -10532,8 +10534,11 @@ async function reviewExpense(id, action, review_note='') {
     const statusColor = { approved:'var(--green)', rejected:'var(--red)' };
     if (oldRow.cells[9]) oldRow.cells[9].innerHTML = `<span style="color:${statusColor[newStatus]};font-size:12px;font-weight:600">${statusMap[newStatus]}</span>`;
     if (oldRow.cells[10]) oldRow.cells[10].innerHTML =
-      `<button type="button" class="btn btn-sm btn-outline" style="margin-left:4px" onclick="openExpEditModal(${id})">編輯</button>` +
-      `<button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff;margin-left:4px" onclick="deleteExpenseClaim(${id})">刪除</button>`;
+      `<div style="display:inline-flex;flex-wrap:nowrap;gap:4px;align-items:center">` +
+      `<button type="button" class="btn btn-sm" style="background:var(--orange,#f59e0b);color:#fff" onclick="revertExpense(${id})">打回待審</button>` +
+      `<button type="button" class="btn btn-sm btn-outline" onclick="openExpEditModal(${id})">編輯</button>` +
+      `<button type="button" class="btn btn-sm" style="background:#6b7280;color:#fff" onclick="deleteExpenseClaim(${id})">刪除</button>` +
+      `</div>`;
     const badge = document.getElementById('badge-expense-review');
     if (badge) setBadge('badge-expense-review', Math.max(0, (parseInt(badge.textContent) || 0) - 1));
   }
@@ -10558,6 +10563,16 @@ function promptRejectExpense(id) {
   if (note === null) return; // cancelled
   if (!note.trim()) { alert('拒絕原因不可為空白'); return; }
   reviewExpense(id, 'reject', note.trim());
+}
+
+async function revertExpense(id) {
+  if (!confirm('確定將此費用申請打回「待審核」狀態？\n（若已連結財務記帳，系統將自動刪除該記帳）')) return;
+  const tbody = document.getElementById('exp-review-tbody');
+  const {ok, data} = await api(`/api/expense/claims/${id}`, {method:'PUT', body:JSON.stringify({action:'revert'})});
+  if (!ok) return;
+  showToast('已打回待審核', 'success');
+  _expUpdateCache(data);
+  if (data) _expReplaceRow(tbody, id, data);
 }
 
 function switchEditExpType(type, keepCategory) {

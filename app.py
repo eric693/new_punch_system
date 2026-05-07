@@ -11488,9 +11488,37 @@ def api_expense_admin_list():
 @login_required
 def api_expense_review(cid):
     b      = request.get_json(force=True)
-    action = b.get('action')  # approve / reject
-    if action not in ('approve','reject'):
+    action = b.get('action')  # approve / reject / revert
+    if action not in ('approve', 'reject', 'revert'):
         return jsonify({'error': 'invalid action'}), 400
+
+    with get_db() as conn:
+        claim = conn.execute("SELECT * FROM expense_claims WHERE id=%s", (cid,)).fetchone()
+        if not claim: return ('', 404)
+
+        # 打回待審：清除審核資訊，並刪除已連結的財務記帳
+        if action == 'revert':
+            old_fin_id = claim.get('finance_record_id')
+            if old_fin_id:
+                conn.execute("DELETE FROM finance_records WHERE id=%s", (old_fin_id,))
+            row = conn.execute("""
+                UPDATE expense_claims
+                SET status='pending', reviewed_by='', review_note='',
+                    reviewed_at=NULL, finance_record_id=NULL
+                WHERE id=%s RETURNING *
+            """, (cid,)).fetchone()
+            staff = conn.execute(
+                "SELECT name, employee_code FROM punch_staff WHERE id=%s", (claim['staff_id'],)
+            ).fetchone() if row else None
+            _badges_cache.clear()
+            _expense_list_cache.clear()
+            if not row: return ('', 404)
+            d = _expense_row(row)
+            if staff:
+                d['staff_name']    = staff['name']
+                d['employee_code'] = staff['employee_code'] or ''
+            return jsonify(d)
+
     reviewed_by  = session.get('admin_display_name','管理員')
     review_note  = b.get('review_note','').strip()
     new_status   = 'approved' if action == 'approve' else 'rejected'

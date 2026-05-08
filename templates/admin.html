@@ -8191,6 +8191,12 @@ document.addEventListener('DOMContentLoaded', () => {
   _cachedAllStaff();
   if (hasModule('finance'))   _cachedFinCatsPromise();
   if (hasModule('quotation')) _cachedQProductsPromise();
+  // 延遲 500ms 預熱其餘半靜態快取（避免阻塞首屏）
+  setTimeout(() => {
+    if (hasModule('sched'))  _cachedShiftTypesPromise();
+    if (hasModule('leave'))  _cachedLeaveTypesPromise();
+    if (hasModule('salary')) _cachedSalaryItemsPromise();
+  }, 500);
 
   // 導向第一個有權限的頁面
   const firstPage = ADMIN_IS_SUPER ? 'dash'
@@ -12167,7 +12173,9 @@ function setFinCompany(cu) {
   document.getElementById('fin-co-label').textContent = label;
   document.getElementById('fin-co-ad').classList.toggle('active', cu==='ad');
   document.getElementById('fin-co-jm').classList.toggle('active', cu==='jm');
-  // 重新載入當前 tab
+  // 切換公司時清除 tab 節流記錄，確保重新載入
+  Object.keys(_finTabLoadTimes).forEach(k => delete _finTabLoadTimes[k]);
+  _invalidateFinCatCache();
   const activeTab = document.querySelector('.inv-tab-bar .inv-tab.active');
   if (activeTab) {
     const tab = activeTab.id.replace('fintab-','');
@@ -12193,7 +12201,10 @@ initFinance = async function() {
   await Promise.all([loadFinCats(), loadFinSummary()]);
 };
 
-// 覆寫 switchFinTab 以加入 revenue
+// 覆寫 switchFinTab 以加入 revenue，並加入 20 秒內同一 tab 不重複載入的節流
+const _finTabLoadTimes = {};
+function _finTabNeedsReload(tab) { return !_finTabLoadTimes[tab] || (Date.now() - _finTabLoadTimes[tab]) > 20000; }
+
 const _origSwitchFinTab = switchFinTab;
 switchFinTab = function(tab) {
   ['dash','revenue','records','cats','ocr','docs','recurring','bank','tax','ap','budget','payroll','stmts','settings','deptcats'].forEach(t => {
@@ -12202,20 +12213,23 @@ switchFinTab = function(tab) {
     if (btn)   btn.classList.toggle('active', t===tab);
     if (panel) panel.style.display = t===tab?'':'none';
   });
+  const skip = !_finTabNeedsReload(tab);
+  if (!skip) return; // 20 秒內切回同一 tab，不重複打 API（收支記錄除外）
+  _finTabLoadTimes[tab] = Date.now();
   if (tab==='dash')      loadFinSummary();
-  if (tab==='revenue')   loadRevenue();
-  if (tab==='records')   loadFinRecords();
-  if (tab==='cats')      loadFinCats();
-  if (tab==='docs')      loadFinDocuments();
-  if (tab==='recurring') loadRecurring();
-  if (tab==='bank')      loadBankStatements();
-  if (tab==='tax')       _initTaxDefaults();
-  if (tab==='ap')        loadApList();
-  if (tab==='budget')    loadBudgetVsActual();
-  if (tab==='payroll')   loadPayrollSyncStatus();
-  if (tab==='stmts')     loadStatements();
-  if (tab==='settings')  loadFinSettings();
-  if (tab==='deptcats')  loadDeptCats();
+  else if (tab==='revenue')   loadRevenue();
+  else if (tab==='records')   loadFinRecords();
+  else if (tab==='cats')      loadFinCats();
+  else if (tab==='docs')      loadFinDocuments();
+  else if (tab==='recurring') loadRecurring();
+  else if (tab==='bank')      loadBankStatements();
+  else if (tab==='tax')       _initTaxDefaults();
+  else if (tab==='ap')        loadApList();
+  else if (tab==='budget')    loadBudgetVsActual();
+  else if (tab==='payroll')   loadPayrollSyncStatus();
+  else if (tab==='stmts')     loadStatements();
+  else if (tab==='settings')  loadFinSettings();
+  else if (tab==='deptcats')  loadDeptCats();
 };
 
 // 覆寫 loadFinSummary 以帶公司參數

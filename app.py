@@ -35,6 +35,13 @@ DATABASE_URL              = _raw_db_url.replace('postgres://', 'postgresql://', 
 RENDER_EXTERNAL_URL       = os.environ.get('RENDER_EXTERNAL_URL', '')
 
 app = Flask(__name__)
+app.config['COMPRESS_ALGORITHM']  = ['br', 'gzip']
+app.config['COMPRESS_LEVEL']      = 6
+app.config['COMPRESS_MIN_SIZE']   = 1000
+app.config['COMPRESS_MIMETYPES']  = [
+    'text/html', 'text/css', 'text/javascript',
+    'application/json', 'application/javascript',
+]
 Compress(app)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
@@ -534,6 +541,19 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_punch_records_tw_month ON punch_records(to_char(punched_at AT TIME ZONE 'Asia/Taipei','YYYY-MM'))",
         "CREATE INDEX IF NOT EXISTS idx_punch_staff_username ON punch_staff(username)",
         "CREATE INDEX IF NOT EXISTS idx_punch_staff_line_user ON punch_staff(line_user_id) WHERE line_user_id IS NOT NULL",
+        # ── 審核請求表 status 索引（用於 badge COUNT 及審核列表）────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_punch_requests_status ON punch_requests(status)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_requests_staff_status ON punch_requests(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_requests_status_created ON punch_requests(status, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_overtime_requests_status ON overtime_requests(status)",
+        "CREATE INDEX IF NOT EXISTS idx_overtime_requests_staff_status ON overtime_requests(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_overtime_requests_status_created ON overtime_requests(status, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_schedule_requests_status ON schedule_requests(status)",
+        "CREATE INDEX IF NOT EXISTS idx_schedule_requests_staff ON schedule_requests(staff_id)",
+        # ── 排班索引（排班日曆 / 月份查詢）──────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_shift_assignments_date ON shift_assignments(shift_date)",
+        "CREATE INDEX IF NOT EXISTS idx_shift_assignments_staff_date ON shift_assignments(staff_id, shift_date)",
+        "CREATE INDEX IF NOT EXISTS idx_shift_assignments_type_date ON shift_assignments(shift_type_id, shift_date)",
         # ── 公告管理 ─────────────────────────────────────────────────────────────
         """CREATE TABLE IF NOT EXISTS announcements (
             id          SERIAL PRIMARY KEY,
@@ -4326,6 +4346,11 @@ def init_leave_db():
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS attachment_type TEXT DEFAULT ''",
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS lv_start_time TIME",
         "ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS lv_end_time TIME",
+        # ── 假勤索引 ─────────────────────────────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_staff_status ON leave_requests(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_staff_date ON leave_requests(staff_id, start_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_status_created ON leave_requests(status, created_at DESC)",
         """CREATE TABLE IF NOT EXISTS leave_balances (
             id          SERIAL PRIMARY KEY,
             staff_id    INT REFERENCES punch_staff(id) ON DELETE CASCADE,
@@ -5139,6 +5164,11 @@ def init_salary_db():
             updated_at      TIMESTAMPTZ   DEFAULT NOW(),
             UNIQUE(staff_id, month)
         )""",
+        # ── 薪資索引 ─────────────────────────────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_salary_advances_staff ON salary_advances(staff_id)",
+        "CREATE INDEX IF NOT EXISTS idx_salary_advances_staff_status ON salary_advances(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_salary_advances_deduct_month ON salary_advances(deduct_month)",
+        "CREATE INDEX IF NOT EXISTS idx_salary_records_staff_month ON salary_records(staff_id, month)",
     ]
     for sql in migrations:
         try:
@@ -9172,6 +9202,11 @@ def init_finance_db():
             UNIQUE(year, month, category_id)
         )""",
         "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS finance_synced BOOLEAN DEFAULT FALSE",
+        # ── 財務索引 ─────────────────────────────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_finance_records_company_date ON finance_records(company_unit, record_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_finance_records_date ON finance_records(record_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_finance_records_category ON finance_records(category_id)",
+        "CREATE INDEX IF NOT EXISTS idx_finance_categories_company ON finance_categories(company_unit)",
     ]
     for sql in migrations:
         try:

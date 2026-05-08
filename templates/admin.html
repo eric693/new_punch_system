@@ -2461,6 +2461,10 @@ textarea.form-input { resize: vertical; font-family: 'DM Mono', monospace; font-
           <label>備註</label>
           <input class="fi" type="text" id="edit-exp-note">
         </div>
+        <div class="exp-field" id="edit-exp-review-note-wrap" style="margin-bottom:14px;display:none">
+          <label style="color:var(--red)">審核備注（拒絕原因）</label>
+          <input class="fi" type="text" id="edit-exp-review-note" style="border-color:var(--red)">
+        </div>
         <div class="exp-divider"></div>
         <div class="exp-section-label indigo" style="margin-bottom:14px">報帳資訊</div>
         <div class="exp-row col2">
@@ -10612,6 +10616,15 @@ function openExpEditModal(id) {
   document.getElementById('edit-exp-account-holder').value   = c.account_holder || '';
   document.getElementById('edit-exp-bank-account').value     = c.bank_account || '';
   switchEditExpType(c.expense_type || '支出', c.category || '');
+  const rnWrap = document.getElementById('edit-exp-review-note-wrap');
+  const rnInput = document.getElementById('edit-exp-review-note');
+  if (c.status === 'rejected') {
+    rnInput.value = c.review_note || '';
+    rnWrap.style.display = '';
+  } else {
+    rnInput.value = '';
+    rnWrap.style.display = 'none';
+  }
   document.getElementById('modal-edit-expense').style.display = 'flex';
 }
 
@@ -10623,6 +10636,7 @@ async function saveExpEdit() {
   const id   = parseInt(document.getElementById('edit-exp-id').value);
   const staffId = parseInt(document.getElementById('edit-exp-staff').value);
   if (!staffId) { showToast('請選擇申請人', 'error'); return; }
+  const rnWrap = document.getElementById('edit-exp-review-note-wrap');
   const body = {
     staff_id:             staffId,
     expense_date:         document.getElementById('edit-exp-date').value,
@@ -10636,6 +10650,7 @@ async function saveExpEdit() {
     bank_branch:          document.getElementById('edit-exp-bank-branch').value.trim(),
     account_holder:       document.getElementById('edit-exp-account-holder').value.trim(),
     bank_account:         document.getElementById('edit-exp-bank-account').value.trim(),
+    ...(rnWrap && rnWrap.style.display !== 'none' ? { review_note: document.getElementById('edit-exp-review-note').value.trim() } : {}),
   };
 
   // Optimistic：立即關 modal、更新 row

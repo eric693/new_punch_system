@@ -4822,23 +4822,30 @@ def _update_leave_balance(conn, staff_id, leave_type_id, year_str, delta_days):
 def api_leave_my_list():
     sid = session.get('punch_staff_id')
     if not sid: return jsonify({'error': 'not logged in'}), 401
-    with get_db() as conn:
-        rows = conn.execute("""
-            SELECT lr.*, lt.name as leave_type_name, lt.code as leave_code,
-                   lt.color as leave_color, lt.pay_rate
-            FROM leave_requests lr
-            JOIN leave_types lt ON lt.id=lr.leave_type_id
-            WHERE lr.staff_id=%s
-            ORDER BY lr.start_date DESC LIMIT 30
-        """, (sid,)).fetchall()
+    try:
+        with get_db() as conn:
+            rows = conn.execute("""
+                SELECT lr.*, lt.name as leave_type_name, lt.code as leave_code,
+                       lt.color as leave_color, lt.pay_rate
+                FROM leave_requests lr
+                JOIN leave_types lt ON lt.id=lr.leave_type_id
+                WHERE lr.staff_id=%s
+                ORDER BY lr.start_date DESC LIMIT 30
+            """, (sid,)).fetchall()
+    except Exception as e:
+        print(f"[leave/my-requests GET] error: {e}")
+        return jsonify([])
     result = []
     for r in rows:
-        d = leave_req_row(r)
-        d['leave_type_name'] = r['leave_type_name']
-        d['leave_code']      = r['leave_code']
-        d['leave_color']     = r['leave_color']
-        d['pay_rate']        = float(r['pay_rate'])
-        result.append(d)
+        try:
+            d = leave_req_row(r)
+            d['leave_type_name'] = r['leave_type_name']
+            d['leave_code']      = r['leave_code']
+            d['leave_color']     = r['leave_color']
+            d['pay_rate']        = float(r['pay_rate'])
+            result.append(d)
+        except Exception:
+            pass
     return jsonify(result)
 
 @app.route('/api/leave/my-requests', methods=['POST'])
@@ -11323,17 +11330,21 @@ def api_expense_submit():
         amount = float(b.get('amount', 0))
     except (TypeError, ValueError):
         return jsonify({'error': '金額格式錯誤'}), 400
-    with get_db() as conn:
-        row = conn.execute("""
-            INSERT INTO expense_claims
-              (staff_id, title, amount, expense_date, category, note, document_id, expense_type, company, vendor)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (sid, b['title'].strip(), amount,
-              b['expense_date'], b.get('category','').strip(),
-              b.get('note','').strip(), b.get('document_id') or None,
-              b.get('expense_type', '支出').strip(),
-              b.get('company', '進光設計').strip(),
-              b.get('vendor', '').strip())).fetchone()
+    try:
+        with get_db() as conn:
+            row = conn.execute("""
+                INSERT INTO expense_claims
+                  (staff_id, title, amount, expense_date, category, note, document_id, expense_type, company, vendor)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+            """, (sid, b['title'].strip(), amount,
+                  b['expense_date'], b.get('category','').strip(),
+                  b.get('note','').strip(), b.get('document_id') or None,
+                  b.get('expense_type', '支出').strip(),
+                  b.get('company', '進光設計').strip(),
+                  b.get('vendor', '').strip())).fetchone()
+    except Exception as e:
+        print(f"[expense/my-claims POST] error: {e}")
+        return jsonify({'error': '送出失敗，請稍後重試'}), 500
     return jsonify(_expense_row(row)), 201
 
 

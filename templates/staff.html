@@ -757,7 +757,10 @@ async function submitPunchReq(){
   }catch(e){showToast('網路錯誤','err');}
 }
 async function loadMyReqs(){
-  const res=await fetch('/api/punch/request/my');const list=await res.json();
+  try{
+  const res=await fetch('/api/punch/request/my');
+  if(!res.ok){return;}
+  const list=await res.json();
   const wrap=document.getElementById('my-reqs');const body=document.getElementById('my-reqs-list');
   if(!list.length){wrap.style.display='none';return;}
   wrap.style.display='';
@@ -765,6 +768,7 @@ async function loadMyReqs(){
     const dt=r.requested_at?r.requested_at.slice(0,16).replace('T',' '):'';
     return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px"><div><div style="font-size:12px;font-weight:600">${PLABEL[r.punch_type]||r.punch_type} — <span style="font-family:'DM Mono',monospace">${dt}</span></div><div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(r.reason)}</div>${r.review_note?`<div style="font-size:11px;color:var(--red);margin-top:2px">意見：${esc(r.review_note)}</div>`:''}</div><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap;${REQ_CLS[r.status]||''}">${REQ_LABEL[r.status]||r.status}</span></div>`;
   }).join('');
+  }catch(e){}
 }
 
 /* 排休申請 */
@@ -1183,7 +1187,10 @@ async function submitOTRequest(){
   }
 }
 async function loadMyOTRequests(){
-  const res=await fetch('/api/overtime/my-requests');const list=await res.json();
+  try{
+  const res=await fetch('/api/overtime/my-requests');
+  if(!res.ok){return;}
+  const list=await res.json();
   const wrap=document.getElementById('my-ot-list');
   if(!list.length){wrap.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">尚無申請記錄</div>';return;}
   const DAY_LABEL={weekday:'平日',rest_day:'休息日',holiday:'國定假日',special:'例假日'};
@@ -1192,6 +1199,7 @@ async function loadMyOTRequests(){
     const payStr=r.ot_pay>0?`<div style="font-size:13px;font-weight:700;color:var(--green);margin-top:4px">加班費：$${Number(r.ot_pay).toLocaleString()}</div>`:'';
     return `<div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px"><div style="padding:10px 14px;background:var(--bg);display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700">${r.request_date}　${r.start_time}～${r.end_time}<span style="font-size:11px;font-weight:400;background:var(--bg);padding:1px 6px;border-radius:8px;margin-left:6px">${DAY_LABEL[r.day_type||'weekday']||''}</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px">加班 <strong>${r.ot_hours}</strong> 小時</div></div><span style="font-size:12px;font-weight:700;color:${sc};padding:3px 10px;border-radius:10px;background:${sc}22">${sl}</span></div><div style="padding:10px 14px;font-size:12px;color:var(--text)">${esc(r.reason)}${payStr}${r.review_note?`<div style="color:${sc};margin-top:4px">意見：${esc(r.review_note)}</div>`:''}</div></div>`;
   }).join('');
+  }catch(e){}
 }
 
 /* 出勤月曆 */
@@ -1467,12 +1475,14 @@ async function initAnnStaff() {
   await loadAnnStaff();
 }
 
+let _annListCache = [];
 async function loadAnnStaff() {
   const wrap = document.getElementById('ann-staff-list');
   try {
     const res  = await fetch('/api/announcements/public');
     if (!res.ok) { wrap.innerHTML='<div style="text-align:center;color:var(--muted);padding:20px">無法載入公告</div>'; return; }
     const list = await res.json();
+    _annListCache = list;
     const unread = list.filter(a => !readAnnIds.has(String(a.id))).length;
     const dot = document.getElementById('ann-unread-dot');
     if (dot) dot.style.display = unread > 0 ? '' : 'none';
@@ -1518,13 +1528,10 @@ function toggleAnnStaff(id, headerEl) {
     // Remove unread dot on this card
     const dot = headerEl.querySelector('.ann-unread');
     if (dot) dot.style.display = 'none';
-    // Check if any unread remain
-    fetch('/api/announcements/public')
-      .then(r=>r.json()).then(list=>{
-        const rem = list.filter(a=>!readAnnIds.has(String(a.id))).length;
-        const navDot = document.getElementById('ann-unread-dot');
-        if (navDot) navDot.style.display = rem>0?'':'none';
-      }).catch(()=>{});
+    // 用本地快取計算剩餘未讀，不重複 fetch
+    const rem = _annListCache.filter(a=>!readAnnIds.has(String(a.id))).length;
+    const navDot = document.getElementById('ann-unread-dot');
+    if (navDot) navDot.style.display = rem>0?'':'none';
     // Record view
     fetch('/api/announcements/'+id+'/view',{method:'POST'}).catch(()=>{});
   }
@@ -1584,13 +1591,22 @@ function updateLeaveTypeInfo() {
   previewLeaveStaff();
 }
 
+let _annualSchedCache = null, _annualSchedCacheAt = 0;
+async function _fetchAnnualSched() {
+  if (_annualSchedCache && Date.now() - _annualSchedCacheAt < 60000) return _annualSchedCache;
+  const res = await fetch('/api/leave/annual-schedule/public');
+  if (!res.ok) return null;
+  _annualSchedCache = await res.json();
+  _annualSchedCacheAt = Date.now();
+  return _annualSchedCache;
+}
+
 async function loadAnnualLeaveCard() {
   const card = document.getElementById('annual-leave-card');
   if (!card) return;
   try {
-    const res = await fetch('/api/leave/annual-schedule/public');
-    if (!res.ok) { card.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">特休排程載入失敗，請重新整理</div>'; return; }
-    const data = await res.json();
+    const data = await _fetchAnnualSched();
+    if (!data) { card.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">特休排程載入失敗，請重新整理</div>'; return; }
     if (!data.hire_date) {
       card.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;text-align:center">尚未設定到職日，請聯絡管理員設定</div>';
       return;
@@ -1755,7 +1771,12 @@ function renderLeaveBalanceOverview() {
   wrap.innerHTML = html;
 }
 
+let _previewLeaveTimer = null;
 function previewLeaveStaff() {
+  clearTimeout(_previewLeaveTimer);
+  _previewLeaveTimer = setTimeout(_doPreviewLeave, 120);
+}
+function _doPreviewLeave() {
   const s  = document.getElementById('leave-start').value;
   const e  = document.getElementById('leave-end').value;
   const sh = document.getElementById('leave-start-half').checked;
@@ -1796,9 +1817,8 @@ function previewLeaveStaff() {
 
 async function showMyAnnualSchedule() {
   try {
-    const res  = await fetch('/api/leave/annual-schedule/public');
-    if (!res.ok) { showToast('無法載入排程', 'err'); return; }
-    const data = await res.json();
+    const data = await _fetchAnnualSched();
+    if (!data) { showToast('無法載入排程', 'err'); return; }
     if (!data.hire_date) {
       showToast('尚未設定到職日，請聯絡管理員', 'err');
       return;
@@ -1902,8 +1922,7 @@ async function submitLeaveRequest() {
     document.getElementById('leave-reason').value = '';
     document.getElementById('leave-sub').value    = '';
     if (fileInput) { fileInput.value = ''; document.getElementById('leave-file-label').textContent = '點擊上傳病單（圖片或 PDF）'; }
-    await loadMyLeaveBalance();
-    await loadMyLeaveHistory();
+    await Promise.all([loadMyLeaveBalance(), loadMyLeaveHistory()]);
   } catch(e) { showToast('網路錯誤', 'err'); }
   finally { if(btn){ btn.disabled=false; btn.textContent='送出請假申請'; } }
 }
@@ -2246,6 +2265,7 @@ async function submitExpense() {
   const res = await fetch('/api/expense/my-claims', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
   });
+  if (!res.ok) { let d={}; try{d=await res.json();}catch(e){} showToast(d.error||'送出失敗，請重試','err'); return; }
   const data = await res.json();
   if (!data.error) {
     showToast('申請已送出', 'ok');

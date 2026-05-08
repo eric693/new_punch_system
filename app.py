@@ -64,6 +64,12 @@ def _refresh_session():
     if session.get('logged_in'):
         session.modified = True
 
+@app.after_request
+def _static_cache_headers(response):
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
+
 print(f"[startup] DATABASE_URL prefix: {DATABASE_URL[:20] if DATABASE_URL else 'NOT SET'}")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)

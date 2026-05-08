@@ -523,7 +523,7 @@ def _register_blueprints():
     from routes.announcements import bp as ann_bp,         init as ann_init
     from routes.holidays     import bp as holidays_bp,     init as holidays_init
     from routes.mobile       import bp as mobile_bp
-    from routes.webauthn     import bp as webauthn_bp
+    from routes.webauthn     import bp as webauthn_bp, init as webauthn_init
 
     # Call each blueprint's init() to create module-specific tables
     for fn, name in [
@@ -542,6 +542,7 @@ def _register_blueprints():
         (schedule_init,    'schedule'),
         (shifts_init,      'shifts'),
         (overtime_init,    'overtime'),
+        (webauthn_init,    'webauthn'),
     ]:
         try:
             fn()

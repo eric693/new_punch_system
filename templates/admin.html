@@ -12281,8 +12281,16 @@ loadFinRecords = async function() {
   if (company) params.set('company', company);
   const tbody = document.getElementById('fin-rec-tbody');
   tbody.innerHTML = skeletonRows(9);
-  const {ok, data} = await api('/api/finance/records?' + params, {}, true);
-  if (!ok) { tbody.innerHTML = '<tr><td colspan="9" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
+  let result = await api('/api/finance/records?' + params, {}, true);
+  if (!result.ok) {
+    await new Promise(r => setTimeout(r, 1200));
+    result = await api('/api/finance/records?' + params, {}, true);
+  }
+  if (!result.ok) {
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:16px;text-align:center">載入失敗　<button class="btn btn-sm btn-outline" onclick="loadFinRecords()" style="margin-left:8px">重試</button></td></tr>`;
+    return;
+  }
+  const {ok, data} = result;
   window._finRecords = data;
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">此條件無記錄</div></td></tr>'; return; }
   const statusLabel = {income:'<span class="badge badge-ok">收入</span>', expense:'<span class="badge" style="background:rgba(214,66,66,0.12);color:var(--red)">支出</span>'};

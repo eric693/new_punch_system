@@ -9307,24 +9307,31 @@ def api_finance_records_list():
         conds.append("fr.category_id=%s"); params.append(int(cat_id))
     if company:
         conds.append("fr.company_unit=%s"); params.append(company)
-    with get_db() as conn:
-        rows = conn.execute(f"""
-            SELECT fr.*, fc.name as category_name, fc.color as category_color,
-                   fd.filename as doc_filename, fd.ocr_raw as ocr_raw
-            FROM finance_records fr
-            LEFT JOIN finance_categories fc ON fc.id=fr.category_id
-            LEFT JOIN finance_documents fd ON fd.id=fr.document_id
-            WHERE {' AND '.join(conds)}
-            ORDER BY fr.record_date DESC, fr.id DESC
-        """, params).fetchall()
+    try:
+        with get_db() as conn:
+            rows = conn.execute(f"""
+                SELECT fr.*, fc.name as category_name, fc.color as category_color,
+                       fd.filename as doc_filename, fd.ocr_raw as ocr_raw
+                FROM finance_records fr
+                LEFT JOIN finance_categories fc ON fc.id=fr.category_id
+                LEFT JOIN finance_documents fd ON fd.id=fr.document_id
+                WHERE {' AND '.join(conds)}
+                ORDER BY fr.record_date DESC, fr.id DESC
+            """, params).fetchall()
+    except Exception as e:
+        print(f"[finance/records GET] DB error: {e}")
+        return jsonify({'error': f'資料庫錯誤：{e}'}), 500
     result = []
     for r in rows:
-        d = _finance_rec_row(r)
-        d['category_name']  = r['category_name']
-        d['category_color'] = r['category_color']
-        d['doc_filename']   = r['doc_filename']
-        d['ocr_raw']        = r['ocr_raw'] if r['ocr_raw'] else None
-        result.append(d)
+        try:
+            d = _finance_rec_row(r)
+            d['category_name']  = r['category_name']
+            d['category_color'] = r['category_color']
+            d['doc_filename']   = r['doc_filename']
+            d['ocr_raw']        = r['ocr_raw'] if r['ocr_raw'] else None
+            result.append(d)
+        except Exception as e:
+            print(f"[finance/records GET] row serialize error id={r.get('id')}: {e}")
     return jsonify(result)
 
 

@@ -59,9 +59,18 @@ def _refresh_session():
 
 
 @app.after_request
-def _static_cache_headers(response):
-    if request.path.startswith('/static/'):
-        response.headers['Cache-Control'] = 'public, max-age=86400'
+def _cache_headers(response):
+    path = request.path
+    if path.startswith('/static/'):
+        # JS/CSS/字型/圖片 → 30 天強快取（部署時檔名帶版本號）
+        if path.endswith(('.js', '.css', '.woff', '.woff2', '.ttf', '.otf',
+                          '.png', '.jpg', '.jpeg', '.svg', '.ico', '.gif', '.webp')):
+            response.headers['Cache-Control'] = 'public, max-age=2592000, stale-while-revalidate=86400'
+        else:
+            response.headers['Cache-Control'] = 'public, max-age=86400'
+    elif path.startswith('/api/'):
+        # API 回應不快取（避免瀏覽器快取舊資料）
+        response.headers['Cache-Control'] = 'no-store'
     return response
 
 
@@ -381,6 +390,22 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_shift_assignments_date ON shift_assignments(shift_date)",
         "CREATE INDEX IF NOT EXISTS idx_shift_assignments_staff_date ON shift_assignments(staff_id, shift_date)",
         "CREATE INDEX IF NOT EXISTS idx_shift_assignments_type_date ON shift_assignments(shift_type_id, shift_date)",
+        # ── 補充高頻查詢索引 ─────────────────────────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_status_date ON leave_requests(status, start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_staff_status ON leave_requests(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_requests_date_range ON leave_requests(start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_leave_balances_staff_type_year ON leave_balances(staff_id, leave_type_id, year)",
+        "CREATE INDEX IF NOT EXISTS idx_salary_records_staff_month ON salary_records(staff_id, month)",
+        "CREATE INDEX IF NOT EXISTS idx_salary_records_month_status ON salary_records(month, status)",
+        "CREATE INDEX IF NOT EXISTS idx_overtime_requests_date ON overtime_requests(request_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_punch_staff_active ON punch_staff(active) WHERE active=TRUE",
+        "CREATE INDEX IF NOT EXISTS idx_shift_assign_tw_month ON shift_assignments(to_char(shift_date,'YYYY-MM'))",
+        "CREATE INDEX IF NOT EXISTS idx_performance_reviews_staff ON performance_reviews(staff_id, reviewed_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_announcements_active_pub ON announcements(active, published_at DESC) WHERE active=TRUE",
+        "CREATE INDEX IF NOT EXISTS idx_expense_claims_staff_status ON expense_claims(staff_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_expense_claims_status_date ON expense_claims(status, expense_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_training_records_staff ON training_records(staff_id)",
+        "CREATE INDEX IF NOT EXISTS idx_training_records_expiry ON training_records(expiry_date) WHERE expiry_date IS NOT NULL",
         """CREATE TABLE IF NOT EXISTS announcements (
             id          SERIAL PRIMARY KEY,
             title       TEXT NOT NULL,

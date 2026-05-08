@@ -67,49 +67,54 @@ def _hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
 
-# ─── In-Memory Caches ─────────────────────────────────────────────────────────
+# ─── In-Memory / Redis Caches ────────────────────────────────────────────────
+# CacheDict: L1=in-process dict, L2=Redis (when REDIS_URL is set).
+# Falls back to plain dict behaviour when Redis is unavailable.
 
-_punch_cfg_cache:  dict = {'data': None, 'at': 0.0}
-_punch_locs_cache: dict = {'data': None, 'at': 0.0}
+from cache import CacheDict
+
+_punch_cfg_cache:  CacheDict = CacheDict('punch_cfg',  redis_ttl=600)
+_punch_locs_cache: CacheDict = CacheDict('punch_locs', redis_ttl=120)
 _PUNCH_CFG_TTL  = 300
 _PUNCH_LOCS_TTL = 60
 
-_fin_cats_cache:   dict = {}
-_qproducts_cache:  dict = {}
-_stores_cache:     dict = {'data': None, 'at': 0.0}
+_fin_cats_cache:   CacheDict = CacheDict('fin_cats',   redis_ttl=120)
+_qproducts_cache:  CacheDict = CacheDict('qproducts',  redis_ttl=120)
+_stores_cache:     CacheDict = CacheDict('stores',     redis_ttl=60)
 _STATIC_TTL = 30.0
 
-_leave_types_all_cache:    dict = {'data': None, 'at': 0.0}
-_leave_types_pub_cache:    dict = {'data': None, 'at': 0.0}
-_shift_types_all_cache:    dict = {'data': None, 'at': 0.0}
-_shift_types_pub_cache:    dict = {'data': None, 'at': 0.0}
-_salary_items_cache:       dict = {'data': None, 'at': 0.0}
-_ann_public_cache:         dict = {'data': None, 'at': 0.0}
-_holidays_pub_cache:       dict = {}
+_leave_types_all_cache:  CacheDict = CacheDict('lv_types_all', redis_ttl=120)
+_leave_types_pub_cache:  CacheDict = CacheDict('lv_types_pub', redis_ttl=120)
+_shift_types_all_cache:  CacheDict = CacheDict('sh_types_all', redis_ttl=120)
+_shift_types_pub_cache:  CacheDict = CacheDict('sh_types_pub', redis_ttl=120)
+_salary_items_cache:     CacheDict = CacheDict('sal_items',    redis_ttl=120)
+_ann_public_cache:       CacheDict = CacheDict('ann_pub',      redis_ttl=60)
+_holidays_pub_cache:     CacheDict = CacheDict('holidays_pub', redis_ttl=1200)
 _SEMISTATIC_TTL = 60.0
 _HOLIDAY_TTL    = 600.0
 _ANN_TTL        = 30.0
 
-_badges_cache:   dict = {}
+_badges_cache:   CacheDict = CacheDict('badges',    redis_ttl=30)
 _BADGES_TTL = 8.0
 
-_admin_html_cache:    dict = {}
-_admin_tmtime_cache:  dict = {'at': 0.0, 'mtime': 0}
+# Admin HTML cache stays in-process (large payload, worker-local is fine)
+_admin_html_cache:   dict = {}
+_admin_tmtime_cache: dict = {'at': 0.0, 'mtime': 0}
 
-_expense_list_cache: dict = {}
+_expense_list_cache: CacheDict = CacheDict('expense_list', redis_ttl=120)
 _EXPENSE_LIST_TTL = 60.0
 
-_dashboard_cache:     dict = {}
-_punch_summary_cache: dict = {}
-_anomalies_cache:     dict = {'data': None, 'at': 0.0}
-_labor_cost_cache:    dict = {'data': None, 'at': 0.0}
-_heatmap_cache:       dict = {}
+_dashboard_cache:     CacheDict = CacheDict('dashboard',  redis_ttl=120)
+_punch_summary_cache: CacheDict = CacheDict('punch_sum',  redis_ttl=120)
+_anomalies_cache:     CacheDict = CacheDict('anomalies',  redis_ttl=240)
+_labor_cost_cache:    CacheDict = CacheDict('labor_cost', redis_ttl=240)
+_heatmap_cache:       CacheDict = CacheDict('heatmap',    redis_ttl=120)
 _DASHBOARD_TTL  = 60.0
 _SUMMARY_TTL    = 60.0
 _ANOMALIES_TTL  = 120.0
 _LABOR_TTL      = 120.0
 
-_admin_acct_cache: dict = {'by_username': None, 'by_id': None, 'at': 0.0}
+_admin_acct_cache: CacheDict = CacheDict('admin_acct', redis_ttl=600)
 _ADMIN_ACCT_TTL = 300.0
 
 

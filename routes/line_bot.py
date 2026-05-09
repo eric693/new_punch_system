@@ -1116,7 +1116,7 @@ def _line_submit_leave(staff, user_id, text):
 
         row = conn.execute("""
             INSERT INTO leave_requests
-              (staff_id, leave_type_id, start_date, end_date, days,
+              (staff_id, leave_type_id, start_date, end_date, total_days,
                reason, status, created_at)
             VALUES (%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id
         """, (staff['id'], lt['id'], date_str1, date_str2, days, reason or '（LINE 請假）')).fetchone()

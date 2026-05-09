@@ -108,7 +108,12 @@ def api_punch_login():
         return jsonify({'error': '帳號或密碼錯誤'}), 401
     session['punch_staff_id']   = staff['id']
     session['punch_staff_name'] = staff['name']
-    return jsonify({'id': staff['id'], 'name': staff['name'], 'role': staff['role']})
+    return jsonify({
+        'id': staff['id'], 'name': staff['name'], 'role': staff['role'],
+        'bank_code': staff['bank_code'] or '', 'bank_name': staff['bank_name'] or '',
+        'bank_branch': staff['bank_branch'] or '', 'bank_account': staff['bank_account'] or '',
+        'account_holder': staff['account_holder'] or '',
+    })
 
 
 @bp.route('/api/punch/logout', methods=['POST'])
@@ -125,7 +130,8 @@ def api_punch_me():
         return jsonify({'error': 'not logged in'}), 401
     with get_db() as conn:
         staff = conn.execute(
-            "SELECT id,name,role FROM punch_staff WHERE id=%s AND active=TRUE", (sid,)
+            """SELECT id, name, role, bank_code, bank_name, bank_branch, bank_account, account_holder
+               FROM punch_staff WHERE id=%s AND active=TRUE""", (sid,)
         ).fetchone()
     if not staff:
         session.pop('punch_staff_id', None)
@@ -170,7 +176,8 @@ def api_punch_init():
         today_log = []
         if sid:
             staff = conn.execute(
-                "SELECT id, name, role FROM punch_staff WHERE id=%s AND active=TRUE", (sid,)
+                """SELECT id, name, role, bank_code, bank_name, bank_branch, bank_account, account_holder
+                   FROM punch_staff WHERE id=%s AND active=TRUE""", (sid,)
             ).fetchone()
             if not staff:
                 session.pop('punch_staff_id', None)

@@ -343,7 +343,7 @@ def mobile_leave_apply():
         return jsonify({'error': '日期格式錯誤'}), 400
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO leave_requests (staff_id, leave_type_id, start_date, end_date, days, reason, status)
+            """INSERT INTO leave_requests (staff_id, leave_type_id, start_date, end_date, total_days, reason, status)
                VALUES (%s, %s, %s, %s, %s, %s, 'pending')""",
             (staff_id, leave_type_id, start_date, end_date, days, reason)
         )

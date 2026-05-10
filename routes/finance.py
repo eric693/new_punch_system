@@ -359,11 +359,12 @@ def api_finance_category_update(cid):
     b = request.get_json(force=True)
     with get_db() as conn:
         row = conn.execute("""
-            UPDATE finance_categories SET name=%s,type=%s,color=%s,sort_order=%s,active=%s,statement_section=%s
+            UPDATE finance_categories SET name=%s,type=%s,color=%s,sort_order=%s,active=%s,statement_section=%s,company_unit=%s
             WHERE id=%s RETURNING *
         """, (b.get('name', '').strip(), b.get('type', 'expense'), b.get('color', '#4a7bda'),
               int(b.get('sort_order', 0)), bool(b.get('active', True)),
               b.get('statement_section') or ('operating_revenue' if b.get('type') == 'income' else 'operating_expense'),
+              b.get('company_unit', 'ad'),
               cid)).fetchone()
     _fin_cats_cache.clear()
     return jsonify(_finance_cat_row(row)) if row else ('', 404)
@@ -490,15 +491,19 @@ def api_finance_record_get(rid):
 def api_finance_record_update(rid):
     b = request.get_json(force=True)
     with get_db() as conn:
+        existing = conn.execute("SELECT company_unit FROM finance_records WHERE id=%s", (rid,)).fetchone()
+        current_unit = (existing['company_unit'] if existing else None) or 'ad'
         row = conn.execute("""
             UPDATE finance_records SET
               record_date=%s, category_id=%s, type=%s, title=%s, amount=%s,
-              tax_amount=%s, vendor=%s, invoice_no=%s, note=%s, updated_at=NOW()
+              tax_amount=%s, vendor=%s, invoice_no=%s, note=%s,
+              company_unit=%s, updated_at=NOW()
             WHERE id=%s RETURNING *
         """, (b['record_date'], b.get('category_id') or None, b.get('type', 'expense'),
               b.get('title', '').strip(), float(b.get('amount', 0)), float(b.get('tax_amount', 0)),
               b.get('vendor', '').strip(), b.get('invoice_no', '').strip(),
-              b.get('note', '').strip(), rid)).fetchone()
+              b.get('note', '').strip(),
+              b.get('company_unit', current_unit), rid)).fetchone()
     return jsonify(_finance_rec_row(row)) if row else ('', 404)
 
 

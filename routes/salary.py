@@ -34,6 +34,7 @@ def init():
         "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS income_tax_withheld NUMERIC(12,2) DEFAULT 0",
         "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS actual_work_hours NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS punch_details JSONB DEFAULT '[]'",
+        "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS absent_days NUMERIC(5,1) DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS salary_advances (
             id           SERIAL PRIMARY KEY,
             staff_id     INT REFERENCES punch_staff(id) ON DELETE CASCADE,
@@ -125,7 +126,7 @@ def salary_record_row(row):
     d = dict(row)
     for f in ['base_salary', 'insured_salary', 'work_days', 'actual_days', 'leave_days',
               'unpaid_days', 'ot_pay', 'allowance_total', 'deduction_total', 'net_pay',
-              'actual_work_hours']:
+              'actual_work_hours', 'absent_days']:
         if d.get(f) is not None:
             d[f] = float(d[f])
     if isinstance(d.get('items'), str):
@@ -849,12 +850,12 @@ def api_salary_generate():
                 conn.execute("""
                     INSERT INTO salary_records
                       (staff_id, month, base_salary, insured_salary, work_days, actual_days,
-                       leave_days, unpaid_days, ot_pay, allowance_total, deduction_total,
+                       leave_days, unpaid_days, absent_days, ot_pay, allowance_total, deduction_total,
                        net_pay, items, actual_work_hours, punch_details, status, updated_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s::jsonb,'draft',NOW())
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s::jsonb,'draft',NOW())
                     ON CONFLICT (staff_id, month) DO UPDATE
                       SET base_salary=%s, insured_salary=%s, work_days=%s, actual_days=%s,
-                          leave_days=%s, unpaid_days=%s, ot_pay=%s, allowance_total=%s,
+                          leave_days=%s, unpaid_days=%s, absent_days=%s, ot_pay=%s, allowance_total=%s,
                           deduction_total=%s, net_pay=%s, items=%s::jsonb,
                           actual_work_hours=%s, punch_details=%s::jsonb,
                           status=CASE WHEN salary_records.status='confirmed' THEN 'confirmed' ELSE 'draft' END,
@@ -862,11 +863,11 @@ def api_salary_generate():
                 """, (
                     data['staff_id'], month, stored_base, data['insured_salary'],
                     data['work_days'], data['actual_days'], data['leave_days'], data['unpaid_days'],
-                    data['ot_pay'], data['allowance_total'], data['deduction_total'],
+                    data['absent_days'], data['ot_pay'], data['allowance_total'], data['deduction_total'],
                     data['net_pay'], items_json, data['actual_work_hours'], punch_details_json,
                     stored_base, data['insured_salary'], data['work_days'], data['actual_days'],
-                    data['leave_days'], data['unpaid_days'], data['ot_pay'], data['allowance_total'],
-                    data['deduction_total'], data['net_pay'], items_json,
+                    data['leave_days'], data['unpaid_days'], data['absent_days'], data['ot_pay'],
+                    data['allowance_total'], data['deduction_total'], data['net_pay'], items_json,
                     data['actual_work_hours'], punch_details_json,
                 ))
                 generated += 1

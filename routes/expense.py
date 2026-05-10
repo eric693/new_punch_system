@@ -402,7 +402,7 @@ def api_expense_admin_list():
                        ec.reimbursement_method, ec.bank_name, ec.bank_branch,
                        ec.bank_account, ec.account_holder,
                        ec.document_id, ec.document_id2, ec.status, ec.review_note,
-                       ec.reviewed_at, ec.created_at,
+                       ec.reviewed_by, ec.reviewed_at, ec.created_at,
                        ps.name as staff_name, ps.employee_code
                 FROM expense_claims ec
                 LEFT JOIN punch_staff ps ON ps.id=ec.staff_id

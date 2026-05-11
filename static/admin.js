@@ -6419,21 +6419,39 @@ async function _fetchExpenseFromServer(ym, rym, reRenderAfter, silent = false) {
   return true;
 }
 
+function _expReRender() {
+  const status = document.getElementById('exp-review-status')?.value ?? '';
+  _renderExpenseFiltered(status);
+}
+
+function _expSyncCatOptions() {
+  const sel = document.getElementById('exp-filter-cat');
+  if (!sel || _expAllClaims === null) return;
+  const cur = sel.value;
+  const cats = [...new Set(_expAllClaims.map(c => c.category).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-Hant'));
+  sel.innerHTML = '<option value="">全部類型</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  if (cats.includes(cur)) sel.value = cur;
+}
+
 function _renderExpenseFiltered(status) {
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody || _expAllClaims === null) return;
-  const kw = (document.getElementById('staff-search-input')?.value || '').trim().toLowerCase();
+  _expSyncCatOptions();
+  const kw      = (document.getElementById('exp-filter-kw')?.value || '').trim().toLowerCase();
+  const expType = document.getElementById('exp-filter-type')?.value || '';
+  const cat     = document.getElementById('exp-filter-cat')?.value || '';
+  const company = document.getElementById('exp-filter-company')?.value || '';
   let list = _expAllClaims;
-  // client-side status filter（status='' 表示全部）
-  if (status) list = list.filter(c => c.status === status);
+  if (status)  list = list.filter(c => c.status === status);
+  if (expType) list = list.filter(c => (c.expense_type || '') === expType);
+  if (cat)     list = list.filter(c => (c.category || '') === cat);
+  if (company) list = list.filter(c => (c.company || '') === company);
   if (kw) {
     list = list.filter(c =>
       (c.staff_name  || '').toLowerCase().includes(kw) ||
       (c.vendor      || '').toLowerCase().includes(kw) ||
-      (c.category    || '').toLowerCase().includes(kw) ||
       (c.note        || '').toLowerCase().includes(kw) ||
-      (c.expense_date|| '').includes(kw) ||
-      String(c.amount || '').includes(kw)
+      (c.expense_date|| '').includes(kw)
     );
   }
   if (!list.length) {

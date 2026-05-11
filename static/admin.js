@@ -4392,7 +4392,7 @@ function renderFinRecords() {
       <td style="color:var(--muted);font-size:12px">${escHtml(r.vendor||'')}</td>
       <td style="color:var(--muted);font-size:12px">${escHtml(r.invoice_no||'')}</td>
       <td style="text-align:right;font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">${ r.amount.toLocaleString()}</td>
-      <td style="color:var(--muted);font-size:12px">${escHtml(r.note||'')}</td>
+      <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(r.note||'')}" onclick="this.style.whiteSpace=this.style.whiteSpace==='normal'?'nowrap':'normal';this.style.overflow=this.style.overflow==='visible'?'hidden':'visible'">${escHtml(r.note||'')}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" onclick="openFinRecModal(${r.id})">編輯</button>
         <button class="btn btn-danger btn-sm" onclick="deleteFinRec(${r.id})" style="margin-left:4px">刪除</button>
@@ -6340,16 +6340,17 @@ async function submitAdminExpense() {
 let _expClaimsMap = {};
 let _expAllClaims = null;      // 目前 ym 下的全部記錄（不分狀態）
 let _expCacheYm   = undefined; // 快取對應的 ym
+let _expCacheRYm  = undefined; // 快取對應的 reviewed_ym
 let _expLastError = '';
 
-// 快取 key 只依 ym，不含 status（全部記錄一次抓完）
-function _expCacheKey(ym) { return `expClaims2:${ym}`; }
-function _saveExpCache(ym, list) {
-  try { localStorage.setItem(_expCacheKey(ym), JSON.stringify({ at: Date.now(), data: list })); } catch(e) {}
+// 快取 key 依 ym + reviewed_ym
+function _expCacheKey(ym, rym) { return `expClaims2:${ym}:${rym||''}`; }
+function _saveExpCache(ym, rym, list) {
+  try { localStorage.setItem(_expCacheKey(ym, rym), JSON.stringify({ at: Date.now(), data: list })); } catch(e) {}
 }
-function _loadExpCache(ym) {
+function _loadExpCache(ym, rym) {
   try {
-    const raw = localStorage.getItem(_expCacheKey(ym));
+    const raw = localStorage.getItem(_expCacheKey(ym, rym));
     if (!raw) return null;
     const { at, data } = JSON.parse(raw);
     if (!Array.isArray(data) || Date.now() - at > 120000) return null; // 2 min TTL
@@ -6360,53 +6361,57 @@ function _loadExpCache(ym) {
 async function loadExpenseReview(forceRefresh = false) {
   const status = document.getElementById('exp-review-status')?.value ?? '';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
+  const rym    = document.getElementById('exp-review-reviewed-ym')?.value || '';
   const tbody  = document.getElementById('exp-review-tbody');
   if (!tbody) return;
 
-  const ymChanged = ym !== _expCacheYm;
+  const filtersChanged = ym !== _expCacheYm || rym !== _expCacheRYm;
 
-  // 記憶體快取有效（ym 未變）：立刻依 status 重新渲染，背景靜默更新
-  if (_expAllClaims !== null && !forceRefresh && !ymChanged) {
+  // 記憶體快取有效（篩選條件未變）：立刻依 status 重新渲染，背景靜默更新
+  if (_expAllClaims !== null && !forceRefresh && !filtersChanged) {
     _renderExpenseFiltered(status);
-    _fetchExpenseFromServer(ym, true, true);
+    _fetchExpenseFromServer(ym, rym, true, true);
     return;
   }
 
   // localStorage 快取：立刻渲染，背景重新拉
   if (!forceRefresh) {
-    const cached = _loadExpCache(ym);
+    const cached = _loadExpCache(ym, rym);
     if (cached) {
       _expAllClaims = cached.data;
       _expCacheYm   = ym;
+      _expCacheRYm  = rym;
       _expClaimsMap = Object.fromEntries(cached.data.map(c => [c.id, c]));
       _renderExpenseFiltered(status);
-      _fetchExpenseFromServer(ym, true, true);
+      _fetchExpenseFromServer(ym, rym, true, true);
       return;
     }
   }
 
   if (!tbody.querySelector('tr[data-exp-id]')) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   }
-  const ok = await _fetchExpenseFromServer(ym, false, false);
+  const ok = await _fetchExpenseFromServer(ym, rym, false, false);
   if (!ok) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
     return;
   }
   _renderExpenseFiltered(status);
 }
 
-async function _fetchExpenseFromServer(ym, reRenderAfter, silent = false) {
+async function _fetchExpenseFromServer(ym, rym, reRenderAfter, silent = false) {
   // 永遠不帶 status，一次拉回該月份全部記錄，client 端依狀態篩選
   const params = new URLSearchParams();
-  if (ym) params.set('ym', ym);
+  if (ym)  params.set('ym', ym);
+  if (rym) params.set('reviewed_ym', rym);
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, silent);
   if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
   _expAllClaims = Array.isArray(data) ? data : [];
   _expCacheYm   = ym;
+  _expCacheRYm  = rym;
   _expClaimsMap = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
-  _saveExpCache(ym, _expAllClaims);
+  _saveExpCache(ym, rym, _expAllClaims);
   if (reRenderAfter) {
     const status = document.getElementById('exp-review-status')?.value ?? '';
     _renderExpenseFiltered(status);
@@ -6432,7 +6437,7 @@ function _renderExpenseFiltered(status) {
     );
   }
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><div class="empty-state-text">無符合資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">無符合資料</div></td></tr>';
     return;
   }
   tbody.innerHTML = list.map(_renderAdminExpenseRows).join('');
@@ -6445,7 +6450,7 @@ function _renderAdminExpenseRows(c) {
   const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.bank_branch || c.account_holder || c.bank_account);
   const bankRow = hasBankInfo ? `
     <tr style="background:var(--bg-subtle,#f8f9fb)">
-      <td colspan="11" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
+      <td colspan="12" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
         <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
         ${escHtml(c.bank_name||'')}${c.bank_branch ? `（${escHtml(c.bank_branch)}）` : ''}
         ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
@@ -6454,7 +6459,7 @@ function _renderAdminExpenseRows(c) {
     </tr>` : '';
   const reviewerNoteRow = c.review_note ? `
     <tr style="background:#fff8f8">
-      <td colspan="11" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
+      <td colspan="12" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
         審核備注：${escHtml(c.review_note)}
       </td>
     </tr>` : '';
@@ -6470,6 +6475,7 @@ function _renderAdminExpenseRows(c) {
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
     <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${c.reviewed_at ? c.reviewed_at.slice(0,10) : '—'}</td>
     <td style="white-space:nowrap">
       <div style="display:inline-flex;flex-wrap:nowrap;gap:4px;align-items:center">
         ${c.status === 'pending' ? `

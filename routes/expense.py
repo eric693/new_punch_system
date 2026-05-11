@@ -372,9 +372,10 @@ def api_expense_admin_create():
 @bp.route('/api/expense/claims', methods=['GET'])
 @login_required
 def api_expense_admin_list():
-    status = request.args.get('status', '')
-    ym     = request.args.get('ym', '')
-    cache_key = f"{status}:{ym}"
+    status      = request.args.get('status', '')
+    ym          = request.args.get('ym', '')
+    reviewed_ym = request.args.get('reviewed_ym', '')
+    cache_key = f"{status}:{ym}:{reviewed_ym}"
     now = time.time()
     cached = _expense_list_cache.get(cache_key)
     if cached and now - cached['at'] < _EXPENSE_LIST_TTL:
@@ -392,8 +393,19 @@ def api_expense_admin_list():
             params.extend([start, end])
         except Exception:
             pass
+    if reviewed_ym:
+        try:
+            y, m = reviewed_ym.split('-')
+            y, m = int(y), int(m)
+            start = f"{y:04d}-{m:02d}-01"
+            ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+            end = f"{ny:04d}-{nm:02d}-01"
+            conds.append("ec.reviewed_at >= %s AND ec.reviewed_at < %s")
+            params.extend([start, end])
+        except Exception:
+            pass
     where = ('WHERE ' + ' AND '.join(conds)) if conds else ''
-    limit_clause = '' if (status or ym) else 'LIMIT 500'
+    limit_clause = '' if (status or ym or reviewed_ym) else 'LIMIT 500'
     try:
         with get_db() as conn:
             rows = conn.execute(f"""

@@ -1,11 +1,12 @@
 import json as _json
 import time
 import traceback
+from datetime import datetime
 
 from flask import Blueprint, request, jsonify, session
 
 from auth import login_required
-from config import ANTHROPIC_API_KEY
+from config import ANTHROPIC_API_KEY, TW_TZ
 from db import get_db, _expense_list_cache, _badges_cache, _EXPENSE_LIST_TTL
 from notifications import _notify_review_result
 
@@ -519,7 +520,7 @@ def api_expense_review(cid):
                 INSERT INTO finance_records
                   (record_date, category_id, type, title, amount, note, document_id, created_by, company_unit)
                 VALUES (%s,%s,'expense',%s,%s,%s,%s,'expense-claim',%s) RETURNING id
-            """, (claim['expense_date'], cat['id'] if cat else None,
+            """, (datetime.now(TW_TZ).date(), cat['id'] if cat else None,
                   claim['title'], claim['amount'],
                   '：'.join(note_parts),
                   claim['document_id'], company_unit)).fetchone()

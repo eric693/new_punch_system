@@ -205,7 +205,7 @@ def _admin_row(r):
     if not r: return None
     d = dict(r)
     d.pop('password_hash', None)
-    if 'password_plain' not in d: d['password_plain'] = ''
+    d['password_plain'] = d.get('password_plain') or ''
     perms = d.get('permissions')
     if isinstance(perms, str):
         try: d['permissions'] = _json.loads(perms)

@@ -39,7 +39,7 @@ def punch_staff_row(row):
     d = dict(row)
     d['has_password'] = bool(d.get('password_hash'))
     d.pop('password_hash', None)
-    if 'password_plain' not in d: d['password_plain'] = ''
+    d['password_plain'] = d.get('password_plain') or ''
     if d.get('created_at'): d['created_at'] = d['created_at'].isoformat()
     if d.get('hire_date'):  d['hire_date']  = d['hire_date'].isoformat()
     if d.get('birth_date'): d['birth_date'] = d['birth_date'].isoformat()

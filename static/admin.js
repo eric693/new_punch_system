@@ -1383,7 +1383,7 @@ function openPunchStaffModal(id=null) {
     document.getElementById('psm-address').value        = s.address         || '';
     document.getElementById('psm-username').value       = s.username        || '';
     document.getElementById('psm-active').value         = s.active ? '1' : '0';
-    document.getElementById('psm-pw-hint').textContent  = s.has_password ? '已設定密碼（留空表示不修改）' : '尚未設定密碼，請輸入';
+    document.getElementById('psm-pw-hint').textContent  = s.has_password ? '已帶入目前密碼（明碼顯示）' : '尚未設定密碼，請輸入';
     document.getElementById('psm-bank-code').value      = s.bank_code       || '';
     document.getElementById('psm-bank-name').value      = s.bank_name       || '';
     document.getElementById('psm-bank-branch').value    = s.bank_branch     || '';
@@ -6130,7 +6130,7 @@ function openAdminAccModal(id=null) {
   document.getElementById('aam-id').value = id||'';
   document.getElementById('aam-title').textContent = id ? '編輯帳號' : '新增帳號';
   document.getElementById('aam-password').value = '';
-  document.getElementById('aam-pw-hint').textContent = id ? '留空不修改密碼' : '新增必填';
+  document.getElementById('aam-pw-hint').textContent = id ? '已帶入目前密碼（明碼顯示）' : '新增必填';
   // 編輯時填入明文密碼
   if (id) {
     const _a = adminAccList.find(x=>x.id===id);

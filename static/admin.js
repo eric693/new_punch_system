@@ -4365,7 +4365,7 @@ function renderFinRecords() {
   const kw     = (document.getElementById('fin-rec-kw')?.value || '').trim().toLowerCase();
   let list = all;
   if (fltCat) list = list.filter(r => (r.category_name||'') === fltCat);
-  if (kw)     list = list.filter(r => (r.title||'').toLowerCase().includes(kw) || (r.vendor||'').toLowerCase().includes(kw));
+  if (kw)     list = list.filter(r => (r.title||'').toLowerCase().includes(kw) || (r.vendor||'').toLowerCase().includes(kw) || (r.payment_method||'').toLowerCase().includes(kw));
   if (!all.length) {
     tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">無記錄</div></td></tr>';
     document.getElementById('fin-rec-footer').style.display = 'none'; return;
@@ -4389,10 +4389,10 @@ function renderFinRecords() {
       <td>${typeBadge}${ocrBadge}</td>
       <td>${catDot}${escHtml(r.category_name||'—')}</td>
       <td style="font-weight:600">${escHtml(r.title)}</td>
-      <td style="color:var(--muted);font-size:12px">${escHtml(r.vendor||'')}</td>
+      <td style="color:var(--muted);font-size:12px">${r.type==='income' ? escHtml(r.payment_method||'') : escHtml(r.vendor||'')}</td>
       <td style="color:var(--muted);font-size:12px">${escHtml(r.invoice_no||'')}</td>
       <td style="text-align:right;font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">${ r.amount.toLocaleString()}</td>
-      <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(r.note||'')}" onclick="this.style.whiteSpace=this.style.whiteSpace==='normal'?'nowrap':'normal';this.style.overflow=this.style.overflow==='visible'?'hidden':'visible'">${escHtml(r.note||'')}</td>
+      <td style="color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(r.note||'')}" onclick="this.style.whiteSpace=this.style.whiteSpace==='normal'?'nowrap':'normal';this.style.overflow=this.style.overflow==='visible'?'hidden':'visible'">${escHtml(r.note||'')}${r.photo_url?` <a href="${r.photo_url}" target="_blank" style="color:var(--accent);font-size:11px" onclick="event.stopPropagation()">📷</a>`:''}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" onclick="openFinRecModal(${r.id})">編輯</button>
         <button class="btn btn-danger btn-sm" onclick="deleteFinRec(${r.id})" style="margin-left:4px">刪除</button>
@@ -8369,7 +8369,7 @@ loadFinRecords = async function() {
     <td style="font-size:12px">${r.type==='income' ? escHtml(r.payment_method||'') : escHtml(r.vendor||'')}</td>
     <td style="font-size:12px;color:var(--muted)">${escHtml(r.invoice_no||'')}</td>
     <td style="text-align:right;font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">${Number(r.amount||0).toLocaleString()}</td>
-    <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.note||'')}</td>
+    <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.note||'')}${r.photo_url?` <a href="${r.photo_url}" target="_blank" style="color:var(--accent);font-size:11px" onclick="event.stopPropagation()">📷</a>`:''}</td>
     <td style="white-space:nowrap">
       <button class="btn btn-outline btn-sm" onclick="openFinRecModal(${r.id})">編輯</button>
       <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteFinRec(${r.id})">刪除</button>

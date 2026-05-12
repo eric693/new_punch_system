@@ -8328,7 +8328,7 @@ loadFinRecords = async function() {
     <td style="text-align:right;font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">${Number(r.amount||0).toLocaleString()}</td>
     <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.note||'')}</td>
     <td style="white-space:nowrap">
-      <button class="btn btn-outline btn-sm" onclick="openFinRecModal(null,${r.id})">編輯</button>
+      <button class="btn btn-outline btn-sm" onclick="openFinRecModal(${r.id})">編輯</button>
       <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteFinRec(${r.id})">刪除</button>
     </td>
   </tr>`).join('');

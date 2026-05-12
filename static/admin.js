@@ -1299,7 +1299,7 @@ function renderPunchStaff() {
   if (fltDept)    list = list.filter(s => (s.department||'') === fltDept);
   if (fltActive)  list = list.filter(s => String(s.active ? 1 : 0) === fltActive);
   document.getElementById('punch-staff-count').textContent = `共 ${list.length} 位員工${list.length !== punchStaffList.length ? `（全部 ${punchStaffList.length}）` : ''}`;
-  if (!list.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無符合條件的員工</div></td></tr>'; return; }
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">無符合條件的員工</div></td></tr>'; return; }
   tb.innerHTML = list.map(s => {
     const bankDisplay = s.bank_account ? (s.bank_name ? `${escHtml(s.bank_name)} ${escHtml(s.bank_account)}` : escHtml(s.bank_account)) : '<span style="color:var(--muted)">—</span>';
     const gripCell = `<td class="staff-grip-cell" style="display:none;cursor:grab;color:var(--muted);text-align:center;font-size:18px;user-select:none">⠿</td>`;
@@ -1309,6 +1309,7 @@ function renderPunchStaff() {
     <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${escHtml(s.employee_code||'—')}</td>
     <td style="color:var(--muted)">${escHtml(s.role||'')}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px">${escHtml(s.username||'—')}${s.has_password ? '' : '<span style="color:var(--red);font-size:10px;margin-left:4px">未設密碼</span>'}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px">${escHtml(s.password_plain||'')}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px">${bankDisplay}</td>
     <td>${s.active ? '<span class="badge badge-ok">在職</span>' : '<span class="badge badge-warn">停用</span>'}</td>
     <td style="white-space:nowrap" class="staff-action-cell">
@@ -6091,7 +6092,7 @@ function renderAdminAccounts() {
   const tb = document.getElementById('adminacc-tbody');
   if (!tb) return;
   if (!adminAccList.length) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">尚無帳號</div></td></tr>'; return;
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">尚無帳號</div></td></tr>'; return;
   }
   const kw = (document.getElementById('aacc-flt-kw')?.value || '').trim().toLowerCase();
   const fltActive = document.getElementById('aacc-flt-active')?.value || '';
@@ -6099,7 +6100,7 @@ function renderAdminAccounts() {
   if (kw)        list = list.filter(a => (a.username||'').toLowerCase().includes(kw) || (a.display_name||'').toLowerCase().includes(kw));
   if (fltActive) list = list.filter(a => String(a.active ? 1 : 0) === fltActive);
   if (!list.length) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-text">無符合帳號</div></td></tr>'; return;
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">無符合帳號</div></td></tr>'; return;
   }
   tb.innerHTML = list.map(a => {
     const modLabels = a.is_super
@@ -6114,6 +6115,7 @@ function renderAdminAccounts() {
     const lastLogin = a.last_login_at ? new Date(a.last_login_at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-weight:600">${escHtml(a.username)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px">${escHtml(a.password_plain||'')}</td>
       <td>${escHtml(a.display_name||'')}</td>
       <td style="line-height:1.8">${modLabels}</td>
       <td>${typeLabel}</td>

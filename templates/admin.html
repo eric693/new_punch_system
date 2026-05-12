@@ -1889,8 +1889,8 @@
   </div><!-- end page-training -->
 
   <!-- ── 費用審核 ── -->
-  <div class="page" id="page-expense-review" style="display:none">
-    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 0 0">
+  <div class="page page-flex" id="page-expense-review" style="display:none">
+    <div class="flex-filters">
       <!-- 第一列：月份與按鈕 -->
       <div class="filter-bar" style="flex-wrap:wrap">
         <span class="filter-label">費用月份</span>
@@ -1935,8 +1935,8 @@
         <input type="text" id="exp-filter-kw" class="filter-input" placeholder="🔍 申請人 / 廠商 / 說明…" style="min-width:200px" oninput="_expReRender()">
       </div>
     </div>
-    <div class="card">
-      <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow-y:auto">
+    <div class="card flex-card">
+      <div class="table-wrap flex-table-wrap">
         <table class="data-table">
           <thead style="position:sticky;top:0;z-index:2;background:var(--surface)"><tr>
             <th>申請人</th><th>日期</th><th>性質</th><th>類型</th><th>廠商</th><th style="text-align:right">金額</th><th>說明</th><th>報帳方式</th><th>收據</th><th>狀態</th><th>核准/退回日</th><th>操作</th>
@@ -3855,4 +3855,67 @@ const ADMIN_PERMS        = {{ admin_permissions  | tojson }};
 const ADMIN_IS_SUPER     = {{ admin_is_super     | tojson }};
 </script>
 <script defer src="/static/admin.js"></script>
+<script>
+/* ── 浮動水平捲軸 + Shift+滾輪右移 ── */
+(function(){
+  /* 建立固定在視窗底部的代理捲軸 */
+  var bar=document.createElement('div');
+  bar.style.cssText='position:fixed;bottom:0;height:14px;background:#eef0f6;border-top:1px solid #dde3ef;overflow-x:scroll;overflow-y:hidden;z-index:800;display:none;box-shadow:0 -2px 8px rgba(0,0,0,.07)';
+  var inner=document.createElement('div');
+  inner.style.cssText='height:1px;pointer-events:none';
+  bar.appendChild(inner);
+  document.body.appendChild(bar);
+
+  var wrap=null,timer=null;
+
+  function show(el){
+    clearTimeout(timer);
+    if(el.scrollWidth<=el.clientWidth+2){hide();return;}
+    var r=el.getBoundingClientRect();
+    bar.style.left=r.left+'px';
+    bar.style.width=r.width+'px';
+    inner.style.width=el.scrollWidth+'px';
+    if(wrap!==el){bar.scrollLeft=el.scrollLeft;wrap=el;}
+    bar.style.display='block';
+  }
+
+  function hide(){timer=setTimeout(function(){bar.style.display='none';wrap=null;},400);}
+
+  /* 代理捲軸拖動 → 同步到表格 */
+  bar.addEventListener('scroll',function(){if(wrap)wrap.scrollLeft=bar.scrollLeft;});
+  bar.addEventListener('mouseenter',function(){clearTimeout(timer);});
+  bar.addEventListener('mouseleave',hide);
+
+  /* 表格自身捲動 → 同步到代理捲軸 */
+  document.addEventListener('scroll',function(e){
+    if(wrap&&e.target===wrap)bar.scrollLeft=wrap.scrollLeft;
+  },true);
+
+  /* 滑鼠移入 table-wrap → 顯示代理捲軸 */
+  document.addEventListener('mouseover',function(e){
+    var el=e.target.closest&&e.target.closest('.table-wrap');
+    if(el)show(el);
+  });
+
+  /* 滑鼠移出 → 延遲隱藏（移到代理捲軸本身時不隱藏） */
+  document.addEventListener('mouseout',function(e){
+    if(!e.relatedTarget){hide();return;}
+    var to=e.relatedTarget===bar||bar.contains(e.relatedTarget)||(e.relatedTarget.closest&&e.relatedTarget.closest('.table-wrap'));
+    if(!to)hide();
+  });
+
+  window.addEventListener('resize',function(){if(wrap)show(wrap);});
+
+  /* Shift+滾輪 → 水平右移 */
+  document.addEventListener('wheel',function(e){
+    var el=e.target.closest&&e.target.closest('.table-wrap');
+    if(!el)return;
+    if(e.shiftKey){
+      el.scrollLeft+=e.deltaY;
+      if(wrap===el)bar.scrollLeft=el.scrollLeft;
+      e.preventDefault();
+    }
+  },{passive:false});
+})();
+</script>
 </html>

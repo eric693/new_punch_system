@@ -9132,6 +9132,7 @@ document.addEventListener('click', e => {
 
 // ── 客戶管理 ─────────────────────────────────────────────────────
 let _clientEditingId = null;
+let _clientList = [];
 
 async function loadClients() {
   const q = document.getElementById('cl-search')?.value || '';
@@ -9140,6 +9141,7 @@ async function loadClients() {
   const tbody = document.getElementById('cl-tbody');
   if (!tbody) return;
   if (!ok) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--red);padding:16px">載入失敗</td></tr>'; return; }
+  _clientList = data;
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">尚無客戶資料</div></td></tr>'; return; }
   tbody.innerHTML = data.map(c => `<tr>
     <td style="font-weight:600">${escHtml(c.name)}</td>
@@ -9158,20 +9160,20 @@ function openClientModal(id=null) {
   _clientEditingId = id || null;
   let c = {name:'',phone:'',address:'',line_id:'',email:'',note:''};
   if (id) {
-    const row = document.querySelector(`#cl-tbody tr td`);
-    // read from API if editing
+    const found = _clientList.find(x => x.id === id);
+    if (found) c = found;
   }
   const html = `<div class="modal" style="display:flex" onclick="if(event.target===this)this.remove()">
     <div class="modal-content" style="max-width:440px;width:95%">
       <div class="modal-header"><span class="modal-title">${id?'編輯':'新增'}客戶</span>
         <button class="modal-close" onclick="this.closest('.modal').remove()">✕</button></div>
       <div style="padding:20px;display:grid;gap:12px">
-        <div><label class="form-label">姓名 *</label><input class="form-input" id="cl-m-name" style="width:100%" value="${escHtml(c.name)}"></div>
-        <div><label class="form-label">電話</label><input class="form-input" id="cl-m-phone" style="width:100%" value="${escHtml(c.phone)}"></div>
-        <div><label class="form-label">Line ID</label><input class="form-input" id="cl-m-line" style="width:100%" value="${escHtml(c.line_id)}"></div>
-        <div><label class="form-label">地址</label><input class="form-input" id="cl-m-addr" style="width:100%" value="${escHtml(c.address)}"></div>
+        <div><label class="form-label">姓名 *</label><input class="form-input" id="cl-m-name" style="width:100%" value="${escHtml(c.name||'')}"></div>
+        <div><label class="form-label">電話</label><input class="form-input" id="cl-m-phone" style="width:100%" value="${escHtml(c.phone||'')}"></div>
+        <div><label class="form-label">Line ID</label><input class="form-input" id="cl-m-line" style="width:100%" value="${escHtml(c.line_id||'')}"></div>
+        <div><label class="form-label">地址</label><input class="form-input" id="cl-m-addr" style="width:100%" value="${escHtml(c.address||'')}"></div>
         <div><label class="form-label">Email</label><input class="form-input" id="cl-m-email" style="width:100%" value="${escHtml(c.email||'')}"></div>
-        <div><label class="form-label">備註</label><input class="form-input" id="cl-m-note" style="width:100%" value="${escHtml(c.note)}"></div>
+        <div><label class="form-label">備註</label><input class="form-input" id="cl-m-note" style="width:100%" value="${escHtml(c.note||'')}"></div>
       </div>
       <div style="padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px">
         <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">取消</button>
@@ -9180,23 +9182,6 @@ function openClientModal(id=null) {
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
-  if (id) {
-    api(`/api/clients?company=${window._qCompany||'ad'}&q=`, {}, true).then(({data}) => {
-      // find by id
-    });
-    // load from table data - simpler: re-fetch
-    api(`/api/clients?company=${window._qCompany||'ad'}`, {}, true).then(({ok, data}) => {
-      if (!ok) return;
-      const found = data.find(x=>x.id===id);
-      if (!found) return;
-      document.getElementById('cl-m-name').value  = found.name  || '';
-      document.getElementById('cl-m-phone').value = found.phone || '';
-      document.getElementById('cl-m-line').value  = found.line_id || '';
-      document.getElementById('cl-m-addr').value  = found.address || '';
-      document.getElementById('cl-m-email').value = found.email || '';
-      document.getElementById('cl-m-note').value  = found.note  || '';
-    });
-  }
 }
 
 async function saveClient() {

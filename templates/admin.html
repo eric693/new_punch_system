@@ -1349,7 +1349,7 @@
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>日期</th><th>類型</th><th>類別</th><th>標題</th><th>廠商</th><th>發票/單據</th><th style="text-align:right">金額</th><th>備註</th><th>操作</th></tr></thead>
+            <thead><tr><th>日期</th><th>類型</th><th>類別</th><th>標題</th><th>廠商/收款方式</th><th>發票/單據</th><th style="text-align:right">金額</th><th>備註</th><th>操作</th></tr></thead>
             <tbody id="fin-rec-tbody"><tr><td colspan="9" class="empty-state"><div class="empty-state-text">請選擇月份</div></td></tr></tbody>
           </table>
         </div>
@@ -3445,11 +3445,23 @@
         </div>
       </div>
 
-      <!-- Row: vendor + invoice -->
+      <!-- Row: vendor (expense) / payment_method (income) + invoice -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div>
+        <div id="frm-vendor-row">
           <label class="form-label" style="margin-bottom:6px;display:block">廠商／店家</label>
           <input class="form-input" id="frm-vendor" placeholder="選填" style="width:100%">
+        </div>
+        <div id="frm-payment-row" style="display:none">
+          <label class="form-label" style="margin-bottom:6px;display:block">收款方式</label>
+          <select class="form-input" id="frm-payment-method" style="width:100%">
+            <option value="">請選擇</option>
+            <option value="現金">現金</option>
+            <option value="臨櫃匯款">臨櫃匯款</option>
+            <option value="轉帳">轉帳</option>
+            <option value="刷卡">刷卡</option>
+            <option value="電支">電支</option>
+            <option value="其它">其它</option>
+          </select>
         </div>
         <div>
           <label class="form-label" style="margin-bottom:6px;display:block">發票／單據號碼</label>
@@ -3458,7 +3470,7 @@
       </div>
 
       <!-- Row: tax + note -->
-      <div style="display:grid;grid-template-columns:140px 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:16px;margin-bottom:16px">
         <div>
           <label class="form-label" style="margin-bottom:6px;display:block">稅額</label>
           <div style="position:relative">
@@ -3469,6 +3481,25 @@
         <div>
           <label class="form-label" style="margin-bottom:6px;display:block">備註</label>
           <input class="form-input" id="frm-note" placeholder="選填" style="width:100%">
+        </div>
+      </div>
+
+      <!-- Photo upload (income only) -->
+      <div id="frm-photo-row" style="display:none">
+        <label class="form-label" style="margin-bottom:6px;display:block">收款憑證照片</label>
+        <div id="frm-photo-drop"
+             onclick="document.getElementById('frm-photo-file').click()"
+             style="border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:border-color .2s;font-size:13px;color:var(--muted)"
+             ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+             ondragleave="this.style.borderColor='var(--border)'"
+             ondrop="handleFinPhotoDropEvt(event)">
+          點擊或拖曳上傳照片
+        </div>
+        <input type="file" id="frm-photo-file" accept="image/*" style="display:none" onchange="handleFinPhotoFile(this.files[0])">
+        <input type="hidden" id="frm-photo-url">
+        <div id="frm-photo-preview" style="margin-top:8px;display:none">
+          <img id="frm-photo-img" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">
+          <button type="button" onclick="clearFinPhoto()" style="display:block;margin-top:4px;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer">移除照片</button>
         </div>
       </div>
     </div>

@@ -4418,9 +4418,15 @@ function _setFinType(type) {
   if (type === 'expense') {
     eBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--red);color:#fff';
     iBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:transparent;color:var(--muted)';
+    document.getElementById('frm-vendor-row').style.display = '';
+    document.getElementById('frm-payment-row').style.display = 'none';
+    document.getElementById('frm-photo-row').style.display = 'none';
   } else {
     iBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:var(--green);color:#fff';
     eBtn.style.cssText = 'padding:8px 28px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .15s;background:transparent;color:var(--muted)';
+    document.getElementById('frm-vendor-row').style.display = 'none';
+    document.getElementById('frm-payment-row').style.display = '';
+    document.getElementById('frm-photo-row').style.display = '';
   }
   renderFinCatOptions();
 }
@@ -4436,9 +4442,11 @@ async function openFinRecModal(id=null) {
   document.getElementById('frm-amount').value = '';
   document.getElementById('frm-title-input').value = '';
   document.getElementById('frm-vendor').value = '';
+  document.getElementById('frm-payment-method').value = '';
   document.getElementById('frm-invoice').value = '';
   document.getElementById('frm-tax').value = '0';
   document.getElementById('frm-note').value = '';
+  clearFinPhoto();
   if (id) {
     // Try cache first, fallback to API
     let r = (window._finRecords || []).find(x => x.id === id);
@@ -4453,9 +4461,11 @@ async function openFinRecModal(id=null) {
       document.getElementById('frm-amount').value = r.amount != null ? r.amount : '';
       document.getElementById('frm-title-input').value = r.title || '';
       document.getElementById('frm-vendor').value = r.vendor || '';
+      document.getElementById('frm-payment-method').value = r.payment_method || '';
       document.getElementById('frm-invoice').value = r.invoice_no || '';
       document.getElementById('frm-tax').value = r.tax_amount || 0;
       document.getElementById('frm-note').value = r.note || '';
+      if (r.photo_url) _setFinPhoto(r.photo_url);
     }
   }
   document.getElementById('fin-rec-modal').style.display = 'flex';
@@ -4463,17 +4473,20 @@ async function openFinRecModal(id=null) {
 function closeFinRecModal() { document.getElementById('fin-rec-modal').style.display='none'; }
 async function saveFinRec() {
   const id = document.getElementById('frm-id').value;
+  const type = document.getElementById('frm-type').value;
   const body = {
-    record_date:  document.getElementById('frm-date').value,
-    type:         document.getElementById('frm-type').value,
-    category_id:  document.getElementById('frm-cat').value || null,
-    title:        document.getElementById('frm-title-input').value.trim(),
-    amount:       parseFloat(document.getElementById('frm-amount').value)||0,
-    tax_amount:   parseFloat(document.getElementById('frm-tax').value)||0,
-    vendor:       document.getElementById('frm-vendor').value.trim(),
-    invoice_no:   document.getElementById('frm-invoice').value.trim(),
-    note:         document.getElementById('frm-note').value.trim(),
-    company_unit: window._finCompany || 'ad',
+    record_date:     document.getElementById('frm-date').value,
+    type,
+    category_id:     document.getElementById('frm-cat').value || null,
+    title:           document.getElementById('frm-title-input').value.trim(),
+    amount:          parseFloat(document.getElementById('frm-amount').value)||0,
+    tax_amount:      parseFloat(document.getElementById('frm-tax').value)||0,
+    vendor:          type === 'expense' ? document.getElementById('frm-vendor').value.trim() : '',
+    payment_method:  type === 'income'  ? document.getElementById('frm-payment-method').value : '',
+    invoice_no:      document.getElementById('frm-invoice').value.trim(),
+    note:            document.getElementById('frm-note').value.trim(),
+    photo_url:       type === 'income'  ? (document.getElementById('frm-photo-url').value || '') : '',
+    company_unit:    window._finCompany || 'ad',
   };
   if (!body.record_date) { showToast('請選擇日期','error'); return; }
   if (!body.title)       { showToast('請填寫標題','error'); return; }
@@ -4486,6 +4499,36 @@ async function saveFinRec() {
   if (!window._finRecords) window._finRecords=[];
   if (id) window._finRecords = window._finRecords.map(r=>r.id===parseInt(id)?data:r);
   else window._finRecords.unshift(data);
+}
+function _setFinPhoto(url) {
+  document.getElementById('frm-photo-url').value = url;
+  document.getElementById('frm-photo-img').src = url;
+  document.getElementById('frm-photo-preview').style.display = '';
+  document.getElementById('frm-photo-drop').style.display = 'none';
+}
+function clearFinPhoto() {
+  document.getElementById('frm-photo-url').value = '';
+  const preview = document.getElementById('frm-photo-preview');
+  const drop = document.getElementById('frm-photo-drop');
+  if (preview) { preview.style.display = 'none'; }
+  if (drop) { drop.style.display = ''; }
+}
+async function handleFinPhotoFile(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/finance/records/upload-photo', {method:'POST', body:fd});
+    const data = await res.json();
+    if (!res.ok || !data.photo_url) { showToast(data.error||'上傳失敗','error'); return; }
+    _setFinPhoto(data.photo_url);
+  } catch(e) { showToast('上傳失敗','error'); }
+}
+function handleFinPhotoDropEvt(e) {
+  e.preventDefault();
+  document.getElementById('frm-photo-drop').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleFinPhotoFile(file);
 }
 async function deleteFinRec(id) {
   if (!confirm('確定刪除此記錄？')) return;
@@ -8323,7 +8366,7 @@ loadFinRecords = async function() {
     <td>${statusLabel[r.type]||r.type}</td>
     <td style="font-size:12px;color:var(--muted)">${escHtml(r.category_name||'未分類')}</td>
     <td style="font-weight:600">${escHtml(r.title||'')}</td>
-    <td style="font-size:12px">${escHtml(r.vendor||'')}</td>
+    <td style="font-size:12px">${r.type==='income' ? escHtml(r.payment_method||'') : escHtml(r.vendor||'')}</td>
     <td style="font-size:12px;color:var(--muted)">${escHtml(r.invoice_no||'')}</td>
     <td style="text-align:right;font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;font-weight:600;color:${r.type==='income'?'var(--green)':'var(--red)'}">${Number(r.amount||0).toLocaleString()}</td>
     <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.note||'')}</td>

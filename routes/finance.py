@@ -121,6 +121,8 @@ def init():
         "ALTER TABLE finance_categories ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS company_unit TEXT DEFAULT 'ad'",
         "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS linked_quotation_id INTEGER",
+        "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT ''",
+        "ALTER TABLE finance_records    ADD COLUMN IF NOT EXISTS photo_url TEXT DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS finance_settings (
             id            SERIAL PRIMARY KEY,
             setting_key   TEXT UNIQUE NOT NULL,
@@ -458,14 +460,16 @@ def api_finance_record_create():
     with get_db() as conn:
         row = conn.execute("""
             INSERT INTO finance_records
-              (record_date, category_id, type, title, amount, tax_amount, vendor, invoice_no, note, document_id, created_by, company_unit)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+              (record_date, category_id, type, title, amount, tax_amount, vendor, invoice_no, note, document_id, created_by, company_unit, payment_method, photo_url)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
         """, (b['record_date'], b.get('category_id') or None, b.get('type', 'expense'),
               b['title'].strip(), float(b.get('amount', 0)), float(b.get('tax_amount', 0)),
               b.get('vendor', '').strip(), b.get('invoice_no', '').strip(),
               b.get('note', '').strip(), b.get('document_id') or None,
               session.get('admin_display_name', ''),
-              b.get('company_unit', 'ad'))).fetchone()
+              b.get('company_unit', 'ad'),
+              b.get('payment_method', '').strip(),
+              b.get('photo_url', '').strip())).fetchone()
     return jsonify(_finance_rec_row(row)), 201
 
 
@@ -497,13 +501,15 @@ def api_finance_record_update(rid):
             UPDATE finance_records SET
               record_date=%s, category_id=%s, type=%s, title=%s, amount=%s,
               tax_amount=%s, vendor=%s, invoice_no=%s, note=%s,
-              company_unit=%s, updated_at=NOW()
+              company_unit=%s, payment_method=%s, photo_url=%s, updated_at=NOW()
             WHERE id=%s RETURNING *
         """, (b['record_date'], b.get('category_id') or None, b.get('type', 'expense'),
               b.get('title', '').strip(), float(b.get('amount', 0)), float(b.get('tax_amount', 0)),
               b.get('vendor', '').strip(), b.get('invoice_no', '').strip(),
               b.get('note', '').strip(),
-              b.get('company_unit', current_unit), rid)).fetchone()
+              b.get('company_unit', current_unit),
+              b.get('payment_method', '').strip(),
+              b.get('photo_url', '').strip(), rid)).fetchone()
     return jsonify(_finance_rec_row(row)) if row else ('', 404)
 
 
@@ -513,6 +519,23 @@ def api_finance_record_delete(rid):
     with get_db() as conn:
         conn.execute("DELETE FROM finance_records WHERE id=%s", (rid,))
     return jsonify({'deleted': rid})
+
+
+@bp.route('/api/finance/records/upload-photo', methods=['POST'])
+@require_module('finance')
+def api_finance_record_upload_photo():
+    import uuid, os
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': '請選擇圖片'}), 400
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'):
+        return jsonify({'error': '不支援的圖片格式'}), 400
+    filename = f"{uuid.uuid4().hex}{ext}"
+    save_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'uploads', 'finance')
+    os.makedirs(save_dir, exist_ok=True)
+    file.save(os.path.join(save_dir, filename))
+    return jsonify({'photo_url': f'/static/uploads/finance/{filename}'})
 
 
 # ── Finance P&L Summary ────────────────────────────────────────────────────────

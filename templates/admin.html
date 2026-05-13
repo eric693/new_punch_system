@@ -1898,6 +1898,8 @@
         <div class="filter-divider"></div>
         <span class="filter-label">核准月份</span>
         <input type="month" id="exp-review-reviewed-ym" class="filter-input" onchange="loadExpenseReview()">
+        <input type="date" id="exp-filter-reviewed-date" class="filter-input" style="min-width:140px" title="篩選特定核准日" onchange="_expReRender()">
+        <button class="btn btn-outline btn-sm" onclick="expFilterToday()">今日簽核</button>
         <span class="filter-spacer"></span>
         <button class="btn btn-ghost btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
         <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>

@@ -6469,6 +6469,16 @@ function _expReRender() {
   _renderExpenseFiltered(status);
 }
 
+async function expFilterToday() {
+  const today = new Date().toISOString().slice(0, 10);
+  const ym    = today.slice(0, 7);
+  document.getElementById('exp-review-reviewed-ym').value   = ym;
+  document.getElementById('exp-filter-reviewed-date').value = today;
+  document.getElementById('exp-review-status').value        = 'approved';
+  document.getElementById('exp-review-ym').value            = '';
+  await loadExpenseReview();
+}
+
 function _expSyncCatOptions() {
   const sel = document.getElementById('exp-filter-cat');
   if (!sel || _expAllClaims === null) return;
@@ -6482,15 +6492,17 @@ function _renderExpenseFiltered(status) {
   const tbody = document.getElementById('exp-review-tbody');
   if (!tbody || _expAllClaims === null) return;
   _expSyncCatOptions();
-  const kw      = (document.getElementById('exp-filter-kw')?.value || '').trim().toLowerCase();
-  const expType = document.getElementById('exp-filter-type')?.value || '';
-  const cat     = document.getElementById('exp-filter-cat')?.value || '';
-  const company = document.getElementById('exp-filter-company')?.value || '';
+  const kw           = (document.getElementById('exp-filter-kw')?.value || '').trim().toLowerCase();
+  const expType      = document.getElementById('exp-filter-type')?.value || '';
+  const cat          = document.getElementById('exp-filter-cat')?.value || '';
+  const company      = document.getElementById('exp-filter-company')?.value || '';
+  const reviewedDate = document.getElementById('exp-filter-reviewed-date')?.value || '';
   let list = _expAllClaims;
-  if (status)  list = list.filter(c => c.status === status);
-  if (expType) list = list.filter(c => (c.expense_type || '') === expType);
-  if (cat)     list = list.filter(c => (c.category || '') === cat);
-  if (company) list = list.filter(c => (c.company || '') === company);
+  if (status)       list = list.filter(c => c.status === status);
+  if (expType)      list = list.filter(c => (c.expense_type || '') === expType);
+  if (cat)          list = list.filter(c => (c.category || '') === cat);
+  if (company)      list = list.filter(c => (c.company || '') === company);
+  if (reviewedDate) list = list.filter(c => (c.reviewed_at || '').slice(0, 10) === reviewedDate);
   if (kw) {
     list = list.filter(c =>
       (c.staff_name  || '').toLowerCase().includes(kw) ||
@@ -6705,7 +6717,7 @@ function _setEditExpPhoto(url) {
   if (hidden) hidden.value = _editExpPhotoUrl;
   if (url) {
     img.src = url;
-    img.style.display = '';
+    img.style.display = 'block';
     hint.style.display = 'none';
     wrap.style.borderColor = '#2e9e6b';
     if (rmWrap) rmWrap.style.display = '';
@@ -6726,8 +6738,14 @@ function clearEditExpPhoto() {
 async function editExpPhotoSelected(event) {
   const file = event.target.files[0];
   if (!file) return;
+  // 即時預覽（只更新畫面，尚未取得伺服器 URL）
   const reader = new FileReader();
-  reader.onload = e => _setEditExpPhoto(e.target.result);
+  reader.onload = e => {
+    const img = document.getElementById('edit-exp-photo-preview');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    document.getElementById('edit-exp-photo-hint').style.display = 'none';
+  };
   reader.readAsDataURL(file);
   const loading = document.getElementById('edit-exp-photo-loading');
   loading.style.display = '';
@@ -6738,6 +6756,7 @@ async function editExpPhotoSelected(event) {
     const data = await res.json();
     loading.style.display = 'none';
     if (data.error) { showToast('照片上傳失敗', 'error'); clearEditExpPhoto(); return; }
+    // 上傳成功後才更新 _editExpPhotoUrl（避免儲存 base64 到 DB）
     _setEditExpPhoto(data.photo_url);
     showToast('照片已上傳', 'success');
   } catch(e) {

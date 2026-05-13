@@ -390,6 +390,7 @@
         </select>
         <span class="filter-label">月份</span>
         <input type="month" class="filter-input" id="preq-filter-month" onchange="loadPunchRequests()" style="min-width:140px">
+        <input type="date" class="filter-input" id="preq-filter-date" style="min-width:140px" title="篩選特定日期" onchange="renderPunchRequests()">
         <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;color:var(--text)">
           <input type="checkbox" id="preq-select-all" onchange="selectAllBatch('punch',this.checked)">全選
         </label>
@@ -406,6 +407,7 @@
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="ot-filter-month" onchange="otFilterChanged()">
+        <input type="date" class="filter-input" id="ot-filter-date" style="min-width:140px" title="篩選特定日期" onchange="renderOTRequests()">
         <div class="filter-divider"></div>
         <span class="filter-label">狀態</span>
         <select class="filter-input" id="ot-filter-status" onchange="loadOTRequests()" style="min-width:120px">
@@ -803,6 +805,7 @@
       <div class="filter-bar" style="margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="leave-req-month" onchange="debouncedLeaveRequests()">
+        <input type="date" class="filter-input" id="leave-req-date" style="min-width:140px" title="篩選特定日期" onchange="renderLeaveRequests()">
         <div class="filter-divider"></div>
         <span class="filter-label">狀態</span>
         <select class="filter-input" id="leave-req-status" onchange="debouncedLeaveRequests()" style="min-width:110px">
@@ -1047,6 +1050,7 @@
       <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="adv-month" onchange="loadAdvances()">
+        <input type="date" class="filter-input" id="adv-date-filter" style="min-width:140px" title="篩選特定預支日期" onchange="renderAdvances()">
         <select class="filter-input" id="adv-status-filter" onchange="loadAdvances()" style="min-width:100px">
           <option value="">全部狀態</option>
           <option value="pending">待扣</option>
@@ -1336,6 +1340,7 @@
       <div class="filter-bar" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
         <span class="filter-label">月份</span>
         <input class="filter-input" type="month" id="fin-rec-month" onchange="loadFinRecords()">
+        <input type="date" class="filter-input" id="fin-rec-date" style="min-width:140px" title="篩選特定日期" onchange="renderFinRecords()">
         <select class="filter-input" id="fin-rec-type" onchange="loadFinRecords()" style="min-width:100px">
           <option value="">全部</option><option value="income">收入</option><option value="expense">支出</option>
         </select>

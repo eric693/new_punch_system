@@ -1684,8 +1684,10 @@ async function loadPunchRequests() {
 }
 function renderPunchRequests() {
   const wrap = document.getElementById('preq-list');
-  if (!punchReqList.length) { wrap.innerHTML = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
-  wrap.innerHTML = punchReqList.map(r => {
+  const dateFilter = document.getElementById('preq-filter-date')?.value || '';
+  const list = dateFilter ? punchReqList.filter(r => (r.requested_at || '').slice(0, 10) === dateFilter) : punchReqList;
+  if (!list.length) { wrap.innerHTML = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
+  wrap.innerHTML = list.map(r => {
     const dt = r.requested_at ? r.requested_at.slice(0,16).replace('T',' ') : '';
     const created = r.created_at ? r.created_at.slice(0,16).replace('T','  ') : '';
     const isPending = r.status === 'pending';
@@ -1823,9 +1825,11 @@ async function loadOTRequests() {
 }
 function renderOTRequests() {
   const wrap = document.getElementById('ot-req-list');
-  if (!otReqData.length) { wrap.innerHTML = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
+  const dateFilter = document.getElementById('ot-filter-date')?.value || '';
+  const list = dateFilter ? otReqData.filter(r => (r.request_date || '') === dateFilter) : otReqData;
+  if (!list.length) { wrap.innerHTML = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
   const DAY_TYPE = {weekday:'平日',rest_day:'休息日',holiday:'國定假日',special:'例假日'};
-  wrap.innerHTML = otReqData.map(r => {
+  wrap.innerHTML = list.map(r => {
     const sc = OT_STATUS_COLOR[r.status]||'var(--muted)'; const sl = OT_STATUS_LABEL[r.status]||r.status;
     const isOTPending = r.status === 'pending';
     return `<div class="card" style="margin-bottom:10px">
@@ -2544,8 +2548,10 @@ async function _refreshLeaveBalCache(year) {
 
 function renderLeaveRequests() {
   const wrap = document.getElementById('leave-req-list');
-  if (!leaveReqData.length) { wrap.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
-  wrap.innerHTML = leaveReqData.map(r => {
+  const dateFilter = document.getElementById('leave-req-date')?.value || '';
+  const list = dateFilter ? leaveReqData.filter(r => (r.start_date || '') <= dateFilter && (r.end_date || r.start_date || '') >= dateFilter) : leaveReqData;
+  if (!list.length) { wrap.innerHTML='<div class="card" style="padding:40px;text-align:center;color:var(--muted)">無符合申請</div>'; return; }
+  wrap.innerHTML = list.map(r => {
     const sc = LEAVE_STATUS_COLOR[r.status]||'var(--muted)';
     const sl = LEAVE_STATUS_LABEL[r.status]||r.status;
     const canReview = r.status==='pending';
@@ -3576,6 +3582,8 @@ async function saveSalStaff() {
 // ── 薪資預支扣帳 ─────────────────────────────────────────────
 let _advStaffList = [];
 
+let _advData = [];
+
 async function loadAdvances() {
   const month  = document.getElementById('adv-month').value;
   const status = document.getElementById('adv-status-filter').value;
@@ -3583,7 +3591,13 @@ async function loadAdvances() {
   if (month)  url += `month=${month}&`;
   if (status) url += `status=${status}&`;
   const {ok, data} = await api(url, {}, true);
-  const rows = ok ? data : [];
+  _advData = ok ? data : [];
+  renderAdvances();
+}
+
+function renderAdvances() {
+  const dateFilter = document.getElementById('adv-date-filter')?.value || '';
+  const rows = dateFilter ? _advData.filter(r => (r.advance_date || '') === dateFilter) : _advData;
   document.getElementById('adv-count').textContent = `共 ${rows.length} 筆`;
   const tb = document.getElementById('adv-tbody');
   if (!rows.length) {
@@ -4362,11 +4376,13 @@ function renderFinRecords() {
     const expected = '<option value="">全部類別</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
     if (catSel.innerHTML !== expected) { catSel.innerHTML = expected; catSel.value = cur; }
   }
-  const fltCat = document.getElementById('fin-rec-cat')?.value || '';
-  const kw     = (document.getElementById('fin-rec-kw')?.value || '').trim().toLowerCase();
+  const fltCat  = document.getElementById('fin-rec-cat')?.value || '';
+  const kw      = (document.getElementById('fin-rec-kw')?.value || '').trim().toLowerCase();
+  const fltDate = document.getElementById('fin-rec-date')?.value || '';
   let list = all;
-  if (fltCat) list = list.filter(r => (r.category_name||'') === fltCat);
-  if (kw)     list = list.filter(r => (r.title||'').toLowerCase().includes(kw) || (r.vendor||'').toLowerCase().includes(kw) || (r.payment_method||'').toLowerCase().includes(kw));
+  if (fltCat)  list = list.filter(r => (r.category_name||'') === fltCat);
+  if (fltDate) list = list.filter(r => (r.record_date || '').slice(0, 10) === fltDate);
+  if (kw)      list = list.filter(r => (r.title||'').toLowerCase().includes(kw) || (r.vendor||'').toLowerCase().includes(kw) || (r.payment_method||'').toLowerCase().includes(kw));
   if (!all.length) {
     tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">無記錄</div></td></tr>';
     document.getElementById('fin-rec-footer').style.display = 'none'; return;

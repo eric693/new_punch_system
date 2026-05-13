@@ -82,6 +82,7 @@ def init():
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS expense_type TEXT NOT NULL DEFAULT '支出'",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS company TEXT NOT NULL DEFAULT '進光設計'",
         "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS vendor TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE expense_claims ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_expense_claims_staff_id ON expense_claims(staff_id)",
         "CREATE INDEX IF NOT EXISTS idx_expense_claims_status ON expense_claims(status)",
         "CREATE INDEX IF NOT EXISTS idx_expense_claims_created_at ON expense_claims(created_at DESC)",
@@ -414,7 +415,7 @@ def api_expense_admin_list():
                        ec.vendor, ec.amount, ec.note, ec.title, ec.company,
                        ec.reimbursement_method, ec.bank_name, ec.bank_branch,
                        ec.bank_account, ec.account_holder,
-                       ec.document_id, ec.document_id2, ec.status, ec.review_note,
+                       ec.document_id, ec.document_id2, ec.photo_url, ec.status, ec.review_note,
                        ec.reviewed_by, ec.reviewed_at, ec.created_at,
                        ps.name as staff_name, ps.employee_code
                 FROM expense_claims ec
@@ -550,13 +551,30 @@ def api_expense_review(cid):
     return ('', 404)
 
 
+@bp.route('/api/expense/upload-photo', methods=['POST'])
+@login_required
+def api_expense_upload_photo():
+    import uuid, os
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'error': '請選擇圖片'}), 400
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'):
+        return jsonify({'error': '不支援的圖片格式'}), 400
+    filename = f"{uuid.uuid4().hex}{ext}"
+    save_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'uploads', 'expense')
+    os.makedirs(save_dir, exist_ok=True)
+    file.save(os.path.join(save_dir, filename))
+    return jsonify({'photo_url': f'/static/uploads/expense/{filename}'})
+
+
 @bp.route('/api/expense/claims/<int:cid>', methods=['PATCH'])
 @login_required
 def api_expense_claim_edit(cid):
     b = request.get_json(force=True)
     allowed = ['staff_id', 'expense_date', 'expense_type', 'category', 'vendor', 'amount',
                'note', 'review_note', 'reimbursement_method', 'bank_name', 'bank_branch',
-               'bank_account', 'account_holder', 'title']
+               'bank_account', 'account_holder', 'title', 'photo_url']
     sets, vals = [], []
     for key in allowed:
         if key in b:

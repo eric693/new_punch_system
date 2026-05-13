@@ -2275,6 +2275,23 @@
           <input class="fi" type="text" id="edit-exp-review-note" style="border-color:var(--red)">
         </div>
         <div class="exp-divider"></div>
+        <div class="exp-section-label blue" style="margin-bottom:10px">憑證照片</div>
+        <div class="exp-field" style="margin-bottom:14px">
+          <div class="exp-upload" id="edit-exp-photo-wrap" onclick="document.getElementById('edit-exp-photo-input').click()">
+            <input type="file" id="edit-exp-photo-input" accept="image/*" style="display:none" onchange="editExpPhotoSelected(event)">
+            <div id="edit-exp-photo-hint">
+              <div class="exp-upload-icon">🧾</div>
+              <div class="exp-upload-text">點擊上傳憑證照片</div>
+            </div>
+            <img id="edit-exp-photo-preview">
+            <div class="uploading" id="edit-exp-photo-loading">上傳中…</div>
+          </div>
+          <div id="edit-exp-photo-remove-wrap" style="display:none;margin-top:6px">
+            <button type="button" onclick="clearEditExpPhoto()" style="font-size:12px;color:var(--red);background:none;border:none;cursor:pointer">移除照片</button>
+          </div>
+          <input type="hidden" id="edit-exp-photo-url">
+        </div>
+        <div class="exp-divider"></div>
         <div class="exp-section-label indigo" style="margin-bottom:14px">報帳資訊</div>
         <div class="exp-row col2">
           <div class="exp-field">

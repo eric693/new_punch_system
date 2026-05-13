@@ -6536,7 +6536,7 @@ function _renderAdminExpenseRows(c) {
     <td style="font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;text-align:right;font-weight:600">${fmtNum(c.amount)}</td>
     <td style="min-width:160px;white-space:normal;word-break:break-word;font-size:12px;background:#f0f2f8">${escHtml(c.note||'—')}</td>
     <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
-    <td style="text-align:center">${c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—'}</td>
+    <td style="text-align:center">${c.photo_url ? `<a href="${escHtml(c.photo_url)}" target="_blank" style="font-size:12px">查看照片</a>` : (c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—')}</td>
     <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
     <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${c.reviewed_at ? c.reviewed_at.slice(0,10) : '—'}</td>
     <td style="white-space:nowrap">
@@ -6685,11 +6685,66 @@ function openExpEditModal(id) {
     rnInput.value = '';
     rnWrap.style.display = 'none';
   }
+  _setEditExpPhoto(c.photo_url || '');
   document.getElementById('modal-edit-expense').style.display = 'flex';
 }
 
 function closeExpEditModal() {
   document.getElementById('modal-edit-expense').style.display = 'none';
+}
+
+let _editExpPhotoUrl = '';
+
+function _setEditExpPhoto(url) {
+  _editExpPhotoUrl = url || '';
+  const img     = document.getElementById('edit-exp-photo-preview');
+  const hint    = document.getElementById('edit-exp-photo-hint');
+  const rmWrap  = document.getElementById('edit-exp-photo-remove-wrap');
+  const wrap    = document.getElementById('edit-exp-photo-wrap');
+  const hidden  = document.getElementById('edit-exp-photo-url');
+  if (hidden) hidden.value = _editExpPhotoUrl;
+  if (url) {
+    img.src = url;
+    img.style.display = '';
+    hint.style.display = 'none';
+    wrap.style.borderColor = '#2e9e6b';
+    if (rmWrap) rmWrap.style.display = '';
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    hint.style.display = '';
+    wrap.style.borderColor = '';
+    if (rmWrap) rmWrap.style.display = 'none';
+  }
+}
+
+function clearEditExpPhoto() {
+  document.getElementById('edit-exp-photo-input').value = '';
+  _setEditExpPhoto('');
+}
+
+async function editExpPhotoSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => _setEditExpPhoto(e.target.result);
+  reader.readAsDataURL(file);
+  const loading = document.getElementById('edit-exp-photo-loading');
+  loading.style.display = '';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res  = await fetch('/api/expense/upload-photo', { method: 'POST', body: form });
+    const data = await res.json();
+    loading.style.display = 'none';
+    if (data.error) { showToast('照片上傳失敗', 'error'); clearEditExpPhoto(); return; }
+    _setEditExpPhoto(data.photo_url);
+    showToast('照片已上傳', 'success');
+  } catch(e) {
+    loading.style.display = 'none';
+    showToast('照片上傳失敗', 'error');
+    clearEditExpPhoto();
+  }
 }
 
 async function saveExpEdit() {
@@ -6710,6 +6765,7 @@ async function saveExpEdit() {
     bank_branch:          document.getElementById('edit-exp-bank-branch').value.trim(),
     account_holder:       document.getElementById('edit-exp-account-holder').value.trim(),
     bank_account:         document.getElementById('edit-exp-bank-account').value.trim(),
+    photo_url:            _editExpPhotoUrl,
     ...(rnWrap && rnWrap.style.display !== 'none' ? { review_note: document.getElementById('edit-exp-review-note').value.trim() } : {}),
   };
 

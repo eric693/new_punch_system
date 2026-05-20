@@ -131,28 +131,81 @@ function _updateBatchButtons(category) {
   });
 }
 
+// ── 共用簽核備註 Modal ───────────────────────────────────────────
+let _rnmCallback = null;
+
+function showReviewNoteModal({ title, desc, action, requireNote = false, onConfirm }) {
+  _rnmCallback = onConfirm;
+  document.getElementById('rnm-title').textContent = title || '確認審核';
+  const descEl = document.getElementById('rnm-desc');
+  if (desc) { descEl.textContent = desc; descEl.style.display = 'block'; }
+  else { descEl.style.display = 'none'; }
+  const noteEl = document.getElementById('rnm-note');
+  noteEl.value = '';
+  noteEl.placeholder = requireNote ? '請填寫原因（必填）' : '請填寫簽核意見（可選填）';
+  noteEl.style.borderColor = '';
+  noteEl.dataset.require = requireNote ? '1' : '';
+  document.getElementById('rnm-required-hint').textContent = requireNote ? '（必填）' : '（選填）';
+  const btn = document.getElementById('rnm-confirm-btn');
+  if (action === 'reject') {
+    btn.textContent = '確認退回';
+    btn.style.background = 'var(--red)';
+    btn.className = 'btn btn-danger';
+  } else {
+    btn.textContent = '確認核准';
+    btn.style.background = 'var(--green)';
+    btn.className = 'btn btn-primary';
+  }
+  document.getElementById('review-note-modal').style.display = 'flex';
+  setTimeout(() => noteEl.focus(), 80);
+}
+
+function closeReviewNoteModal() {
+  document.getElementById('review-note-modal').style.display = 'none';
+  _rnmCallback = null;
+}
+
+function confirmReviewNote() {
+  const noteEl = document.getElementById('rnm-note');
+  const note = noteEl.value.trim();
+  if (noteEl.dataset.require === '1' && !note) {
+    noteEl.style.borderColor = 'var(--red)';
+    noteEl.focus();
+    return;
+  }
+  noteEl.style.borderColor = '';
+  const cb = _rnmCallback;
+  closeReviewNoteModal();
+  if (cb) cb(note);
+}
+// ────────────────────────────────────────────────────────────────
+
 async function batchReview(category, action) {
-  const ids    = [..._batchSelected[category]];
+  const ids   = [..._batchSelected[category]];
   if (!ids.length) { showToast('請先勾選要審核的申請', 'error'); return; }
-  const label  = action === 'approve' ? '核准' : '退回';
-  const note   = action === 'reject'
-    ? (prompt(`批次退回 ${ids.length} 筆，請填寫退回原因（可留空）：`) ?? '')
-    : '';
-  if (note === null) return; // cancelled
-  const urlMap = { punch: '/api/punch/requests/batch', ot: '/api/overtime/requests/batch',
-                   sched: '/api/schedule/requests/batch', leave: '/api/leave/requests/batch' };
-  const { ok, data } = await api(urlMap[category], apiJSON({ ids, action, review_note: note }));
-  if (!ok) return;
-  showToast(`已批次${label} ${data.done} 筆`, 'success');
-  _batchSelected[category].clear();
-  _updateBatchButtons(category);
-  _resetSelectAll(category);
-  // Reload the appropriate list
-  if (category === 'punch')  loadPunchRequests();
-  if (category === 'ot')     loadOTRequests();
-  if (category === 'sched')  loadSchedRequests();
-  if (category === 'leave')  loadLeaveRequests();
-  debouncedRefreshBadges();
+  const label = action === 'approve' ? '核准' : '退回';
+  const catLabel = { punch:'補打卡', ot:'加班', sched:'排休', leave:'請假' }[category] || '';
+  showReviewNoteModal({
+    title: `批次${label}${catLabel}申請`,
+    desc: `共 ${ids.length} 筆申請將被${label}`,
+    action,
+    requireNote: false,
+    onConfirm: async (note) => {
+      const urlMap = { punch: '/api/punch/requests/batch', ot: '/api/overtime/requests/batch',
+                       sched: '/api/schedule/requests/batch', leave: '/api/leave/requests/batch' };
+      const { ok, data } = await api(urlMap[category], apiJSON({ ids, action, review_note: note }));
+      if (!ok) return;
+      showToast(`已批次${label} ${data.done} 筆`, 'success');
+      _batchSelected[category].clear();
+      _updateBatchButtons(category);
+      _resetSelectAll(category);
+      if (category === 'punch')  loadPunchRequests();
+      if (category === 'ot')     loadOTRequests();
+      if (category === 'sched')  loadSchedRequests();
+      if (category === 'leave')  loadLeaveRequests();
+      debouncedRefreshBadges();
+    }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -6570,7 +6623,7 @@ function _renderAdminExpenseRows(c) {
     <td style="white-space:nowrap">
       <div style="display:inline-flex;flex-wrap:nowrap;gap:4px;align-items:center">
         ${c.status === 'pending' ? `
-          <button type="button" class="btn btn-sm btn-success" onclick="reviewExpense(${c.id},'approve')">核准</button>
+          <button type="button" class="btn btn-sm btn-success" onclick="promptApproveExpense(${c.id})">核准</button>
           <button type="button" class="btn btn-sm" style="background:var(--red);color:#fff" onclick="promptRejectExpense(${c.id})">拒絕</button>
         ` : `
           <button type="button" class="btn btn-sm" style="background:var(--orange,#f59e0b);color:#fff" onclick="revertExpense(${c.id})">打回待審</button>
@@ -6641,11 +6694,22 @@ async function reviewExpense(id, action, review_note='') {
   if (data) _expReplaceRow(tbody, id, data);
 }
 
+function promptApproveExpense(id) {
+  showReviewNoteModal({
+    title: '核准費用申請',
+    action: 'approve',
+    requireNote: false,
+    onConfirm: (note) => reviewExpense(id, 'approve', note)
+  });
+}
+
 function promptRejectExpense(id) {
-  const note = prompt('請填寫拒絕原因（必填）', '');
-  if (note === null) return; // cancelled
-  if (!note.trim()) { alert('拒絕原因不可為空白'); return; }
-  reviewExpense(id, 'reject', note.trim());
+  showReviewNoteModal({
+    title: '拒絕費用申請',
+    action: 'reject',
+    requireNote: true,
+    onConfirm: (note) => reviewExpense(id, 'reject', note)
+  });
 }
 
 async function revertExpense(id) {

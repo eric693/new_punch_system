@@ -3004,7 +3004,7 @@
       <input type="hidden" id="preq-id">
       <div id="preq-info" style="padding:12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:13px"></div>
       <div style="margin-bottom:12px"><label class="form-label">審核人員</label><input class="form-input" id="preq-by" placeholder="管理員姓名" style="width:100%"></div>
-      <div><label class="form-label">審核意見（選填）</label><input class="form-input" id="preq-note" placeholder="退回原因或備註" style="width:100%"></div>
+      <div><label class="form-label" style="display:flex;align-items:center;gap:6px">簽核備註 <span style="font-size:11px;font-weight:400;color:var(--muted)">（選填）</span></label><textarea class="form-input" id="preq-note" placeholder="退回原因或審核意見" rows="2" style="width:100%;resize:vertical;min-height:60px;font-size:13px"></textarea></div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closePreqModal()">取消</button><button class="btn btn-danger" onclick="reviewPunchReq('reject')">退回</button><button class="btn btn-primary" style="background:var(--green)" onclick="reviewPunchReq('approve')">核准並補打</button></div>
   </div>
@@ -3023,7 +3023,7 @@
         <div style="font-size:18px;font-weight:700;color:var(--green);margin-top:6px">加班費：<span id="otrm-pay-amount">$0</span></div>
       </div>
       <div style="margin-bottom:12px"><label class="form-label">審核人員 *</label><input class="form-input" id="otrm-by" placeholder="管理員姓名" style="width:100%"></div>
-      <div><label class="form-label">審核意見（選填）</label><input class="form-input" id="otrm-note" placeholder="退回原因或備註" style="width:100%"></div>
+      <div><label class="form-label" style="display:flex;align-items:center;gap:6px">簽核備註 <span style="font-size:11px;font-weight:400;color:var(--muted)">（選填）</span></label><textarea class="form-input" id="otrm-note" placeholder="退回原因或審核意見" rows="2" style="width:100%;resize:vertical;min-height:60px;font-size:13px"></textarea></div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeOTReview()">取消</button><button class="btn btn-danger" onclick="reviewOTRequest('reject')">退回</button><button class="btn btn-primary" style="background:var(--green)" onclick="reviewOTRequest('approve')">核准</button></div>
   </div>
@@ -3037,7 +3037,7 @@
       <input type="hidden" id="srm-id">
       <div id="srm-info" style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;font-size:13px"></div>
       <div style="margin-bottom:12px"><label class="form-label">審核人員</label><input class="form-input" id="srm-by" placeholder="管理員姓名" style="width:100%"></div>
-      <div><label class="form-label">審核意見（選填）</label><input class="form-input" id="srm-note" placeholder="退回原因或備注" style="width:100%"></div>
+      <div><label class="form-label" style="display:flex;align-items:center;gap:6px">簽核備註 <span style="font-size:11px;font-weight:400;color:var(--muted)">（選填）</span></label><textarea class="form-input" id="srm-note" placeholder="退回原因或審核意見" rows="2" style="width:100%;resize:vertical;min-height:60px;font-size:13px"></textarea></div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeSchedReview()">取消</button><button class="btn btn-danger" onclick="reviewRequest('reject')">退回</button><button class="btn btn-primary" style="background:var(--green)" onclick="reviewRequest('approve')">核准</button></div>
   </div>
@@ -3268,7 +3268,7 @@
       <input type="hidden" id="lrm-id">
       <div id="lrm-info" style="padding:12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:13px"></div>
       <div style="margin-bottom:12px"><label class="form-label">審核人員 *</label><input class="form-input" id="lrm-by" placeholder="管理員姓名" style="width:100%"></div>
-      <div><label class="form-label">審核意見（選填）</label><input class="form-input" id="lrm-note" placeholder="退回原因或備註" style="width:100%"></div>
+      <div><label class="form-label" style="display:flex;align-items:center;gap:6px">簽核備註 <span style="font-size:11px;font-weight:400;color:var(--muted)">（選填）</span></label><textarea class="form-input" id="lrm-note" placeholder="退回原因或審核意見" rows="2" style="width:100%;resize:vertical;min-height:60px;font-size:13px"></textarea></div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeLeaveReview()">取消</button><button class="btn btn-danger" onclick="reviewLeave('reject')">退回</button><button class="btn btn-primary" style="background:var(--green)" onclick="reviewLeave('approve')">核准</button></div>
   </div>
@@ -3866,6 +3866,30 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeAdminAccModal()">取消</button>
       <button class="btn btn-primary" onclick="saveAdminAcc()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Signing Note Confirmation Modal (shared across all review modules) -->
+<div class="modal-overlay" id="review-note-modal" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="rnm-title">確認審核</span>
+      <button class="modal-close" onclick="closeReviewNoteModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="rnm-desc" style="padding:10px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:13px;color:var(--text);display:none"></div>
+      <div>
+        <label class="form-label" style="display:flex;align-items:center;gap:6px">
+          簽核備註
+          <span id="rnm-required-hint" style="font-size:11px;font-weight:400;color:var(--muted)">（選填）</span>
+        </label>
+        <textarea class="form-input" id="rnm-note" rows="3" placeholder="請填寫簽核意見" style="width:100%;resize:vertical;min-height:80px;font-size:13px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeReviewNoteModal()">取消</button>
+      <button class="btn btn-primary" id="rnm-confirm-btn" style="background:var(--green)" onclick="confirmReviewNote()">確認</button>
     </div>
   </div>
 </div>

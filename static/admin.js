@@ -6451,11 +6451,31 @@ async function submitAdminExpense() {
   }
 }
 
-let _expClaimsMap = {};
-let _expAllClaims = null;      // 目前 ym 下的全部記錄（不分狀態）
-let _expCacheYm   = undefined; // 快取對應的 ym
-let _expCacheRYm  = undefined; // 快取對應的 reviewed_ym
-let _expLastError = '';
+let _expClaimsMap   = {};
+let _expAllClaims   = null;      // 目前 ym 下的全部記錄（不分狀態）
+let _expCacheYm     = undefined; // 快取對應的 ym
+let _expCacheRYm    = undefined; // 快取對應的 reviewed_ym
+let _expLastError   = '';
+let _expPendingMode = false;     // true = 待審核全月份模式
+
+function switchExpTab(tab) {
+  _expPendingMode = (tab === 'pending');
+  document.getElementById('exp-tab-month').className   = _expPendingMode ? 'btn btn-sm btn-outline' : 'btn btn-sm btn-primary';
+  document.getElementById('exp-tab-pending').className = _expPendingMode ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline';
+  const monthControls = ['exp-review-ym', 'exp-review-reviewed-ym', 'exp-filter-reviewed-date', 'exp-btn-today', 'exp-review-status'];
+  monthControls.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = _expPendingMode;
+  });
+  if (_expPendingMode) {
+    document.getElementById('exp-review-status').value = 'pending';
+  } else {
+    document.getElementById('exp-review-status').value = '';
+  }
+  _expAllClaims = null;
+  _expCacheYm   = undefined;
+  loadExpenseReview(true);
+}
 
 // 快取 key 依 ym + reviewed_ym
 function _expCacheKey(ym, rym) { return `expClaims2:${ym}:${rym||''}`; }
@@ -6473,11 +6493,31 @@ function _loadExpCache(ym, rym) {
 }
 
 async function loadExpenseReview(forceRefresh = false) {
+  const tbody = document.getElementById('exp-review-tbody');
+  if (!tbody) return;
+
+  // ── 待審核全月份模式 ──
+  if (_expPendingMode) {
+    if (_expAllClaims !== null && !forceRefresh && _expCacheYm === '__pending__') {
+      _renderExpenseFiltered('pending');
+      return;
+    }
+    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+    const ok = await _fetchExpenseFromServer('', '', false, false, true);
+    if (!ok) {
+      tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
+      return;
+    }
+    _renderExpenseFiltered('pending');
+    const badge = document.getElementById('exp-pending-count');
+    if (badge) { badge.textContent = _expAllClaims.length; badge.style.display = _expAllClaims.length ? '' : 'none'; }
+    return;
+  }
+
+  // ── 一般依月份模式 ──
   const status = document.getElementById('exp-review-status')?.value ?? '';
   const ym     = document.getElementById('exp-review-ym')?.value || '';
   const rym    = document.getElementById('exp-review-reviewed-ym')?.value || '';
-  const tbody  = document.getElementById('exp-review-tbody');
-  if (!tbody) return;
 
   const filtersChanged = ym !== _expCacheYm || rym !== _expCacheRYm;
 
@@ -6513,21 +6553,24 @@ async function loadExpenseReview(forceRefresh = false) {
   _renderExpenseFiltered(status);
 }
 
-async function _fetchExpenseFromServer(ym, rym, reRenderAfter, silent = false) {
-  // 永遠不帶 status，一次拉回該月份全部記錄，client 端依狀態篩選
+async function _fetchExpenseFromServer(ym, rym, reRenderAfter, silent = false, pendingMode = false) {
   const params = new URLSearchParams();
-  if (ym)  params.set('ym', ym);
-  if (rym) params.set('reviewed_ym', rym);
+  if (pendingMode) {
+    params.set('status', 'pending');
+  } else {
+    if (ym)  params.set('ym', ym);
+    if (rym) params.set('reviewed_ym', rym);
+  }
   const qs = params.toString() ? '?' + params.toString() : '';
   const {ok, data} = await api(`/api/expense/claims${qs}`, {}, silent);
   if (!ok) { _expLastError = data?.error || '未知錯誤'; return false; }
   _expAllClaims = Array.isArray(data) ? data : [];
-  _expCacheYm   = ym;
-  _expCacheRYm  = rym;
+  _expCacheYm   = pendingMode ? '__pending__' : ym;
+  _expCacheRYm  = pendingMode ? '' : rym;
   _expClaimsMap = Object.fromEntries(_expAllClaims.map(c => [c.id, c]));
-  _saveExpCache(ym, rym, _expAllClaims);
+  if (!pendingMode) _saveExpCache(ym, rym, _expAllClaims);
   if (reRenderAfter) {
-    const status = document.getElementById('exp-review-status')?.value ?? '';
+    const status = pendingMode ? 'pending' : (document.getElementById('exp-review-status')?.value ?? '');
     _renderExpenseFiltered(status);
   }
   return true;

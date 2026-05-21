@@ -1895,6 +1895,11 @@
 
   <!-- ── 費用審核 ── -->
   <div class="page page-flex" id="page-expense-review" style="display:none">
+    <!-- 頁籤切換 -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-shrink:0">
+      <button id="exp-tab-month" class="btn btn-sm btn-primary" onclick="switchExpTab('month')">依月份</button>
+      <button id="exp-tab-pending" class="btn btn-sm btn-outline" onclick="switchExpTab('pending')">待審核（全月份）<span id="exp-pending-count" style="display:none;margin-left:5px;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700"></span></button>
+    </div>
     <div class="flex-filters">
       <!-- 第一列：月份與按鈕 -->
       <div class="filter-bar" style="flex-wrap:wrap">
@@ -1904,7 +1909,7 @@
         <span class="filter-label">核准月份</span>
         <input type="month" id="exp-review-reviewed-ym" class="filter-input" onchange="loadExpenseReview()">
         <input type="date" id="exp-filter-reviewed-date" class="filter-input" style="min-width:140px" title="篩選特定核准日" onchange="_expReRender()">
-        <button class="btn btn-outline btn-sm" onclick="expFilterToday()">今日簽核</button>
+        <button class="btn btn-outline btn-sm" id="exp-btn-today" onclick="expFilterToday()">今日簽核</button>
         <span class="filter-spacer"></span>
         <button class="btn btn-ghost btn-sm" onclick="loadExpenseReview(true)">重新整理</button>
         <button class="btn btn-outline btn-sm" onclick="exportExpenseExcel()">匯出 Excel</button>

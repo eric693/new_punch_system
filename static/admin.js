@@ -6502,10 +6502,10 @@ async function loadExpenseReview(forceRefresh = false) {
       _renderExpenseFiltered('pending');
       return;
     }
-    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
     const ok = await _fetchExpenseFromServer('', '', false, false, true);
     if (!ok) {
-      tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
       return;
     }
     _renderExpenseFiltered('pending');
@@ -6543,11 +6543,11 @@ async function loadExpenseReview(forceRefresh = false) {
   }
 
   if (!tbody.querySelector('tr[data-exp-id]')) {
-    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-state"><div class="empty-state-text">載入中...</div></td></tr>';
   }
   const ok = await _fetchExpenseFromServer(ym, rym, false, false);
   if (!ok) {
-    tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-state"><div class="empty-state-text" style="color:var(--red)">載入失敗，請點「重新整理」<br><span style="font-size:11px;color:var(--muted)">${_expLastError}</span></div></td></tr>`;
     return;
   }
   _renderExpenseFiltered(status);
@@ -6624,7 +6624,7 @@ function _renderExpenseFiltered(status) {
     );
   }
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="12" class="empty-state"><div class="empty-state-text">無符合資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-state"><div class="empty-state-text">無符合資料</div></td></tr>';
     return;
   }
   tbody.innerHTML = list.map(_renderAdminExpenseRows).join('');
@@ -6637,7 +6637,7 @@ function _renderAdminExpenseRows(c) {
   const hasBankInfo = c.reimbursement_method === '匯款' && (c.bank_name || c.bank_branch || c.account_holder || c.bank_account);
   const bankRow = hasBankInfo ? `
     <tr style="background:var(--bg-subtle,#f8f9fb)">
-      <td colspan="12" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
+      <td colspan="13" style="padding:6px 16px 8px 32px;font-size:12px;color:var(--muted)">
         <span style="font-weight:600;color:var(--navy)">銀行資訊：</span>
         ${escHtml(c.bank_name||'')}${c.bank_branch ? `（${escHtml(c.bank_branch)}）` : ''}
         ${c.account_holder ? `・戶名：<b style="color:var(--navy)">${escHtml(c.account_holder)}</b>` : ''}
@@ -6646,12 +6646,13 @@ function _renderAdminExpenseRows(c) {
     </tr>` : '';
   const reviewerNoteRow = c.review_note ? `
     <tr style="background:#fff8f8">
-      <td colspan="12" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
+      <td colspan="13" style="padding:4px 16px 6px 32px;font-size:11px;color:var(--red)">
         審核備注：${escHtml(c.review_note)}
       </td>
     </tr>` : '';
   return `
   <tr data-exp-id="${c.id}">
+    <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${c.id}</td>
     <td>${escHtml(c.staff_name||'—')}</td>
     <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
     <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>

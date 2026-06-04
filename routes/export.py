@@ -94,7 +94,7 @@ def _make_wb_ws(title):
     ws = wb.active
     ws.title = title
     hdr_fill = PatternFill('solid', fgColor='0F1C3A')
-    hdr_font = Font(bold=True, color='FFFFFF', size=10)
+    hdr_font = Font(bold=True, color='FFFFFF', size=10, name='新細明體')
     alt_fill = PatternFill('solid', fgColor='F4F6FA')
     center   = Alignment(horizontal='center', vertical='center')
     return wb, ws, hdr_fill, hdr_font, alt_fill, center
@@ -339,7 +339,7 @@ def api_anomaly_report_excel():
     col_w   = [12, 10, 12, 8, 8, 8, 8, 12, 30]
     for ci, (h, w) in enumerate(zip(headers, col_w), 1):
         cell = ws.cell(row=1, column=ci, value=h)
-        cell.font = Font(bold=True, color='FFFFFF', name='Noto Sans TC', size=11)
+        cell.font = Font(bold=True, color='FFFFFF', name='新細明體', size=11)
         cell.fill = header_fill; cell.alignment = center_align; cell.border = thin
         ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = w
 
@@ -642,8 +642,8 @@ def api_export_expense_claims():
 
     STATUS_LABEL = {'approved': '已核准', 'rejected': '已拒絕', 'pending': '待審核'}
     navy = '0F1C3A'; white = 'FFFFFF'; alt_gray = 'F7F8FB'; border_c = 'CBD2E0'
-    hdr_font  = Font(bold=True, color=white, size=10, name='微軟正黑體')
-    body_font = Font(size=10, name='微軟正黑體')
+    hdr_font  = Font(bold=True, color=white, size=10, name='新細明體')
+    body_font = Font(size=10, name='新細明體')
     hdr_fill  = PatternFill('solid', fgColor=navy)
     alt_fill  = PatternFill('solid', fgColor=alt_gray)
     thin      = Side(style='thin', color=border_c)
@@ -655,7 +655,7 @@ def api_export_expense_claims():
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = '費用申請匯出'
     ws.merge_cells('A1:M1')
     title_c = ws.cell(1, 1, '進光設計　費用申請表')
-    title_c.font = Font(bold=True, size=14, name='微軟正黑體', color=navy)
+    title_c.font = Font(bold=True, size=14, name='新細明體', color=navy)
     title_c.alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 32
 
@@ -690,13 +690,13 @@ def api_export_expense_claims():
     total_row = len(rows) + 3
     ws.merge_cells(f'A{total_row}:G{total_row}')
     tc = ws.cell(total_row, 1, '合　計')
-    tc.font = Font(bold=True, size=10, name='微軟正黑體', color=navy)
+    tc.font = Font(bold=True, size=10, name='新細明體', color=navy)
     tc.alignment = center_align; tc.fill = PatternFill('solid', fgColor='E8ECF6'); tc.border = full_border
     for col in range(2, 8):
         ws.cell(total_row, col).border = full_border
         ws.cell(total_row, col).fill   = PatternFill('solid', fgColor='E8ECF6')
     ac = ws.cell(total_row, 8, total_amount)
-    ac.font = Font(bold=True, size=10, name='微軟正黑體'); ac.alignment = right_align
+    ac.font = Font(bold=True, size=10, name='新細明體'); ac.alignment = right_align
     ac.number_format = '$#,##0'; ac.fill = PatternFill('solid', fgColor='E8ECF6'); ac.border = full_border
     for col in range(9, 14):
         ws.cell(total_row, col).border = full_border
@@ -1076,7 +1076,7 @@ def api_export_withholding():
         hdrs  = ['序號','姓名','身分證字號','地址','年度薪資合計','二代健保補充費','扣繳稅額']
         ws.append(hdrs)
         for ci, h in enumerate(hdrs, 1):
-            c = ws.cell(1, ci); c.font = Font(bold=True,color='FFFFFF',size=10); c.fill = hfill
+            c = ws.cell(1, ci); c.font = Font(bold=True,color='FFFFFF',size=10,name='新細明體'); c.fill = hfill
             c.alignment = Alignment(horizontal='center',vertical='center'); c.border = thin
         for col, w in zip('ABCDEFG', [5,12,14,30,16,16,12]):
             ws.column_dimensions[col].width = w
@@ -1097,6 +1097,7 @@ def api_export_withholding():
 <meta charset="UTF-8"><title>{year}年度薪資扣繳憑單</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+*{{font-family:'PMingLiU','新細明體',serif !important}}
 body{{font-family:'Noto Sans TC',sans-serif;font-size:12px;padding:20px;color:#1e2a45}}
 h2{{font-size:16px;font-weight:700;margin-bottom:4px}}
 .meta{{font-size:11px;color:#666;margin-bottom:16px}}
@@ -1475,6 +1476,7 @@ def api_salary_pdf(rid):
 <title>薪資單 {esc_h(row['staff_name'])} {esc_h(row['month'])}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+*{{font-family:'PMingLiU','新細明體',serif !important}}
 body{{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-size:13px;color:#1a2340;background:#fff;padding:32px}}
 .header{{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a2340;padding-bottom:16px;margin-bottom:24px}}
 .company{{font-size:20px;font-weight:800;color:#1a2340}}.slip-title{{font-size:14px;color:#666;margin-top:4px}}

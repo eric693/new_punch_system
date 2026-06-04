@@ -3295,6 +3295,7 @@ async function bulkPrintPayslips() {
   const win = window.open('','_blank','width=900,height=900');
   const css = `
     *{box-sizing:border-box;margin:0;padding:0}
+    *{font-family:'PMingLiU','新細明體',serif !important}
     body{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-size:12pt;color:#1a2340;background:#fff}
     .slip{max-width:680px;margin:0 auto;padding:20mm 16mm;page-break-after:always}
     .slip:last-child{page-break-after:avoid}
@@ -3396,6 +3397,7 @@ function printSalarySlip() {
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>${month} 薪資明細表</title>
   <style>
+    *{font-family:'PMingLiU','新細明體',serif !important}
     body{font-family:'Noto Sans TC',sans-serif;padding:32px;color:#1e2a45;max-width:700px;margin:0 auto}
     h2{text-align:center;font-size:22px;margin-bottom:24px;color:#0f1c3a}
     .info-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid #ccc;margin-bottom:16px}
@@ -4825,6 +4827,7 @@ function printStatements() {
 
   const css = `
     *{box-sizing:border-box;margin:0;padding:0}
+    *{font-family:'PMingLiU','新細明體',serif !important}
     body{font-family:'標楷體','DFKai-SB','BiauKai','Noto Serif TC',serif;font-size:11pt;color:#000;background:#fff}
     .page{max-width:680px;margin:0 auto;padding:24mm 18mm;page-break-after:always}
     .page:last-child{page-break-after:avoid}

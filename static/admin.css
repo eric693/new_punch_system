@@ -1,4 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* 全站字體統一為新細明體（PMingLiU）— 覆蓋所有 inline / 動態產生的 font-family */
+*, *::before, *::after { font-family: 'PMingLiU', '新細明體', serif !important; }
 :root {
   --navy: #0f1c3a; --navy-mid: #1a2d58; --navy-light: #243d6e;
   --accent: #4a7bda; --accent-light: #eef3fd; --gold: #c8a96e;

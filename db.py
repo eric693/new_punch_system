@@ -99,7 +99,30 @@ _BADGES_TTL = 8.0
 
 # Admin HTML cache stays in-process (large payload, worker-local is fine)
 _admin_html_cache:   dict = {}
-_admin_tmtime_cache: dict = {'at': 0.0, 'mtime': 0}
+_admin_tmtime_cache: dict = {'at': 0.0, 'mtime': 0, 'css_mtime': 0}
+
+
+def admin_asset_meta(template_folder):
+    """回傳 (template_mtime, css_mtime)，每 30 秒才重讀一次磁碟。
+
+    css_mtime 同時用於：
+      1. admin.html render 快取的 etag（改 CSS 也會讓伺服器端快取失效）
+      2. <link href="/static/admin.css?v=..."> 的版本號（瀏覽器 cache-busting）
+    """
+    now = time.time()
+    tc  = _admin_tmtime_cache
+    if now - tc['at'] > 30:
+        base = template_folder or 'templates'
+        try:
+            tc['mtime'] = int(os.path.getmtime(os.path.join(base, 'admin.html')))
+        except OSError:
+            tc['mtime'] = 0
+        try:
+            tc['css_mtime'] = int(os.path.getmtime(os.path.join('static', 'admin.css')))
+        except OSError:
+            tc['css_mtime'] = 0
+        tc['at'] = now
+    return tc['mtime'], tc['css_mtime']
 
 _expense_list_cache: CacheDict = CacheDict('expense_list', redis_ttl=120)
 _EXPENSE_LIST_TTL = 60.0

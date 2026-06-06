@@ -15,7 +15,7 @@ from auth import (
 from db import (
     get_db,
     _badges_cache, _BADGES_TTL,
-    _admin_html_cache, _admin_tmtime_cache,
+    _admin_html_cache, admin_asset_meta,
     _hash_pw,
     _get_admin_by_username, _get_admin_by_id,
     _invalidate_admin_cache,
@@ -109,23 +109,13 @@ def admin_dashboard():
     admin_id     = session.get('admin_id', 0)
     display_name = session.get('admin_display_name', '')
 
-    # 快取 template mtime（每 30 秒才重新讀一次 IO）
-    now = time.time()
-    tc  = _admin_tmtime_cache
-    if now - tc['at'] > 30:
-        from flask import current_app
-        template_path = os.path.join(
-            current_app.template_folder or 'templates', 'admin.html'
-        )
-        try:
-            tc['mtime'] = int(os.path.getmtime(template_path))
-        except OSError:
-            tc['mtime'] = 0
-        tc['at'] = now
-    tmtime = tc['mtime']
+    # 快取 template + css mtime（每 30 秒才重新讀一次 IO）
+    from flask import current_app
+    tmtime, css_v = admin_asset_meta(current_app.template_folder)
 
-    # ETag = template mtime + admin 身份（含 display_name，避免改名後顯示舊名）
-    etag_src = f"{tmtime}:{admin_id}:{sorted(perms)}:{is_super}:{display_name}"
+    # ETag = template/css mtime + admin 身份（含 display_name，避免改名後顯示舊名）
+    # css mtime 納入 → 只改 admin.css 時也會讓伺服器端 HTML 快取失效
+    etag_src = f"{tmtime}:{css_v}:{admin_id}:{sorted(perms)}:{is_super}:{display_name}"
     etag = '"' + hashlib.md5(etag_src.encode()).hexdigest()[:16] + '"'
     if request.headers.get('If-None-Match') == etag:
         return ('', 304)
@@ -137,6 +127,7 @@ def admin_dashboard():
             admin_display_name=display_name,
             admin_permissions=perms,
             admin_is_super=is_super,
+            css_version=css_v,
         )
         # 只保留最近 20 個版本（多帳號 × 多權限組合），避免無限增長
         if len(_admin_html_cache) >= 20:

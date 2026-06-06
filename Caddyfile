@@ -1,0 +1,8 @@
+lin-punch-system.crownai.ink {
+    reverse_proxy app:8000
+
+    # 上傳檔案大小限制
+    request_body {
+        max_size 20MB
+    }
+}

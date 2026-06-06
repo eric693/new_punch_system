@@ -108,22 +108,22 @@ body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: va
 
 /* ── Table ── */
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
 thead th { background: linear-gradient(180deg,#f7f9fd 0%,#f3f6fc 100%); color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 11px 16px; text-align: left; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
 tbody tr { border-bottom: 1px solid #eef0f6; transition: background var(--tr); }
 tbody tr:hover { background: #f5f7fc; }
 tbody tr:last-child { border-bottom: none; }
-tbody td { padding: 11px 16px; color: var(--text); white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 13px; vertical-align: middle; }
+tbody td { padding: 11px 16px; color: var(--text); white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 14px; vertical-align: middle; }
 tbody td.tc { font-family: 'Noto Sans TC', sans-serif; }
-/* 列表字級全站統一 14px：蓋過各欄位寫死的 11/12px，解決同一列忽大忽小 */
-.data-table tbody td,
-.data-table tbody td span,
-.data-table tbody td a,
-.data-table tbody td b { font-size: 14px !important; }
+/* 列表字級全站統一 14px：蓋過各模組各欄位寫死的 11/12/13px，解決同一列忽大忽小 */
+tbody td,
+tbody td span,
+tbody td a,
+tbody td b { font-size: 14px !important; }
 /* 例外：徽章與拖曳把手維持原本尺寸 */
-.data-table tbody td .nav-badge,
-.data-table tbody td .punch-manual-badge { font-size: 10px !important; }
-.data-table tbody td.staff-grip-cell { font-size: 18px !important; }
+tbody td .nav-badge,
+tbody td .punch-manual-badge { font-size: 10px !important; }
+tbody td.staff-grip-cell { font-size: 18px !important; }
 .action-btns { display: flex; gap: 5px; align-items: center; }
 
 /* ── Punch module ── */

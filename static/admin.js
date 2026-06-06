@@ -6655,18 +6655,18 @@ function _renderAdminExpenseRows(c) {
     </tr>` : '';
   return `
   <tr data-exp-id="${c.id}">
-    <td style="text-align:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${c.id}</td>
+    <td style="text-align:center;font-family:'DM Mono',monospace;color:var(--muted)">#${c.id}</td>
     <td>${escHtml(c.staff_name||'—')}</td>
-    <td style="font-family:'DM Mono',monospace;font-size:12px">${c.expense_date}</td>
-    <td><span style="font-size:11px;font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
+    <td style="font-family:'DM Mono',monospace">${c.expense_date}</td>
+    <td><span style="font-weight:600;color:${expTypeColor[c.expense_type]||'var(--muted)'}">${escHtml(c.expense_type||'支出')}</span></td>
     <td>${escHtml(c.category||'—')}</td>
-    <td style="font-size:12px;background:#f0f2f8">${escHtml(c.vendor||'—')}</td>
+    <td style="background:#f0f2f8">${escHtml(c.vendor||'—')}</td>
     <td style="font-family:'Noto Sans TC',sans-serif;font-variant-numeric:tabular-nums;text-align:right;font-weight:600">${fmtNum(c.amount)}</td>
-    <td style="min-width:160px;white-space:normal;word-break:break-word;font-size:12px;background:#f0f2f8">${escHtml(c.note||'—')}</td>
-    <td style="font-size:12px">${escHtml(c.reimbursement_method||'—')}</td>
-    <td style="text-align:center">${c.photo_url ? `<a href="${escHtml(c.photo_url)}" target="_blank" style="font-size:12px">查看照片</a>` : (c.document_id ? `<span style="color:var(--accent);font-size:12px">有附件</span>` : '—')}</td>
-    <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-size:12px;font-weight:600">${statusMap[c.status]||c.status}</span></td>
-    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">${c.reviewed_at ? c.reviewed_at.slice(0,10) : '—'}</td>
+    <td style="min-width:160px;white-space:normal;word-break:break-word;background:#f0f2f8">${escHtml(c.note||'—')}</td>
+    <td>${escHtml(c.reimbursement_method||'—')}</td>
+    <td style="text-align:center">${c.photo_url ? `<a href="${escHtml(c.photo_url)}" target="_blank">查看照片</a>` : (c.document_id ? `<span style="color:var(--accent)">有附件</span>` : '—')}</td>
+    <td><span style="color:${statusColor[c.status]||'var(--muted)'};font-weight:600">${statusMap[c.status]||c.status}</span></td>
+    <td style="font-family:'DM Mono',monospace;color:var(--muted)">${c.reviewed_at ? c.reviewed_at.slice(0,10) : '—'}</td>
     <td style="white-space:nowrap">
       <div style="display:inline-flex;flex-wrap:nowrap;gap:4px;align-items:center">
         ${c.status === 'pending' ? `

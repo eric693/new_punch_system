@@ -115,6 +115,15 @@ tbody tr:hover { background: #f5f7fc; }
 tbody tr:last-child { border-bottom: none; }
 tbody td { padding: 11px 16px; color: var(--text); white-space: nowrap; font-family: 'DM Mono', monospace; font-size: 13px; vertical-align: middle; }
 tbody td.tc { font-family: 'Noto Sans TC', sans-serif; }
+/* 列表字級全站統一 14px：蓋過各欄位寫死的 11/12px，解決同一列忽大忽小 */
+.data-table tbody td,
+.data-table tbody td span,
+.data-table tbody td a,
+.data-table tbody td b { font-size: 14px !important; }
+/* 例外：徽章與拖曳把手維持原本尺寸 */
+.data-table tbody td .nav-badge,
+.data-table tbody td .punch-manual-badge { font-size: 10px !important; }
+.data-table tbody td.staff-grip-cell { font-size: 18px !important; }
 .action-btns { display: flex; gap: 5px; align-items: center; }
 
 /* ── Punch module ── */

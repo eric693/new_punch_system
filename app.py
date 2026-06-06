@@ -5,6 +5,13 @@ All routes are registered from routes/* blueprints.
 import hashlib
 import json as _json
 import os
+
+# Load .env when running on VPS (no-op if not present or already set)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+except ImportError:
+    pass
 import threading
 import time
 import traceback

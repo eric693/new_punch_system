@@ -8,9 +8,9 @@ from db import get_db, _get_admin_by_id
 
 bp = Blueprint('webauthn', __name__)
 
-_WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID',  'punch-system.onrender.com')
+_WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID',  'lin-punch-system.crownai.ink')
 _WEBAUTHN_RP_NAME = '打卡系統'
-_WEBAUTHN_ORIGIN  = os.environ.get('WEBAUTHN_ORIGIN', 'https://punch-system.onrender.com')
+_WEBAUTHN_ORIGIN  = os.environ.get('WEBAUTHN_ORIGIN', 'https://lin-punch-system.crownai.ink')
 
 
 def _b64url_encode(data: bytes) -> str:

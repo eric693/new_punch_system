@@ -1,13 +1,10 @@
-databases:
-  - name: punch-db
-    databaseName: punch
-    user: punch_user
-    plan: starter
-    region: singapore
+# 此專案已遷移至 https://lin-punch-system.crownai.ink (VPS 自架)
+# 此檔案保留僅供參考，不再用於 Render 部署。
+# 部署指南：scripts/setup_vps.sh
 
 services:
   - type: web
-    name: punch-system
+    name: lin-punch-system
     env: python
     plan: starter
     region: singapore
@@ -25,10 +22,12 @@ services:
       - key: MOBILE_JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: punch-db
-          property: connectionString
-      - key: WEBAUTHN_RP_ID
         sync: false
+      - key: WEBAUTHN_RP_ID
+        value: lin-punch-system.crownai.ink
       - key: WEBAUTHN_ORIGIN
+        value: https://lin-punch-system.crownai.ink
+      - key: RENDER_EXTERNAL_URL
+        value: https://lin-punch-system.crownai.ink
+      - key: ANTHROPIC_API_KEY
         sync: false
